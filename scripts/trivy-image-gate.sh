@@ -11,16 +11,14 @@ set -e
 IMAGE_REF=${1:?Usage: $0 <image-ref> [trivy-bin]}
 TRIVY_BIN=${2:-trivy}
 
-# Must run from the repository root so .trivyignore.yaml is discovered the
-# same way CI discovers it (trivy-action runs in the workspace root).
-cd "$(dirname "$0")/.."
-
+# No ignore file: the image is proven clean unsuppressed (pip toolchain
+# removal cleared the former vendored findings; verified with Trivy v0.70.0
+# against --ignorefile /dev/null on VM101, issue #91).
 exec "$TRIVY_BIN" image \
     --severity HIGH,CRITICAL \
     --scanners vuln \
     --vuln-type os,library \
     --ignore-unfixed \
-    --ignorefile .trivyignore.yaml \
     --no-progress \
     --exit-code 1 \
     --format table \
