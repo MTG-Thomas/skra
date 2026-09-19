@@ -288,6 +288,49 @@ class TestFileStorageService:
 
             assert result is False
 
+    @pytest.mark.asyncio
+    async def test_presigned_urls_use_sigv4_against_public_host(self, mock_settings):
+        """Presigned URLs are SigV4 signed against the public endpoint host.
+
+        Regression test for issue #94: the default client config produced
+        SigV2 URLs (Garage 403), and rewriting the host after signing
+        invalidated SigV4 (Host is a signed header). Offline: presigning
+        is local HMAC, no network access.
+        """
+        from urllib.parse import parse_qs, urlsplit
+
+        mock_settings.s3_endpoint = "http://minio:9000"
+        mock_settings.s3_public_endpoint = "http://203.0.113.10:3900"
+        service = FileStorageService(settings=mock_settings)
+
+        upload_url = await service.generate_upload_url(
+            s3_key="org/image.png",
+            content_type="image/png",
+        )
+        download_url = await service.generate_download_url(
+            s3_key="org/image.png",
+        )
+
+        for url in (upload_url, download_url):
+            parts = urlsplit(url)
+            assert parts.netloc == "203.0.113.10:3900"
+            query = parse_qs(parts.query)
+            assert query.get("X-Amz-Algorithm") == ["AWS4-HMAC-SHA256"]
+            assert "AWSAccessKeyId" not in query
+            assert "Signature" not in query
+
+    def test_signing_endpoint_prefers_public(self, mock_settings):
+        """Signing host is the public endpoint when configured."""
+        mock_settings.s3_public_endpoint = "http://public.example.invalid:3900"
+        service = FileStorageService(settings=mock_settings)
+        assert service._signing_endpoint() == "http://public.example.invalid:3900"
+
+    def test_signing_endpoint_falls_back_to_internal(self, mock_settings):
+        """Without a public endpoint the internal endpoint is used."""
+        mock_settings.s3_public_endpoint = None
+        service = FileStorageService(settings=mock_settings)
+        assert service._signing_endpoint() == "http://localhost:9000"
+
 
 class TestFileStorageServiceNotConfigured:
     """Tests for FileStorageService when S3 is not configured."""

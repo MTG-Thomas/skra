@@ -41,12 +41,18 @@ class FileStorageService:
         self.backend = getattr(self.settings, "storage_backend", "s3")
 
     @asynccontextmanager
-    async def get_client(self) -> "AsyncGenerator[Any, None]":
+    async def get_client(self, endpoint_url: str | None = None) -> "AsyncGenerator[Any, None]":
         """
         Get S3 client context manager.
 
+        Args:
+            endpoint_url: Override the endpoint this client talks to.
+                Defaults to the internal ``s3_endpoint``. Presigned-URL
+                flows pass the public endpoint (see ``_signing_endpoint``).
+
         Yields:
-            Async S3 client from aiobotocore
+            Async S3 client from aiobotocore, pinned to SigV4
+            (S3-compatible stores such as Garage reject SigV2).
 
         Raises:
             RuntimeError: If S3 storage is not configured
@@ -57,15 +63,17 @@ class FileStorageService:
                 "Set BIFROST_DOCS_S3_ACCESS_KEY and BIFROST_DOCS_S3_SECRET_KEY environment variables."
             )
 
+        from aiobotocore.config import AioConfig
         from aiobotocore.session import get_session
 
         session = get_session()
         async with session.create_client(
             "s3",
-            endpoint_url=self.settings.s3_endpoint,
+            endpoint_url=endpoint_url or self.settings.s3_endpoint,
             aws_access_key_id=self.settings.s3_access_key,
             aws_secret_access_key=self.settings.s3_secret_key,
             region_name=self.settings.s3_region,
+            config=AioConfig(signature_version="s3v4"),
         ) as client:
             yield client
 
@@ -181,24 +189,19 @@ class FileStorageService:
         content_type, _ = mimetypes.guess_type(filename)
         return content_type or "application/octet-stream"
 
-    def _rewrite_url_for_public(self, url: str) -> str:
+    def _signing_endpoint(self) -> str:
         """
-        Rewrite internal S3 URL to use public endpoint.
+        Endpoint presigned URLs are signed against.
 
-        When S3/MinIO runs in Docker, presigned URLs contain internal hostnames
-        (e.g., 'minio:9000') that browsers can't access. This rewrites them to
-        use the configured public endpoint.
-
-        Args:
-            url: Presigned URL with internal endpoint
+        Must be the host requesters actually use (public endpoint when
+        configured): SigV4 binds the Host header, so signing with the
+        internal endpoint and rewriting the host afterwards invalidates
+        the signature. Server-side calls keep using ``s3_endpoint``.
 
         Returns:
-            URL with public endpoint substituted
+            Public endpoint URL if configured, else the S3 endpoint.
         """
-        public_endpoint = self.settings.s3_public_endpoint
-        if not public_endpoint:
-            return url
-        return url.replace(self.settings.s3_endpoint, public_endpoint, 1)
+        return self.settings.s3_public_endpoint or self.settings.s3_endpoint
 
     def generate_s3_key(
         self,
@@ -255,7 +258,7 @@ class FileStorageService:
         if expires_in is None:
             expires_in = self.settings.s3_presigned_url_expiry
 
-        async with self.get_client() as s3:
+        async with self.get_client(endpoint_url=self._signing_endpoint()) as s3:
             url: str = await s3.generate_presigned_url(
                 "put_object",
                 Params={
@@ -265,7 +268,7 @@ class FileStorageService:
                 },
                 ExpiresIn=expires_in,
             )
-        return self._rewrite_url_for_public(url)
+        return url
 
     async def generate_download_url(
         self,
@@ -306,13 +309,13 @@ class FileStorageService:
         if filename:
             params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
 
-        async with self.get_client() as s3:
+        async with self.get_client(endpoint_url=self._signing_endpoint()) as s3:
             url: str = await s3.generate_presigned_url(
                 "get_object",
                 Params=params,
                 ExpiresIn=expires_in,
             )
-        return self._rewrite_url_for_public(url)
+        return url
 
     async def delete_file(self, s3_key: str) -> bool:
         """
