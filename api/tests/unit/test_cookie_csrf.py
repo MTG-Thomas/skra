@@ -61,9 +61,7 @@ class TestCookieCsrfEnforcement:
 
         token = _access_token()
         request = _make_request("POST")
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials=token
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
         principal = await get_current_user_optional(
             request=request, credentials=credentials, db=None
@@ -78,9 +76,7 @@ class TestCookieCsrfEnforcement:
         token = _access_token()
         request = _make_request("GET", cookies={"access_token": token})
 
-        principal = await get_current_user_optional(
-            request=request, credentials=None, db=None
-        )
+        principal = await get_current_user_optional(request=request, credentials=None, db=None)
 
         assert principal is not None
 
@@ -96,9 +92,7 @@ class TestCookieCsrfEnforcement:
             headers={"X-CSRF-Token": csrf_header},
         )
 
-        principal = await get_current_user_optional(
-            request=request, credentials=None, db=None
-        )
+        principal = await get_current_user_optional(request=request, credentials=None, db=None)
 
         assert principal is not None
 
@@ -110,9 +104,7 @@ class TestCookieCsrfEnforcement:
         request = _make_request(method, cookies={"access_token": token})
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_optional(
-                request=request, credentials=None, db=None
-            )
+            await get_current_user_optional(request=request, credentials=None, db=None)
 
         assert exc_info.value.status_code == 403
 
@@ -130,9 +122,7 @@ class TestCookieCsrfEnforcement:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_optional(
-                request=request, credentials=None, db=None
-            )
+            await get_current_user_optional(request=request, credentials=None, db=None)
 
         assert exc_info.value.status_code == 403
 
@@ -141,26 +131,14 @@ class TestCookieCsrfEnforcement:
 
         request = _make_request("POST")
 
-        assert (
-            await get_current_user_optional(
-                request=request, credentials=None, db=None
-            )
-            is None
-        )
+        assert await get_current_user_optional(request=request, credentials=None, db=None) is None
 
     async def test_invalid_cookie_token_returns_none_not_403(self):
         from src.core.auth import get_current_user_optional
 
-        request = _make_request(
-            "POST", cookies={"access_token": "not-a-token"}
-        )
+        request = _make_request("POST", cookies={"access_token": "not-a-token"})
 
-        assert (
-            await get_current_user_optional(
-                request=request, credentials=None, db=None
-            )
-            is None
-        )
+        assert await get_current_user_optional(request=request, credentials=None, db=None) is None
 
 
 class TestRefreshCookieCsrf:
@@ -190,8 +168,7 @@ class TestRefreshCookieCsrf:
             is_active=True,
         )
 
-    async def _call_refresh(self, monkeypatch, user, cookies=None,
-                            headers=None, body_token=None):
+    async def _call_refresh(self, monkeypatch, user, cookies=None, headers=None, body_token=None):
         from unittest.mock import AsyncMock
 
         from starlette.responses import Response
@@ -201,23 +178,15 @@ class TestRefreshCookieCsrf:
 
         repo = AsyncMock()
         repo.get_by_id.return_value = user
-        monkeypatch.setattr(
-            auth_router.UserRepository, "get_by_id", repo.get_by_id
-        )
+        monkeypatch.setattr(auth_router.UserRepository, "get_by_id", repo.get_by_id)
 
-        request = _make_request(
-            "POST", cookies=cookies, headers=headers
-        )
+        request = _make_request("POST", cookies=cookies, headers=headers)
         token_data = (
-            RefreshTokenRequest(refresh_token=body_token)
-            if body_token is not None
-            else None
+            RefreshTokenRequest(refresh_token=body_token) if body_token is not None else None
         )
         # Bypass the slowapi rate-limit wrapper (needs live Redis); the
         # tests target the endpoint's auth logic, not rate limiting.
-        handler = getattr(
-            auth_router.refresh_token, "__wrapped__", auth_router.refresh_token
-        )
+        handler = getattr(auth_router.refresh_token, "__wrapped__", auth_router.refresh_token)
         return await handler(
             request=request,
             response=Response(),
@@ -257,9 +226,7 @@ class TestRefreshCookieCsrf:
 
         assert exc_info.value.status_code == 403
 
-    async def test_cookie_refresh_with_mismatched_pair_raises_403(
-        self, monkeypatch
-    ):
+    async def test_cookie_refresh_with_mismatched_pair_raises_403(self, monkeypatch):
         from uuid import uuid4
 
         user_id = uuid4()
@@ -300,8 +267,6 @@ class TestRefreshCookieCsrf:
         from uuid import uuid4
 
         with pytest.raises(HTTPException) as exc_info:
-            await self._call_refresh(
-                monkeypatch, self._active_user(uuid4())
-            )
+            await self._call_refresh(monkeypatch, self._active_user(uuid4()))
 
         assert exc_info.value.status_code == 401

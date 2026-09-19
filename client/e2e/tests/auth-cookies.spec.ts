@@ -5,8 +5,8 @@ import { test, expect } from './test-utils';
  *
  * Asserts the migration contract: after login no Bearer [REDACTED] remain in
  * readable browser storage (session lives in HttpOnly cookies), the session
- * survives reload, and logout ends it. Refresh rotation is exercised
- * implicitly by the authenticated fixture on every spec.
+ * survives reload, access-cookie expiry triggers a CSRF-guarded refresh
+ * rotation, and logout ends it.
  *
  * Same seed prerequisites as the critical suite (see README).
  */
@@ -35,6 +35,38 @@ test.describe('Cookie session auth', () => {
     await page.reload();
     // Still inside the app, not bounced to login.
     await expect(page).not.toHaveURL(/\/login/);
+  });
+
+  test('expired access cookie triggers CSRF-guarded refresh', async ({
+    page,
+    context,
+  }) => {
+    // Simulate access-token expiry by dropping only that cookie. Refresh
+    // and CSRF cookies stay, mirroring a live session past access TTL.
+    await context.clearCookies({ name: 'access_token' });
+
+    // The first 401 triggers the credentialed refresh rotation.
+    const [refreshRequest] = await Promise.all([
+      page.waitForRequest(
+        (req) =>
+          req.url().includes('/auth/refresh') && req.method() === 'POST'
+      ),
+      page.reload(),
+    ]);
+
+    // The rotation carries the double-submit CSRF header. Without it the
+    // API answers 403 (see server enforcement) and the client logs out,
+    // so reaching the app below proves the header was sent and accepted.
+    expect(refreshRequest.headers()['x-csrf-token']).toBeTruthy();
+
+    // Rotation succeeded: still inside the app, tokens never readable.
+    await expect(page).not.toHaveURL(/\/login/);
+    const stored = await page.evaluate(() => ({
+      accessToken: localStorage.getItem('access_token'),
+      refreshToken: localStorage.getItem('refresh_token'),
+    }));
+    expect(stored.accessToken).toBeNull();
+    expect(stored.refreshToken).toBeNull();
   });
 
   test('logout ends the session', async ({ page }) => {

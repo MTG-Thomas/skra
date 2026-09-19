@@ -16,11 +16,17 @@ interface AuthState {
   hasRole: (role: UserRole) => boolean;
 }
 
-/** Legacy token keys from the pre-cookie session (issue #90). Purged once. */
+/**
+ * Legacy token keys from the pre-cookie session (issue #90). Purged once.
+ * Both persist-key spellings are covered: `bifrost-docs-auth` (current) and
+ * `skra-auth` (rename lane #79), so stale tokens are removed regardless of
+ * which lane merges first. Rebase after the rename decision must keep both.
+ */
 const LEGACY_TOKEN_KEYS = [
   "access_token",
   "refresh_token",
   "bifrost-docs-auth",
+  "skra-auth",
 ] as const;
 
 function purgeLegacyTokenStorage(): void {

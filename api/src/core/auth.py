@@ -16,15 +16,15 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.database import DbSession
 from src.core.security import decode_token, hash_api_key, validate_csrf_token
+from src.models.enums import UserRole
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 #: HTTP methods that can change server state. Cookie-authenticated requests
 #: using these methods must present a valid CSRF double-submit pair, because
 #: browsers attach cookies automatically (see issue #90).
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-from src.models.enums import UserRole
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
