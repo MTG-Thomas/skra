@@ -34,15 +34,16 @@ FROM python:3.11-slim AS runtime-base
 # CVE-2026-13221, fixed in 5.40.1-6+deb13u1). The base image floats, so upgrade
 # explicitly instead of relying on the base snapshot date.
 #
-# Runtime tooling: only curl is kept (required by the HEALTHCHECK below).
+# Runtime tooling: none beyond the application venv. curl was dropped in
+# favor of a python-urllib HEALTHCHECK (issue #108): curl and its libcurl4t64
+# carried unfixed HIGH CVEs and nothing else in the image needs them.
 # pip/setuptools/wheel are not installed: the application runs from /opt/venv
 # and never invokes them (verified: zero imports in src/, full unit suite
 # plus router suites pass with those imports hard-blocked). Omitting them
 # also drops pip's vendored SBOM manifests flagged in issue #82.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    apt-get update \
     && apt-get install -y --only-upgrade perl-base \
     && rm -rf /var/lib/apt/lists/*
 
@@ -94,9 +95,9 @@ USER app
 # Expose port
 EXPOSE 8000
 
-# Health check
+# Health check (python-urllib: curl is not installed; exit 0 only on HTTP 200)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD ["python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status == 200 else 1)"]
 
 # Default command
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
