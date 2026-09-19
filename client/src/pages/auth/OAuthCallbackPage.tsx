@@ -5,7 +5,7 @@
  * Extracts code and state from URL params, exchanges for tokens, and redirects.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +35,18 @@ export function OAuthCallbackPage() {
   const [state, setState] = useState<CallbackState>("processing");
   const [error, setError] = useState<string | null>(null);
 
+  // Guards against double-processing the same callback (React StrictMode
+  // remounts effects in dev, which would otherwise exchange/validate twice
+  // and let the second pass overwrite the first result after cleanup).
+  const handledKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const callbackKey = `${provider ?? ""}:${searchParams.get("code") ?? ""}:${searchParams.get("state") ?? ""}`;
+    if (handledKeyRef.current === callbackKey) {
+      return;
+    }
+    handledKeyRef.current = callbackKey;
+
     const handleCallback = async () => {
       try {
         // Get code and state from URL
