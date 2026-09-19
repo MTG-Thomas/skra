@@ -133,6 +133,82 @@ Per-org attachment orphaned folders are intentionally not attributed per org
 
 Password values are never included in reconciliation output.
 
+### 5. Post-Import Fidelity Verification
+
+After a sync or run, use the read-only `verify` command to check that
+migrated attachments and embedded document images survived the import:
+
+```bash
+python -m itglue_migrate.cli verify \
+    --export-path ../../tests/fixtures/minimal-export \
+    --api-url $BIFROST_API_URL \
+    --token $BIFROST_TOKEN \
+    --all \
+    --output /tmp/test-fidelity-report.json
+```
+
+- Use `--org "Name"` for a single organization or `--all` for every
+  organization in the export.
+- Add `--check-urls` to also probe migrated download/image URLs for
+  reachability (HEAD with GET fallback). Probes follow an explicit origin
+  allowlist: the API origin plus
+  `--allowed-hosts "https://storage.example.com,..."`. Origins match exactly
+  (scheme + host + effective port), so the same host on another port is
+  refused; unlisted destinations (including private/link-local redirect
+  targets) are refused without a request, and every redirect hop is
+  re-validated. Name every storage/image origin explicitly with its scheme
+  (e.g. `--allowed-hosts "http://192.168.1.10:3900"` for self-hosted
+  Garage/MinIO); invalid entries fail fast, and listing an internal origin
+  is an explicit trust decision. Hosts appearing only in migrated content or
+  redirects are never trusted. Without `--check-urls`, verification is fully
+  offline-safe apart from the required read-only API listing calls.
+- The command is read-only: it issues GET requests (plus HEAD/GET probes
+  with `--check-urls`) and never creates, updates, or deletes anything.
+- Exit code is `0` when clean and `1` when any failure is found, so rehearsal
+  CI can gate on it.
+
+Failure categories (shared with the reconciliation vocabulary):
+
+- `missing_upload` — export file (or exported image) with no migrated
+  counterpart, or an exported document absent from the API (its images are
+  then unverifiable). Same-name files are counted per occurrence, so a
+  duplicated filename missing one copy still fails.
+- `unexpected_upload` — migrated attachment with no matching export file,
+  or a migrated document image not referenced by any migrated document
+  content (orphaned upload residue)
+- `unresolved_entity` — migrated attachment whose entity could not be matched
+  to the export via `metadata.itglue_id` (investigate before deleting), or
+  whose record lacks a filename/entity reference and therefore cannot be
+  verified at all
+- `broken_embedded_image` — embedded image file missing from the export
+- `broken_link` — migrated document content still contains a relative image
+  link that was never rewritten to a migrated URL
+- `inaccessible_url` — migrated download/image URL was not reachable
+  (`--check-urls` only)
+- `missing_organization` — exported organization absent from the API, so
+  nothing under it could be verified
+- `api_error` — a read needed for verification failed (attachment listing or
+  document fetch); the error text is in the failure message
+
+Each failure carries the organization, entity type, entity/attachment IDs,
+filename or document/source reference needed to investigate.
+
+Server-generated `/api/.../view` image links in migrated document content
+count as present without probing; other relative links are reported as
+`broken_link`. Migrated `document_image` records are attributed to documents
+through those content links, so only truly orphaned image uploads surface as
+`unexpected_upload`.
+
+`--output` writes a JSON report (`schema_version`, per-organization
+`attachments`/`embedded_images` sections, aggregate `summary` with
+`failure_categories` and `follow_up_required`). Because the category keys
+match the reconciliation report vocabulary, the per-org `failure_categories`
+map can be folded into reconciliation artifacts for combined triage.
+
+For live rehearsals you need a Bifrost Docs API holding migrated fixture
+data (local stack or test VM). VM 101 is currently reserved by the rename
+lane — coordinate before scheduling rehearsal runs there.
+
 ## Extending the Fixture
 
 To add more test scenarios, you can:

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from itglue_migrate.attachments import AttachmentScanner
 from itglue_migrate.document_processor import DocumentProcessor
@@ -15,6 +18,15 @@ BROKEN_API_REFERENCE = "broken_api_reference"
 BROKEN_EMBEDDED_IMAGE = "broken_embedded_image"
 INACCESSIBLE_URL = "inaccessible_url"
 COUNT_MISMATCH = "count_mismatch"
+MISSING_UPLOAD = "missing_upload"
+UNEXPECTED_UPLOAD = "unexpected_upload"
+UNRESOLVED_ENTITY = "unresolved_entity"
+BROKEN_LINK = "broken_link"
+MISSING_ORGANIZATION = "missing_organization"
+API_ERROR = "api_error"
+
+_MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)")
+_MIGRATED_ATTACHMENT_ID_RE = re.compile(r"/attachments/([0-9a-fA-F-]{36})/view")
 
 UrlChecker = Callable[[str], bool]
 
@@ -267,6 +279,271 @@ def verify_embedded_images(
 
     return EmbeddedImageVerificationResult(
         expected_count=len(references),
+        present_count=present_count,
+        failures=failures,
+    )
+
+
+def extract_migrated_attachment_ids(content: str) -> list[str]:
+    """Extract migrated attachment record IDs linked from markdown content.
+
+    Matches the server-generated ``/attachments/<id>/view`` image links so
+    document-image records can be attributed to the documents referencing
+    them. Returns IDs in document order.
+    """
+    if not content:
+        return []
+    return _MIGRATED_ATTACHMENT_ID_RE.findall(content)
+
+
+def _is_api_migrated_link(url: str, api_origin: tuple[str, str, int] | None) -> bool:
+    """Whether an image URL is the server-generated migrated form.
+
+    Relative ``/api/`` links are always server-generated. Absolute links
+    count when they sit on the API origin under ``/api/``; anything else
+    needs reachability checking (or is broken when relative).
+    """
+    if url.startswith("/api/"):
+        return True
+    if api_origin is None:
+        return False
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").casefold()
+    if not host:
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme,
+        host,
+        port or (443 if parsed.scheme == "https" else 80),
+    ) == api_origin and parsed.path.startswith("/api/")
+
+
+def extract_markdown_image_urls(content: str) -> list[str]:
+    """Extract image URLs from migrated markdown document content.
+
+    Args:
+        content: Markdown text as stored in BifrostDocs.
+
+    Returns:
+        Image URLs in document order.
+    """
+    if not content:
+        return []
+    return _MARKDOWN_IMAGE_RE.findall(content)
+
+
+@dataclass(frozen=True)
+class MigratedAttachment:
+    """An attachment record as listed by the BifrostDocs API."""
+
+    attachment_id: str
+    entity_type: str
+    entity_id: str
+    filename: str
+
+
+@dataclass
+class MigratedAttachmentReconciliation:
+    """Read-only post-import attachment fidelity result."""
+
+    expected_count: int
+    migrated_count: int
+    failures: list[VerificationFailure] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """Whether every expected file reconciled with a migrated record."""
+        return not self.failures
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a JSON-safe reconciliation payload."""
+        return {
+            "ok": self.ok,
+            "expected_count": self.expected_count,
+            "migrated_count": self.migrated_count,
+            "failure_count": len(self.failures),
+            "failures": [failure.to_dict() for failure in self.failures],
+        }
+
+
+def reconcile_migrated_attachments(
+    expected: Iterable[tuple[str, str, str]],
+    migrated: Iterable[tuple[str, str, str]],
+    unresolved: Iterable[MigratedAttachment] = (),
+) -> MigratedAttachmentReconciliation:
+    """Reconcile export attachment files against migrated API records.
+
+    Both ``expected`` and ``migrated`` use ``(entity_type, entity_id, filename)``
+    triples in export vocabulary, so the caller resolves API entity UUIDs to
+    IT Glue identities first. Triples are counted per occurrence, so duplicate
+    same-name files are reported individually rather than collapsed. Records
+    that cannot be resolved are reported separately as :data:`UNRESOLVED_ENTITY`
+    instead of being filename-matched.
+
+    Args:
+        expected: Export-side files, one triple per file.
+        migrated: Migrated records, one triple per record.
+        unresolved: Migrated records whose entity could not be resolved.
+
+    Returns:
+        Structured fidelity result using ``missing_upload``,
+        ``unexpected_upload``, and ``unresolved_entity`` categories.
+    """
+    expected_counts = Counter(tuple(triple) for triple in expected)
+    migrated_counts = Counter(tuple(triple) for triple in migrated)
+    failures: list[VerificationFailure] = []
+
+    for entity_type, entity_id, filename in sorted(set(expected_counts)):
+        deficit = expected_counts[(entity_type, entity_id, filename)] - migrated_counts[
+            (entity_type, entity_id, filename)
+        ]
+        for _ in range(deficit):
+            failures.append(
+                VerificationFailure(
+                    category=MISSING_UPLOAD,
+                    message="Export attachment file has no matching migrated record.",
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    filename=filename,
+                )
+            )
+
+    for entity_type, entity_id, filename in sorted(set(migrated_counts)):
+        surplus = migrated_counts[(entity_type, entity_id, filename)] - expected_counts[
+            (entity_type, entity_id, filename)
+        ]
+        for _ in range(surplus):
+            failures.append(
+                VerificationFailure(
+                    category=UNEXPECTED_UPLOAD,
+                    message="Migrated attachment has no matching export file.",
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    filename=filename,
+                )
+            )
+
+    for record in unresolved:
+        failures.append(
+            VerificationFailure(
+                category=UNRESOLVED_ENTITY,
+                message="Migrated attachment entity could not be matched to the export.",
+                entity_type=record.entity_type,
+                entity_id=record.entity_id,
+                filename=record.filename,
+            )
+        )
+
+    return MigratedAttachmentReconciliation(
+        expected_count=sum(expected_counts.values()),
+        migrated_count=sum(migrated_counts.values()),
+        failures=failures,
+    )
+
+
+def verify_migrated_document_images(
+    document_id: str,
+    document_name: str,
+    expected_count: int,
+    image_urls: Iterable[str],
+    *,
+    url_checker: UrlChecker | None = None,
+    api_origin: tuple[str, str, int] | None = None,
+) -> EmbeddedImageVerificationResult:
+    """Verify image links inside one migrated document's markdown content.
+
+    Server-generated ``/api/`` links (relative, or absolute back onto the
+    API origin) are the migrated form and count as present without probing.
+    Other relative links were never rewritten to migrated URLs, so they are
+    reported as :data:`BROKEN_LINK`. When fewer migrated links exist than
+    exported images, the deficit is reported as :data:`MISSING_UPLOAD` with
+    both counts in the message. An optional ``url_checker`` marks unreachable
+    absolute links :data:`INACCESSIBLE_URL`.
+
+    Args:
+        document_id: IT Glue document ID for triage detail.
+        document_name: Document name for triage detail.
+        expected_count: Embedded images found in the export HTML.
+        image_urls: Image URLs extracted from the migrated markdown content.
+        url_checker: Optional callback for checking migrated URLs.
+        api_origin: Optional (scheme, host, port) of the API for migrated-link
+            recognition.
+
+    Returns:
+        Structured image fidelity result.
+    """
+    urls = list(image_urls)
+    failures: list[VerificationFailure] = []
+    present_count = 0
+    linked_count = 0
+
+    for url in urls:
+        if _is_api_migrated_link(url, api_origin):
+            linked_count += 1
+            present_count += 1
+            continue
+        if not url.lower().startswith(("http://", "https://")):
+            failures.append(
+                VerificationFailure(
+                    category=BROKEN_LINK,
+                    message=(
+                        f"Migrated document '{document_name}' contains an "
+                        f"image link that was never rewritten to a migrated URL."
+                    ),
+                    document_id=document_id,
+                    source=url,
+                    url=url,
+                )
+            )
+            continue
+
+        linked_count += 1
+        reachable = True
+        if url_checker is not None:
+            try:
+                reachable = url_checker(url)
+            except Exception:
+                reachable = False
+            if not reachable:
+                failures.append(
+                    VerificationFailure(
+                        category=INACCESSIBLE_URL,
+                        message=(
+                            f"Migrated image URL in document '{document_name}' "
+                            "was not accessible."
+                        ),
+                        document_id=document_id,
+                        source=url,
+                        url=url,
+                    )
+                )
+        if reachable:
+            present_count += 1
+
+    if linked_count < expected_count:
+        failures.append(
+            VerificationFailure(
+                category=MISSING_UPLOAD,
+                message=(
+                    f"Document '{document_name}' references {expected_count} "
+                    f"exported images but only {linked_count} migrated "
+                    "image links were found in its content."
+                ),
+                document_id=document_id,
+            )
+        )
+
+    return EmbeddedImageVerificationResult(
+        expected_count=expected_count,
         present_count=present_count,
         failures=failures,
     )
