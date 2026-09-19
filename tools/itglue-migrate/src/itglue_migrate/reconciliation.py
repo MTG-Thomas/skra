@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,14 +63,26 @@ class OrganizationReconciliation:
 
     name: str
     itglue_id: str
-    skra_id: str | None
-    dry_run: bool
+    skra_id: str | None = None
+    dry_run: bool = False
     entities: dict[str, EntityReconciliation] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     attachment_summary: dict[str, Any] | None = None
     relationship_summary: dict[str, Any] | None = None
     relationship_audit: list[dict[str, Any]] | None = None
+    # Deprecated alias for skra_id (pre-rename callers, e.g. plan files).
+    bifrost_id: str | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.bifrost_id is not None:
+            warnings.warn(
+                "bifrost_id is deprecated, use skra_id instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if self.skra_id is None:
+                self.skra_id = self.bifrost_id
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-safe dict."""

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from itglue_migrate.reconciliation import (
     OrganizationReconciliation,
     ReconciliationReport,
@@ -222,3 +224,18 @@ def test_report_writes_stable_json(tmp_path: Path) -> None:
     assert data["target"] == "Midtown"
     assert data["dry_run"] is True
     assert data["summary"]["organization_count"] == 0
+
+
+def test_legacy_bifrost_id_alias_maps_to_skra_id() -> None:
+    """Pre-rename callers passing bifrost_id keep working via the alias."""
+    with pytest.warns(DeprecationWarning, match="bifrost_id is deprecated"):
+        org = OrganizationReconciliation(
+            name="Midtown",
+            itglue_id="1",
+            skra_id=None,
+            dry_run=True,
+            bifrost_id="org-1",
+        )
+
+    assert org.skra_id == "org-1"
+    assert org.to_dict()["skra_id"] == "org-1"
