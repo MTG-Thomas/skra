@@ -48,6 +48,7 @@ from itglue_migrate.verification import (
     INACCESSIBLE_URL,
     MISSING_ORGANIZATION,
     MISSING_UPLOAD,
+    UNRESOLVED_ENTITY,
     MigratedAttachment,
     MigratedAttachmentReconciliation,
     VerificationFailure,
@@ -3345,7 +3346,7 @@ async def _verify_org_fidelity(
     identities = _invert_entity_identities(state)
     migrated_pairs: list[tuple[tuple[str, str, str], str]] = []
     unresolved: list[MigratedAttachment] = []
-    skipped_records = 0
+    sparse_failures: list[VerificationFailure] = []
     attachment_result = None
     try:
         records = await fetcher.list_all_attachments(org_uuid)
@@ -3368,7 +3369,20 @@ async def _verify_org_fidelity(
         filename = record.get("filename")
         entity_uuid = record.get("entity_id")
         if not filename or not entity_uuid:
-            skipped_records += 1
+            missing_field = "filename" if not filename else "entity reference"
+            sparse_failures.append(
+                VerificationFailure(
+                    category=UNRESOLVED_ENTITY,
+                    message=(
+                        f"Migrated attachment record "
+                        f"'{record.get('id', '')}' is missing its "
+                        f"{missing_field}; it cannot be verified."
+                    ),
+                    entity_type=str(record.get("entity_type", "") or ""),
+                    entity_id=str(entity_uuid or ""),
+                    filename=str(filename or ""),
+                )
+            )
             continue
         identity = identities.get(str(entity_uuid))
         if identity is None:
@@ -3384,17 +3398,13 @@ async def _verify_org_fidelity(
             export_type, itglue_id = identity
             key = (export_type, itglue_id, str(filename))
             migrated_pairs.append((key, str(record.get("id", ""))))
-    if skipped_records:
-        warnings.append(
-            f"Skipped {skipped_records} migrated attachment records "
-            "with missing filename or entity reference."
-        )
     if attachment_result is None:
         attachment_result = reconcile_migrated_attachments(
             expected,
             [triple for triple, _ in migrated_pairs],
             unresolved,
         )
+    attachment_result.failures.extend(sparse_failures)
 
     # --- Attachment accessibility (opt-in URL checks only) ---
     if url_checker is not None:

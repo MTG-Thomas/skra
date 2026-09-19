@@ -472,6 +472,60 @@ async def test_run_verify_missing_migrated_document_without_images_fails(
     assert exit_code == 1
 
 
+@pytest.mark.asyncio
+async def test_run_verify_sparse_attachment_records_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migrated records without filename/entity cannot be verified: fail."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            attachments=[
+                {
+                    "id": "att-no-name",
+                    "entity_type": "document",
+                    "entity_id": "uuid-doc-1",
+                    "_org": "org-uuid-acme",
+                },
+                {
+                    "id": "att-no-entity",
+                    "entity_type": "document",
+                    "filename": "stray.pdf",
+                    "_org": "org-uuid-acme",
+                },
+            ],
+        ),
+    )
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    failures = report["organizations"][0]["attachments"]["failures"]
+    assert len(failures) == 2
+    assert {failure["category"] for failure in failures} == {"unresolved_entity"}
+    assert any("att-no-name" in failure["message"] for failure in failures)
+    assert any("att-no-entity" in failure["message"] for failure in failures)
+
+
 def test_verify_command_requires_org_or_all(tmp_path: Path) -> None:
     """The wrapper rejects missing and conflicting org selection."""
     runner = CliRunner()

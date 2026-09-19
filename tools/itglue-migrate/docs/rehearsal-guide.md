@@ -165,7 +165,9 @@ Failure categories (shared with the reconciliation vocabulary):
   duplicated filename missing one copy still fails.
 - `unexpected_upload` — migrated attachment with no matching export file
 - `unresolved_entity` — migrated attachment whose entity could not be matched
-  to the export via `metadata.itglue_id` (investigate before deleting)
+  to the export via `metadata.itglue_id` (investigate before deleting), or
+  whose record lacks a filename/entity reference and therefore cannot be
+  verified at all
 - `broken_embedded_image` — embedded image file missing from the export
 - `broken_link` — migrated document content still contains a relative image
   link that was never rewritten to a migrated URL
