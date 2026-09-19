@@ -636,40 +636,53 @@ async def list_global_custom_assets(
 async def get_global_sidebar_data(
     _current_user: CurrentActiveUser,
     db: DbSession,
+    show_disabled: bool = Query(False, description="Include archived organizations"),
 ) -> GlobalSidebarData:
     """
-    Get sidebar navigation data aggregated across ALL organizations.
+    Get sidebar navigation data aggregated across visible organizations.
 
-    Returns counts for all entity types across all orgs:
+    Returns counts for all entity types across visible orgs:
     - Core entities (passwords, locations, documents)
     - Configuration types with total configuration counts
     - Custom asset types with total asset counts
 
+    Archived (disabled) organizations are excluded by default and included
+    with show_disabled=true, matching the global list endpoints (issue #93).
+
     Args:
         current_user: Current authenticated user
         db: Database session
+        show_disabled: Include counts from archived (disabled) organizations
 
     Returns:
         Sidebar data with aggregated counts
     """
+    org_ids = await _visible_org_ids(db, show_disabled)
+
+    def org_filter(model):
+        """Org restriction for the default listing (none when opted in)."""
+        return [] if org_ids is None else [model.organization_id.in_(org_ids)]
+
     # Get aggregated core entity counts (only enabled items)
     password_count_result = await db.execute(
-        select(func.count(Password.id)).where(Password.is_enabled.is_(True))
+        select(func.count(Password.id)).where(Password.is_enabled.is_(True), *org_filter(Password))
     )
     passwords_count = password_count_result.scalar_one()
 
     location_count_result = await db.execute(
-        select(func.count(Location.id)).where(Location.is_enabled.is_(True))
+        select(func.count(Location.id)).where(Location.is_enabled.is_(True), *org_filter(Location))
     )
     locations_count = location_count_result.scalar_one()
 
     document_count_result = await db.execute(
-        select(func.count(Document.id)).where(Document.is_enabled.is_(True))
+        select(func.count(Document.id)).where(Document.is_enabled.is_(True), *org_filter(Document))
     )
     documents_count = document_count_result.scalar_one()
 
     configuration_count_result = await db.execute(
-        select(func.count(Configuration.id)).where(Configuration.is_enabled.is_(True))
+        select(func.count(Configuration.id)).where(
+            Configuration.is_enabled.is_(True), *org_filter(Configuration)
+        )
     )
     configurations_count = configuration_count_result.scalar_one()
 
@@ -683,6 +696,7 @@ async def get_global_sidebar_data(
             select(func.count(Configuration.id)).where(
                 Configuration.configuration_type_id == ct.id,
                 Configuration.is_enabled.is_(True),
+                *org_filter(Configuration),
             )
         )
         count = count_result.scalar_one()
@@ -698,6 +712,7 @@ async def get_global_sidebar_data(
             select(func.count(CustomAsset.id)).where(
                 CustomAsset.custom_asset_type_id == at.id,
                 CustomAsset.is_enabled.is_(True),
+                *org_filter(CustomAsset),
             )
         )
         count = count_result.scalar_one()

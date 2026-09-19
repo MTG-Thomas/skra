@@ -498,6 +498,81 @@ class TestDisabledOrgVisibilityMatrix:
         assert await _visible_org_ids(mock_db, True) is None
         mock_db.execute.assert_not_awaited()
 
+    async def _sidebar_statements(self, client, show_disabled, org_a_id):
+        """Run GET /api/global/sidebar with a recording session."""
+        from src.core.database import get_db
+
+        statements = []
+
+        async def fake_execute(stmt, *args, **kwargs):
+            statements.append(stmt)
+            result = MagicMock()
+            result.scalar_one = MagicMock(return_value=1)
+            return result
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(side_effect=fake_execute)
+        mock_ct = MagicMock()
+        mock_ct.id = uuid4()
+        mock_ct.name = "Server"
+        mock_config_type_repo = AsyncMock()
+        mock_config_type_repo.get_all_ordered = AsyncMock(return_value=[mock_ct])
+        mock_at = MagicMock()
+        mock_at.id = uuid4()
+        mock_at.name = "Vendor"
+        mock_asset_type_repo = AsyncMock()
+        mock_asset_type_repo.get_all_ordered = AsyncMock(return_value=[mock_at])
+        app.dependency_overrides[get_db] = lambda: mock_db
+        try:
+            with auth_as(make_principal(UserRole.READER)):
+                with (
+                    patch(
+                        "src.routers.global_view.ConfigurationTypeRepository",
+                        return_value=mock_config_type_repo,
+                    ),
+                    patch(
+                        "src.routers.global_view.CustomAssetTypeRepository",
+                        return_value=mock_asset_type_repo,
+                    ),
+                    patch(
+                        "src.routers.global_view._visible_org_ids",
+                        new=AsyncMock(return_value=None if show_disabled else [org_a_id]),
+                    ),
+                ):
+                    suffix = "?show_disabled=true" if show_disabled else ""
+                    response = await client.get(f"/api/global/sidebar{suffix}")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert response.status_code == 200
+        return response, statements
+
+    async def test_sidebar_counts_hide_disabled_org_by_default(
+        self, client: AsyncClient, org_a_id, org_b_id
+    ):
+        """Default sidebar aggregates filter every count to enabled orgs."""
+        response, statements = await self._sidebar_statements(client, False, org_a_id)
+
+        # 4 core counts + 1 per-type count each.
+        assert len(statements) == 6
+        sql = " ".join(str(s.compile(compile_kwargs={"literal_binds": True})) for s in statements)
+        assert _hex(org_a_id) in sql
+        assert _hex(org_b_id) not in sql
+        body = response.json()
+        assert body["passwords_count"] == 1
+        assert body["configuration_types"][0]["count"] == 1
+        assert body["custom_asset_types"][0]["count"] == 1
+
+    async def test_sidebar_counts_show_disabled_includes_all(
+        self, client: AsyncClient, org_a_id, org_b_id
+    ):
+        """show_disabled=true sidebar aggregates apply no org restriction."""
+        response, statements = await self._sidebar_statements(client, True, org_a_id)
+
+        assert len(statements) == 6
+        sql = " ".join(str(s.compile(compile_kwargs={"literal_binds": True})) for s in statements)
+        assert "organization_id" not in sql.lower()
+
     @pytest.mark.parametrize(
         "route,repo_path",
         [

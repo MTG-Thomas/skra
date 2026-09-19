@@ -66,7 +66,10 @@ async def search(
         "'text' (ILIKE only), 'semantic' (embeddings only, requires OpenAI), "
         "'hybrid' (combines both when available)",
     ),
-    show_disabled: bool = Query(False, description="Include disabled items in search results"),
+    show_disabled: bool = Query(
+        False,
+        description="Include disabled records and archived organizations in search results",
+    ),
 ) -> SearchResponse:
     """
     Search across all entities.
@@ -86,7 +89,8 @@ async def search(
                 organizations the user belongs to.
         limit: Maximum number of results (default 20, max 100)
         mode: Search mode to use
-        show_disabled: Include disabled items in search results (default: False)
+        show_disabled: Include disabled records and archived organizations
+            in search results (default: False)
 
     Returns:
         SearchResponse with query and ranked results
