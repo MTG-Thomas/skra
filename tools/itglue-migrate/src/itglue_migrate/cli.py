@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -43,8 +44,13 @@ from itglue_migrate.sync_differ import EntityPlan, SyncDiffer, SyncPlan
 from itglue_migrate.sync_executor import SyncExecutor, SyncResult
 from itglue_migrate.verification import (
     BROKEN_EMBEDDED_IMAGE,
+    MISSING_UPLOAD,
+    MigratedAttachment,
     collect_embedded_image_references,
+    extract_markdown_image_urls,
+    reconcile_migrated_attachments,
     verify_embedded_images,
+    verify_migrated_document_images,
 )
 from itglue_migrate.warnings import ParsedData, Warning, WarningDetector, summarize
 
@@ -3199,6 +3205,549 @@ def sync(
             Panel(
                 "[yellow]Sync completed with failures.[/yellow]\n\n"
                 "Review the errors above.",
+                title="Warning",
+                border_style="yellow",
+            )
+        )
+
+    sys.exit(exit_code)
+
+
+def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
+    """Check whether a migrated URL is reachable without downloading it.
+
+    Read-only: issues HEAD, falling back to GET for servers that reject HEAD.
+
+    Args:
+        url: Absolute URL to check.
+        timeout_seconds: Per-request timeout.
+
+    Returns:
+        True when the URL responds with a success status.
+    """
+    try:
+        response = httpx.head(url, follow_redirects=True, timeout=timeout_seconds)
+        if response.status_code in (403, 405, 501):
+            with httpx.stream(
+                "GET", url, follow_redirects=True, timeout=timeout_seconds
+            ) as stream:
+                return stream.status_code < 400
+        return response.status_code < 400
+    except Exception:
+        return False
+
+
+async def _paginate_org_records(
+    fetch_fn: Any,
+    org_id: str,
+    **kwargs: Any,
+) -> list[dict[str, Any]]:
+    """Collect every page from a paginated org-scoped list endpoint (GET only)."""
+    records: list[dict[str, Any]] = []
+    offset = 0
+    limit = 100
+    while True:
+        result = await fetch_fn(org_id, limit=limit, offset=offset, **kwargs)
+        items = result.get("items", [])
+        records.extend(items)
+        if len(items) < limit:
+            break
+        offset += limit
+    return records
+
+
+def _invert_entity_identities(
+    state: ExistingState,
+) -> dict[str, tuple[str, str]]:
+    """Map migrated entity UUIDs back to (export entity type, IT Glue ID).
+
+    Custom-asset type slugs are normalized to ``custom_assets`` to match the
+    comparison vocabulary; per-asset precision is preserved via IT Glue ID.
+    """
+    inverted: dict[str, tuple[str, str]] = {}
+    for export_type, mapping in (
+        ("configurations", state.config_by_itglue_id),
+        ("locations", state.location_by_itglue_id),
+        ("documents", state.document_by_itglue_id),
+        ("passwords", state.password_by_itglue_id),
+        ("custom_assets", state.custom_asset_by_itglue_id),
+    ):
+        for itglue_id, uuid in mapping.items():
+            inverted[str(uuid)] = (export_type, str(itglue_id))
+    return inverted
+
+
+async def _verify_org_fidelity(
+    client: BifrostDocsClient,
+    export_path: Path,
+    org_name: str,
+    org_itglue_id: str,
+    org_uuid: str,
+    state: ExistingState,
+    org_configs: list[dict[str, Any]],
+    org_locations: list[dict[str, Any]],
+    org_documents: list[dict[str, Any]],
+    org_passwords: list[dict[str, Any]],
+    org_custom_assets: list[dict[str, Any]],
+    url_checker: Any | None,
+) -> dict[str, Any]:
+    """Run read-only fidelity checks for one organization (GET/HEAD only)."""
+    warnings: list[str] = []
+
+    # --- Attachments: export files vs migrated records ---
+    core_ids = {
+        "configurations": {str(item.get("id", "")) for item in org_configs},
+        "locations": {str(item.get("id", "")) for item in org_locations},
+        "documents": {str(item.get("id", "")) for item in org_documents},
+        "passwords": {str(item.get("id", "")) for item in org_passwords},
+    }
+    custom_ids = {str(asset.get("id", "")) for asset in org_custom_assets}
+
+    scanner = AttachmentScanner()
+    all_attachments = scanner.get_all_attachments(export_path)
+    expected: set[tuple[str, str, str]] = set()
+    for (folder_type, entity_id), paths in all_attachments.items():
+        entity_id = str(entity_id)
+        if folder_type in core_ids:
+            if entity_id not in core_ids[folder_type]:
+                continue
+            export_type = folder_type
+        else:
+            if entity_id not in custom_ids:
+                continue
+            export_type = "custom_assets"
+        for path in paths:
+            expected.add((export_type, entity_id, path.name))
+
+    identities = _invert_entity_identities(state)
+    migrated: set[tuple[str, str, str]] = set()
+    unresolved: list[MigratedAttachment] = []
+    skipped_records = 0
+    try:
+        records = await _paginate_org_records(client.list_attachments, org_uuid)
+    except APIError as e:
+        warnings.append(f"Could not list migrated attachments: {e}")
+        records = []
+    for record in records:
+        filename = record.get("filename")
+        entity_uuid = record.get("entity_id")
+        if not filename or not entity_uuid:
+            skipped_records += 1
+            continue
+        identity = identities.get(str(entity_uuid))
+        if identity is None:
+            unresolved.append(
+                MigratedAttachment(
+                    attachment_id=str(record.get("id", "")),
+                    entity_type=str(record.get("entity_type", "")),
+                    entity_id=str(entity_uuid),
+                    filename=str(filename),
+                )
+            )
+        else:
+            export_type, itglue_id = identity
+            migrated.add((export_type, itglue_id, str(filename)))
+    if skipped_records:
+        warnings.append(
+            f"Skipped {skipped_records} migrated attachment records "
+            "with missing filename or entity reference."
+        )
+    attachment_result = reconcile_migrated_attachments(expected, migrated, unresolved)
+
+    # --- Embedded images: export files, then migrated document content ---
+    image_references = collect_embedded_image_references(export_path, org_documents)
+    export_image_result = verify_embedded_images(image_references)
+    refs_by_doc: dict[str, int] = {}
+    for ref in image_references:
+        refs_by_doc[ref.document_id] = refs_by_doc.get(ref.document_id, 0) + 1
+
+    image_failures = list(export_image_result.failures)
+    documents_checked = 0
+    present_total = 0
+    for doc in org_documents:
+        doc_id = str(doc.get("id", ""))
+        doc_name = str(doc.get("name", doc_id))
+        migrated_uuid = state.document_by_itglue_id.get(doc_id)
+        if not migrated_uuid:
+            warnings.append(
+                f"Document '{doc_name}' (IT Glue ID {doc_id}) not found in "
+                "the API; migrated image check skipped."
+            )
+            continue
+        try:
+            migrated_doc = await client.get_document(org_uuid, migrated_uuid)
+        except APIError as e:
+            warnings.append(
+                f"Could not fetch migrated document '{doc_name}': {e}"
+            )
+            continue
+        documents_checked += 1
+        content = str(migrated_doc.get("content", "") or "")
+        result = verify_migrated_document_images(
+            document_id=doc_id,
+            document_name=doc_name,
+            expected_count=refs_by_doc.get(doc_id, 0),
+            image_urls=extract_markdown_image_urls(content),
+            url_checker=url_checker,
+        )
+        present_total += result.present_count
+        image_failures.extend(result.failures)
+
+    embedded_section = {
+        "expected_count": export_image_result.expected_count,
+        "migrated_documents_checked": documents_checked,
+        "present_count": present_total,
+        "failure_count": len(image_failures),
+        "failures": [failure.to_dict() for failure in image_failures],
+    }
+
+    failure_categories: dict[str, int] = {}
+    for failure in (
+        attachment_result.failures + image_failures
+    ):
+        failure_categories[failure.category] = (
+            failure_categories.get(failure.category, 0) + 1
+        )
+
+    return {
+        "name": org_name,
+        "itglue_id": org_itglue_id,
+        "bifrost_id": org_uuid,
+        "attachments": attachment_result.to_dict(),
+        "embedded_images": embedded_section,
+        "failure_categories": failure_categories,
+        "warnings": warnings,
+    }
+
+
+def _display_verify_report(report: dict[str, Any]) -> None:
+    """Display fidelity verification results."""
+    console.print()
+    table = Table(title="Fidelity Verification", show_header=True)
+    table.add_column("Organization", style="cyan")
+    table.add_column("Attachments OK", justify="right")
+    table.add_column("Missing Uploads", justify="right")
+    table.add_column("Images Present/Expected", justify="right")
+    table.add_column("Image Failures", justify="right")
+
+    for org in report["organizations"]:
+        attachments = org["attachments"]
+        embedded = org["embedded_images"]
+        missing = org["failure_categories"].get(MISSING_UPLOAD, 0)
+        ok_str = (
+            "[green]yes[/green]" if attachments["ok"] else "[red]no[/red]"
+        )
+        missing_str = f"[red]{missing}[/red]" if missing else str(missing)
+        table.add_row(
+            org["name"],
+            ok_str,
+            missing_str,
+            f"{embedded['present_count']}/{embedded['expected_count']}",
+            str(embedded["failure_count"]),
+        )
+    console.print(table)
+
+    failures_total = report["summary"]["failure_count"]
+    if failures_total:
+        console.print()
+        console.print("[bold red]Failures (first 10 per category shown):[/bold red]")
+        shown = 0
+        for org in report["organizations"]:
+            for section in ("attachments", "embedded_images"):
+                for failure in org[section]["failures"]:
+                    if shown >= 10:
+                        break
+                    console.print(
+                        f"  - [{failure['category']}] {org['name']}: "
+                        f"{failure['message']}"
+                    )
+                    shown += 1
+
+    console.print()
+    follow_up = report["summary"]["follow_up_required"]
+    style = "yellow" if follow_up else "green"
+    console.print(
+        f"[{style}]Follow-up required: {follow_up} "
+        f"({failures_total} failures)[/{style}]"
+    )
+
+
+async def _run_verify(
+    export_path: Path,
+    api_url: str,
+    token: str,
+    target_org: str | None,
+    check_urls: bool = False,
+    output: Path | None = None,
+) -> int:
+    """Run read-only fidelity verification (GET/HEAD requests only).
+
+    Returns:
+        Exit code (0 when clean, 1 when failures were found).
+    """
+    validation = _validate_export_path(export_path)
+    parser = CSVParser()
+    console.print("[bold]Parsing CSV files...[/bold]")
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Parsing...", total=None)
+        parsed = _parse_all_csv_files(parser, export_path, validation, progress, task)
+
+    if target_org:
+        orgs_to_verify = [
+            o for o in parsed.organizations if o.get("name") == target_org
+        ]
+        if not orgs_to_verify:
+            error_console.print(
+                f"[red]Error:[/red] Organization '{target_org}' not found in export"
+            )
+            return 1
+    else:
+        orgs_to_verify = parsed.organizations
+
+    url_checker = _check_url_reachable if check_urls else None
+    report: dict[str, Any] = {
+        "schema_version": 1,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "export_path": str(export_path),
+        "target": target_org or "all",
+        "check_urls": check_urls,
+        "organizations": [],
+    }
+
+    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+        fetcher = StateFetcher(client)
+        all_orgs_state = await fetcher.fetch_all_orgs()
+
+        for org in orgs_to_verify:
+            org_name = org.get("name", "")
+            org_itglue_id = str(org.get("id", ""))
+            console.print(f"[bold cyan]Verifying organization: {org_name}[/bold cyan]")
+
+            org_uuid = all_orgs_state.org_by_itglue_id.get(org_itglue_id)
+            if not org_uuid:
+                org_uuid = all_orgs_state.org_by_name.get(org_name.lower())
+            if not org_uuid:
+                message = "Organization not found in API; verification skipped."
+                console.print(f"  [red]{message}[/red]")
+                report["organizations"].append(
+                    {
+                        "name": org_name,
+                        "itglue_id": org_itglue_id,
+                        "bifrost_id": None,
+                        "attachments": {
+                            "ok": False,
+                            "expected_count": 0,
+                            "migrated_count": 0,
+                            "failure_count": 0,
+                            "failures": [],
+                        },
+                        "embedded_images": {
+                            "expected_count": 0,
+                            "migrated_documents_checked": 0,
+                            "present_count": 0,
+                            "failure_count": 0,
+                            "failures": [],
+                        },
+                        "failure_categories": {},
+                        "warnings": [message],
+                    }
+                )
+                continue
+
+            state = await fetcher.fetch_for_org(org_uuid)
+
+            def matches_org(
+                item: dict,
+                expected_itglue_id: str = org_itglue_id,
+                expected_name: str = org_name,
+            ) -> bool:
+                csv_org = str(
+                    item.get("organization_id") or item.get("organization") or ""
+                )
+                return csv_org == expected_itglue_id or csv_org == expected_name
+
+            org_configs = [c for c in parsed.configurations if matches_org(c)]
+            org_locations = [loc for loc in parsed.locations if matches_org(loc)]
+            org_documents = [d for d in parsed.documents if matches_org(d)]
+            org_passwords = [p for p in parsed.passwords if matches_org(p)]
+            org_custom_assets = []
+            for type_slug, assets in parsed.custom_assets.items():
+                for asset in assets:
+                    if matches_org(asset):
+                        asset["_type_slug"] = type_slug
+                        org_custom_assets.append(asset)
+
+            org_report = await _verify_org_fidelity(
+                client=client,
+                export_path=export_path,
+                org_name=org_name,
+                org_itglue_id=org_itglue_id,
+                org_uuid=org_uuid,
+                state=state,
+                org_configs=org_configs,
+                org_locations=org_locations,
+                org_documents=org_documents,
+                org_passwords=org_passwords,
+                org_custom_assets=org_custom_assets,
+                url_checker=url_checker,
+            )
+            report["organizations"].append(org_report)
+
+    failure_categories: dict[str, int] = {}
+    failure_count = 0
+    for org_report in report["organizations"]:
+        for category, count in org_report["failure_categories"].items():
+            failure_categories[category] = failure_categories.get(category, 0) + count
+        failure_count += org_report["attachments"]["failure_count"]
+        failure_count += org_report["embedded_images"]["failure_count"]
+
+    report["summary"] = {
+        "organization_count": len(report["organizations"]),
+        "failure_count": failure_count,
+        "failure_categories": failure_categories,
+        "follow_up_required": failure_count > 0,
+    }
+
+    _display_verify_report(report)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        console.print(f"[green]Fidelity report written to {output}[/green]")
+    return 1 if failure_count > 0 else 0
+
+
+@app.command()
+def verify(
+    export_path: Annotated[
+        Path,
+        typer.Option(
+            "--export-path",
+            "-e",
+            help="Path to the IT Glue export directory",
+            exists=False,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        ),
+    ],
+    api_url: Annotated[
+        str,
+        typer.Option(
+            "--api-url",
+            "-u",
+            help="BifrostDocs API URL (e.g., https://api.example.com)",
+            envvar="BIFROST_API_URL",
+        ),
+    ],
+    token: Annotated[
+        str,
+        typer.Option(
+            "--token",
+            "-t",
+            help="BifrostDocs API authentication token",
+            envvar="BIFROST_API_TOKEN",
+        ),
+    ],
+    org: Annotated[
+        str | None,
+        typer.Option(
+            "--org",
+            "-o",
+            help="Verify a single organization by name",
+        ),
+    ] = None,
+    all_orgs: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            help="Verify all organizations",
+        ),
+    ] = False,
+    check_urls: Annotated[
+        bool,
+        typer.Option(
+            "--check-urls",
+            help="Also check that migrated download/image URLs are reachable",
+        ),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            help="Write a JSON fidelity report to this path",
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
+) -> None:
+    """Verify attachment and embedded image fidelity after import.
+
+    Read-only: only GET requests (plus HEAD/GET URL checks with --check-urls).
+    Compares export files against migrated API records, checks migrated
+    document content for broken image links, and writes a machine-readable
+    report whose failure categories match the reconciliation vocabulary so
+    results can be folded into reconciliation artifacts.
+
+    Use --org to verify a single organization or --all for every organization
+    in the export. Exits non-zero when failures are found.
+    """
+    console.print(Panel("IT Glue Migration - Verify Fidelity", style="bold blue"))
+    console.print()
+
+    if not org and not all_orgs:
+        error_console.print(
+            "[red]Error:[/red] You must specify either --org <name> or --all"
+        )
+        raise typer.Exit(1)
+
+    if org and all_orgs:
+        error_console.print(
+            "[red]Error:[/red] Cannot specify both --org and --all"
+        )
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Export path:[/bold] {export_path}")
+    console.print(f"[bold]API URL:[/bold] {api_url}")
+    console.print(f"[bold]Target:[/bold] {org if org else 'All organizations'}")
+    if check_urls:
+        console.print("[bold]URL checks:[/bold] Enabled")
+    console.print()
+
+    exit_code = asyncio.run(
+        _run_verify(
+            export_path=export_path,
+            api_url=api_url,
+            token=token,
+            target_org=org,
+            check_urls=check_urls,
+            output=output,
+        )
+    )
+
+    console.print()
+    if exit_code == 0:
+        console.print(
+            Panel(
+                "[green]Fidelity verification passed![/green]\n\n"
+                "All expected attachments and images reconciled.",
+                title="Done",
+                border_style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                "[yellow]Fidelity verification found issues.[/yellow]\n\n"
+                "Review the failures above.",
                 title="Warning",
                 border_style="yellow",
             )
