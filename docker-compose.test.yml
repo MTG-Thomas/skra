@@ -168,8 +168,11 @@ services:
       - test  # Only start when running tests
 
   # =============================================================================
-  # Client E2E Testing Services (started with --profile client)
+  # Client E2E Testing Services (started with --profile client --profile e2e)
   # =============================================================================
+  # NOTE: the client depends_on api, which lives in the `e2e` profile.
+  # Compose v5 strictly filters inactive profiles, so the client profile
+  # alone is an invalid project — always enable both profiles together.
 
   # Client frontend (Vite dev server)
   # Serves the React app for Playwright browser tests. Builds the explicit

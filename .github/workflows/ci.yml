@@ -387,7 +387,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Start isolated client E2E stack
-        run: docker compose -f docker-compose.test.yml --profile client up -d --build
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e up -d --build
 
       - name: Wait for client healthy
         run: |
@@ -403,12 +403,12 @@ jobs:
 
       - name: Probe app and API proxy through Vite
         run: |
-          docker compose -f docker-compose.test.yml exec -T client node -e "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-          docker compose -f docker-compose.test.yml exec -T client node -e "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
       - name: Tear down test stack
         if: always()
-        run: docker compose -f docker-compose.test.yml --profile client down -v
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e down -v
 
   # =============================================================================
   # Security Scanning
