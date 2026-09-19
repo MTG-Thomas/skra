@@ -74,6 +74,9 @@ services:
       GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-managed}
       GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-bifrost-docs-key}
       GARAGE_CREDS_FILE: /run/garage-creds/s3.env
+      # Must match the pinned app uid/gid in api/Dockerfile (15000).
+      GARAGE_CREDS_UID: ${GARAGE_CREDS_UID:-15000}
+      GARAGE_CREDS_GID: ${GARAGE_CREDS_GID:-15000}
       GARAGE_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY_ID:-}
       GARAGE_SECRET_ACCESS_KEY: ${GARAGE_SECRET_ACCESS_KEY:-}
       GARAGE_ROTATE: ${GARAGE_ROTATE:-}
@@ -202,10 +205,15 @@ services:
   worker:
     image: jackmusick/bifrost-docs-api:latest
     container_name: bifrost-docs-worker
+    volumes:
+      - bifrost_docsgarage_creds:/run/garage-creds:ro
     environment:
       BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:?BIFROST_DOCS_SECRET_KEY is required (32+ chars)}
       BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD}@pgbouncer:5432/bifrost_docs
       BIFROST_DOCS_REDIS_URL: redis://valkey:6379/0
+      # Same managed S3 credentials as api (issue #107); the worker image is
+      # the api image, so the same uid-pinned app identity applies.
+      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
     depends_on:
       init:
         condition: service_completed_successfully

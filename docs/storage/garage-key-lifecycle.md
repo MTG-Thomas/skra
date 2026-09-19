@@ -14,9 +14,16 @@ Garage-native lifecycle with one file-based secret handoff:
 
 - **Managed mode (default).** First run creates a key via `POST /v1/key`
   (AddKey); Garage mints ID + secret. The secret is written once to
-  `s3.env` (mode 600) on the `garage-creds` Docker volume, consumed by the
-  API via `BIFROST_DOCS_S3_CREDENTIALS_FILE`. Explicit
+  `s3.env` on the `garage-creds` Docker volume, consumed by **api and
+  worker** via `BIFROST_DOCS_S3_CREDENTIALS_FILE` (both mount the volume
+  read-only; the worker runs the same image). Explicit
   `BIFROST_DOCS_S3_ACCESS_KEY`/`_SECRET_KEY` env still wins when set.
+- **Cross-container ownership.** garage-init runs as root (alpine) while
+  the app runs as `app`; a root-owned 0600 file would be unreadable. The
+  Dockerfile pins `app` to uid/gid 15000 and init chowns both state files
+  to `GARAGE_CREDS_UID:GARAGE_CREDS_GID` (default 15000, set in compose)
+  before locking to mode 600 — owner-readable, non-world-readable,
+  verified: uid 15000 reads, any other UID is denied.
 - **Idempotent rerun.** The active key name persists in `s3.keyname` next
   to the credentials. Reruns find the key by exact name (`GET /v1/key?list`),
   re-fetch the secret (`showSecretKey=true`), and rewrite the file — a lost
@@ -49,8 +56,10 @@ Garage-native lifecycle with one file-based secret handoff:
 - Clean install: `up -d` (init runs automatically). Verify with
   `docker compose logs garage-init` (key ID, no secret).
 - Restart: `up -d` again; init reuses the key and rewrites the file.
-- Rotate: `GARAGE_ROTATE=1 up garage-init`, restart `api`, then
-  `GARAGE_REVOKE_KEY_ID=<old-id> up garage-init`.
+- Rotate: `GARAGE_ROTATE=1 up garage-init`, restart **both `api` and
+  `worker`** (both read the credentials file at startup), then
+  `GARAGE_REVOKE_KEY_ID=<old-id> up garage-init`. Restarting only one
+  leaves the other on the superseded key until its next restart.
 - Recover lost volume: restart `garage-init`; the file is rebuilt from the
   stored secret. If the key itself was deleted cluster-side, init mints a
   fresh one (data remains; bucket alias is stable).

@@ -49,8 +49,10 @@ t_managed_clean_install() {
       && grep -q '^S3_SECRET_ACCESS_KEY=[0-9a-f]*$' "$wd/creds/s3.env" \
       && grep -q '^bifrost-docs-key$' "$wd/creds/s3.keyname" \
       && grep -c 'POST /v1/key$' "$wd/stub.log" | grep -q '^1$' \
+      && [ "$(stat -c '%u:%g:%a' "$wd/creds/s3.env")" = "15000:15000:600" ] \
+      && [ "$(stat -c '%u:%g:%a' "$wd/creds/s3.keyname")" = "15000:15000:600" ] \
       && ok "managed clean install mints one key and writes creds" \
-      || bad "managed clean install files/requests wrong"
+      || bad "managed clean install files/requests/ownership wrong"
     # Secret must never reach stdout.
     local sec; sec=$(grep -o '^S3_SECRET_ACCESS_KEY=.*' "$wd/creds/s3.env" | cut -d= -f2)
     grep -q "$sec" "$wd/out.log" && bad "secret leaked to stdout" || ok "secret not on stdout"

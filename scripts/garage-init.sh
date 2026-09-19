@@ -75,9 +75,15 @@ key_id_for_name() {
 }
 
 write_creds_file() {
-    # $1 = key ID, $2 = secret. Writes KEY=VALUE with owner-only perms.
+    # $1 = key ID, $2 = secret. Writes KEY=VALUE readable ONLY by the app
+    # identity: the api image pins app to uid/gid 15000 (see Dockerfile),
+    # while this container runs as root, so a plain 0600 file would be
+    # unreadable across the shared volume. chown by number (alpine has no
+    # app user) then lock to owner-only perms. Secrets stay non-world-readable.
     dir=$(dirname "${CREDS_FILE}")
     [ -d "${dir}" ] || fail "credentials directory missing: ${dir} (mount the garage-creds volume)"
+    uid="${GARAGE_CREDS_UID:-15000}"
+    gid="${GARAGE_CREDS_GID:-15000}"
     tmp="${CREDS_FILE}.tmp.$$"
     umask 077
     {
@@ -85,9 +91,11 @@ write_creds_file() {
         printf 'S3_ACCESS_KEY_ID=%s\n' "$1"
         printf 'S3_SECRET_ACCESS_KEY=%s\n' "$2"
     } > "${tmp}"
+    chown "${uid}:${gid}" "${tmp}" "${STATE_FILE}" 2>/dev/null || chown "${uid}:${gid}" "${tmp}"
     chmod 600 "${tmp}"
     mv "${tmp}" "${CREDS_FILE}"
     printf '%s\n' "${ACTIVE_NAME}" > "${STATE_FILE}"
+    chown "${uid}:${gid}" "${STATE_FILE}"
     chmod 600 "${STATE_FILE}"
 }
 
