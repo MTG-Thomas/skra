@@ -34,19 +34,16 @@ FROM python:3.11-slim
 # CVE-2026-13221, fixed in 5.40.1-6+deb13u1). The base image floats, so upgrade
 # explicitly instead of relying on the base snapshot date.
 #
-# Retained runtime tooling (issue #84: remove only with VM-gated proof):
-# - curl: required by the HEALTHCHECK below.
-# - pip/setuptools/wheel in system site-packages: base-image tooling, kept so
-#   the image stays debuggable with standard Python tooling; the application
-#   itself runs from /opt/venv and never invokes them. Removal (which would
-#   also drop pip's vendored SBOM manifests flagged in issue #82) is deferred
-#   to VM-gated evaluation, tracked in issue #91.
+# Runtime tooling: only curl is kept (required by the HEALTHCHECK below).
+# pip/setuptools/wheel are not installed: the application runs from /opt/venv
+# and never invokes them (verified: zero imports in src/, full unit suite
+# plus router suites pass with those imports hard-blocked). Omitting them
+# also drops pip's vendored SBOM manifests flagged in issue #82.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && apt-get install -y --only-upgrade perl-base \
-    && python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -62,6 +59,34 @@ ENV PYTHONPATH="/app"
 
 # Copy application code
 COPY --chown=app:app . .
+
+# Remove Python packaging tooling from the runtime image. The application
+# runs from /opt/venv (which uv builds without pip) and never invokes pip,
+# setuptools, wheel, or ensurepip at runtime (see comment above). This also
+# removes pip's vendored SBOM manifests (pip/_vendor/{vendor.txt,bom.cdx.json})
+# that Trivy v0.70.0 inventories as installed packages (issue #82). Verified
+# on a probe image built from the published digest: app import, curl, and
+# uvicorn intact; Trivy v0.70.0 HIGH/CRITICAL gate clean with no ignore file.
+RUN rm -rf \
+    /usr/local/lib/python3.11/site-packages/pip \
+    /usr/local/lib/python3.11/site-packages/pip-*.dist-info \
+    /usr/local/lib/python3.11/site-packages/setuptools \
+    /usr/local/lib/python3.11/site-packages/setuptools-*.dist-info \
+    /usr/local/lib/python3.11/site-packages/wheel \
+    /usr/local/lib/python3.11/site-packages/wheel-*.dist-info \
+    /usr/local/lib/python3.11/site-packages/_distutils_hack \
+    /usr/local/lib/python3.11/site-packages/distutils-precedence.pth \
+    /usr/local/lib/python3.11/ensurepip \
+    /usr/local/bin/pip* \
+    /opt/venv/bin/pip* \
+    /opt/venv/lib/python3.11/site-packages/pip \
+    /opt/venv/lib/python3.11/site-packages/pip-*.dist-info \
+    /opt/venv/lib/python3.11/site-packages/setuptools \
+    /opt/venv/lib/python3.11/site-packages/setuptools-*.dist-info \
+    /opt/venv/lib/python3.11/site-packages/wheel \
+    /opt/venv/lib/python3.11/site-packages/wheel-*.dist-info \
+    /opt/venv/lib/python3.11/site-packages/_distutils_hack \
+    /opt/venv/lib/python3.11/site-packages/distutils-precedence.pth
 
 # Switch to non-root user
 USER app
