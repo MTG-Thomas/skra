@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
@@ -241,7 +242,9 @@ async def list_global_passwords(
 
     # Hide archived organizations by default (issue #93)
     org_ids = await _visible_org_ids(db, show_disabled)
-    filters = [] if org_ids is None else [Password.organization_id.in_(org_ids)]
+    filters: list[ColumnElement[bool]] = (
+        [] if org_ids is None else [Password.organization_id.in_(org_ids)]
+    )
     passwords, total = await password_repo.get_paginated(
         filters=filters,
         search_columns=password_repo.SEARCH_COLUMNS,
@@ -399,7 +402,9 @@ async def list_global_locations(
 
     # Hide archived organizations by default (issue #93)
     org_ids = await _visible_org_ids(db, show_disabled)
-    filters = [] if org_ids is None else [Location.organization_id.in_(org_ids)]
+    filters: list[ColumnElement[bool]] = (
+        [] if org_ids is None else [Location.organization_id.in_(org_ids)]
+    )
     locations, total = await location_repo.get_paginated(
         filters=filters,
         search_columns=location_repo.SEARCH_COLUMNS,
