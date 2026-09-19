@@ -19,8 +19,8 @@ This records the deliberate V1 choice in
 `docs/plans/2026-01-13-remove-user-org-scoping.md`. Migration `020` removed
 `user_organizations` and `api_keys.organization_id`, and
 `get_execution_context()` in `api/src/core/auth.py` returns `org_id=None` for
-every user. The `ExecutionContext` class comments still describe the former
-membership model and need correction.
+every user. This decision also corrects the stale `ExecutionContext` comments
+that described the former membership model.
 
 ## Consequences
 
@@ -40,7 +40,6 @@ Issue #73 tracks the enforcement work. Integration tests should cover two
 organizations, every role, API keys, disabled organizations, org routes,
 global lists, and search. Tests must confirm that a role cannot perform an
 operation above its level, regardless of organization ID or browser state.
-Correct the stale execution-context comments in the same implementation.
 
 ## Future tenant boundary
 

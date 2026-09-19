@@ -58,13 +58,12 @@ class ExecutionContext:
 
     Contains the authenticated user, organization scope, and database session.
 
-    Scope rules:
-    - Regular users: org_id = user's current organization (always set)
-    - Platform users: org_id = None (global access)
+    All users have global access across client organizations, subject to
+    their role. Organization IDs on routes select records, not permissions.
     """
 
     user: UserPrincipal
-    org_id: UUID | None  # Execution scope (None only for platform user)
+    org_id: UUID | None  # None for every user in the current access model
     db: "AsyncSession"
 
     @property
@@ -79,7 +78,7 @@ class ExecutionContext:
 
     @property
     def is_global_scope(self) -> bool:
-        """Check if operating in global scope (platform user only)."""
+        """Check if operating in global scope (all users in the current model)."""
         return self.org_id is None
 
     @property

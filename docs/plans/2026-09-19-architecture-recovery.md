@@ -16,20 +16,20 @@ Bifrost runs connectors; Skra owns documentation mapping and reconciliation.
 
 ## 1. Define organization access before changing auth
 
-`api/src/core/auth.py` has a contradictory contract: the `ExecutionContext`
-docstring says regular users always have an organization, but
-`get_execution_context()` returns `org_id=None` for every user. The historical
-V1 plan deliberately chose global roles. That contract is recorded in
-`docs/architecture/001-organization-access.md`. Verify how each router
-authorizes records, and keep the global view and persisted `currentOrg` in
+`api/src/core/auth.py` had contradictory comments about organization scope,
+which this PR corrects. `get_execution_context()` returns `org_id=None` for
+every user. The historical V1 plan deliberately chose global roles. That
+contract is recorded in `docs/architecture/001-organization-access.md`.
+Verify how each router authorizes records, and keep the global view and
+persisted `currentOrg` in
 `client/src/stores/organization.store.ts` consistent with it. Do not recreate
 membership tables without a new tenant design.
 
 Acceptance: tests cover a contributor's access to two organizations, disabled
 organizations, global list/search endpoints, and API keys. A user cannot read
 or mutate a record above the permissions of their global role. Issue #73
-tracks this matrix and the stale docstring. Rollback: revert individual route
-changes while preserving the existing role checks.
+tracks this matrix. Rollback: revert individual route changes while preserving
+the existing role checks.
 
 ## 2. Make session and API-key authorization consistent
 
