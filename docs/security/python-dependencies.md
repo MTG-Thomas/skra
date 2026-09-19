@@ -23,7 +23,8 @@ its venv from `api/uv.lock`, so lockfile changes control what ships.
 ## Verify an image-affecting bump
 
 1. Build: `docker build ./api` (CI builds on every main push).
-2. Confirm the built version: `docker run --rm <img> /opt/venv/bin/pip show <pkg>`.
+2. Confirm the built version (pip is not installed in the runtime image):
+   `docker run --rm --entrypoint /opt/venv/bin/python <img> -c "from importlib.metadata import version; print(version(\"<pkg>\"))"`.
 3. Run the shared gate from the repo root (same flags as CI):
    `./scripts/trivy-image-gate.sh <image-ref> [trivy-bin]`.
 4. VM-gated acceptance (startup, authenticated smoke, gate) runs on VM 101
