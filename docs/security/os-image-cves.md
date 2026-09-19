@@ -43,6 +43,11 @@ dynamic linkage, not via called functionality).
 
 - **curl + libcurl4t64 (8 rows)**: removed. Nothing installed depends on
   them (`apt-cache rdepends --installed` empty; no pycurl in the lock).
+  Verified on a VM101 build of this lane (`cve108-api:verify`, compose
+  project `cve108`): `command -v curl` empty, dpkg knows neither package,
+  HEALTHCHECK config carries the python probe, and Trivy 0.74.0 reports
+  44 rows vs 52 on the published digest — exactly the 8 curl/libcurl4t64
+  rows gone, 0 added, fixed-vulnerability gate exit 0.
   The only consumer was the HEALTHCHECK, rewritten to an equivalent
   `python -c` urllib probe (exit 0 only on HTTP 200; verified as USER app
   in the published image: 200→0, 404→1, refused→1). Compose `api`
