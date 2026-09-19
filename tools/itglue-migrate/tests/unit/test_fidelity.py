@@ -8,7 +8,7 @@ import itglue_migrate.cli as cli_module
 from itglue_migrate.cli import (
     _check_url_reachable,
     _invert_entity_identities,
-    _probe_allowed_hosts,
+    _probe_allowed_origins,
 )
 from itglue_migrate.state_fetcher import ExistingState
 from itglue_migrate.verification import (
@@ -207,17 +207,32 @@ def test_url_probe_policy_blocks_non_public_destinations() -> None:
     assert _check_url_reachable("not a url") is False
 
 
-def test_probe_allowed_hosts_includes_api_and_listed_hosts() -> None:
-    """The probe allowlist combines the API host with operator-listed hosts."""
-    allowed = _probe_allowed_hosts(
-        "https://api.example.com:8443/v1",
-        "cdn.example.com, https://s3.example.com",
+def test_probe_allowed_origins_uses_effective_ports() -> None:
+    """The allowlist holds exact origins with default ports resolved."""
+    allowed = _probe_allowed_origins(
+        "https://api.example.com/v1",
+        "http://cdn.example.com, https://s3.example.com:8443",
     )
 
     assert allowed == frozenset(
-        {"api.example.com", "cdn.example.com", "s3.example.com"}
+        {
+            ("https", "api.example.com", 443),
+            ("http", "cdn.example.com", 80),
+            ("https", "s3.example.com", 8443),
+        }
     )
-    assert _probe_allowed_hosts("not a url", None) == frozenset()
+
+
+def test_probe_allowed_origins_rejects_invalid_entries() -> None:
+    """Bare hosts, wrong schemes, and bad ports fail fast with clear errors."""
+    with pytest.raises(ValueError, match="scheme"):
+        _probe_allowed_origins("https://api.example.com", "cdn.example.com")
+    with pytest.raises(ValueError, match="scheme"):
+        _probe_allowed_origins(
+            "https://api.example.com", "ftp://files.example.invalid/a.png"
+        )
+    with pytest.raises(ValueError, match="port"):
+        _probe_allowed_origins("https://api.example.com", "https://bad.example.com:abc")
 
 
 def test_check_url_reachable_only_probes_allowlisted_hosts() -> None:
@@ -225,17 +240,62 @@ def test_check_url_reachable_only_probes_allowlisted_hosts() -> None:
     assert (
         _check_url_reachable(
             "http://127.0.0.1:1/unreachable.png",
-            allowed_hosts=frozenset({"127.0.0.1"}),
+            allowed_origins=frozenset({("http", "127.0.0.1", 1)}),
         )
         is False
     )
     assert (
         _check_url_reachable(
             "http://127.0.0.1:1/unreachable.png",
-            allowed_hosts=frozenset({"other.example.invalid"}),
+            allowed_origins=frozenset({("http", "other.example.invalid", 80)}),
         )
         is False
     )
+
+
+def test_check_url_reachable_enforces_effective_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same host with a different port is a different origin: never requested."""
+    calls: list[str] = []
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(200, {})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+    allowed = frozenset({("http", "127.0.0.1", 8000)})
+
+    assert (
+        _check_url_reachable("http://127.0.0.1:3903/x", allowed_origins=allowed)
+        is False
+    )
+    assert calls == []
+    assert (
+        _check_url_reachable("http://127.0.0.1:8000/x", allowed_origins=allowed)
+        is True
+    )
+    assert calls == ["http://127.0.0.1:8000/x"]
+
+
+def test_check_url_reachable_refuses_cross_port_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redirects to the same host on another port are refused unrequested."""
+    calls: list[str] = []
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(302, {"location": "http://127.0.0.1:3903/x"})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+    allowed = frozenset({("http", "127.0.0.1", 8000)})
+
+    assert (
+        _check_url_reachable("http://127.0.0.1:8000/a.png", allowed_origins=allowed)
+        is False
+    )
+    assert calls == ["http://127.0.0.1:8000/a.png"]
 
 
 class _FakeHeadResponse:
@@ -259,7 +319,7 @@ def test_check_url_reachable_refuses_redirect_to_unlisted_host(
     assert (
         _check_url_reachable(
             "https://cdn.example.invalid/a.png",
-            allowed_hosts=frozenset({"cdn.example.invalid"}),
+            allowed_origins=frozenset({("https", "cdn.example.invalid", 443)}),
         )
         is False
     )
@@ -283,7 +343,7 @@ def test_check_url_reachable_follows_redirect_to_allowlisted_host(
     assert (
         _check_url_reachable(
             "https://cdn.example.invalid/a.png",
-            allowed_hosts=frozenset({"cdn.example.invalid"}),
+            allowed_origins=frozenset({("https", "cdn.example.invalid", 443)}),
         )
         is True
     )

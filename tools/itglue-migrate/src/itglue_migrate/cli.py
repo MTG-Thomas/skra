@@ -3257,42 +3257,65 @@ def sync(
     sys.exit(exit_code)
 
 
-def _probe_allowed_hosts(api_url: str, extra_hosts: str | None) -> frozenset[str]:
-    """Build the explicit probe destination allowlist for opt-in URL checks.
-
-    The API host is always included; operators name storage/image hosts
-    explicitly via ``--allowed-hosts``. Hostnames match exactly
-    (case-insensitive); ports are not part of the identity. Listing an
-    internal host is an explicit trust decision by the operator.
+def _parse_origin(value: str, *, what: str) -> tuple[str, str, int]:
+    """Parse an exact (scheme, host, effective port) origin or raise ValueError.
 
     Args:
-        api_url: BifrostDocs API URL whose host is always allowed.
-        extra_hosts: Optional comma-separated ``host`` or ``URL`` entries.
+        value: URL text to parse.
+        what: Label naming the value for error messages.
 
     Returns:
-        Frozen set of allowed hostnames.
+        Tuple of (scheme, lowercased host, port with scheme default resolved).
+
+    Raises:
+        ValueError: With a message naming the problem and the value.
     """
-    allowed: set[str] = set()
+    if "://" not in value:
+        raise ValueError(
+            f"{what} {value!r} must include the URL scheme (http:// or https://)."
+        )
     try:
-        api_host = urlsplit(api_url).hostname
+        parsed = urlsplit(value)
     except ValueError:
-        api_host = None
-    if api_host:
-        allowed.add(api_host.casefold())
-    for entry in (extra_hosts or "").split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if "://" not in entry:
-            # Scheme-relative form: the entry is parsed for its hostname
-            # only and is never requested, so no scheme is assumed.
-            entry = f"//{entry}"
-        try:
-            host = urlsplit(entry).hostname
-        except ValueError:
-            continue
-        if host:
-            allowed.add(host.casefold())
+        raise ValueError(f"{what} {value!r} is not a valid URL.") from None
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"{what} {value!r}: scheme must be http or https.")
+    host = (parsed.hostname or "").casefold()
+    if not host:
+        raise ValueError(f"{what} {value!r}: missing hostname.")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError(f"{what} {value!r}: invalid port.") from None
+    return (parsed.scheme, host, port or (443 if parsed.scheme == "https" else 80))
+
+
+def _probe_allowed_origins(
+    api_url: str, extra_hosts: str | None
+) -> frozenset[tuple[str, str, int]]:
+    """Build the explicit probe destination allowlist for opt-in URL checks.
+
+    The API origin is always included; operators name storage/image origins
+    explicitly via ``--allowed-hosts``. Origins match exactly
+    (scheme + normalized host + effective port), so the same host on another
+    port is a different origin. Listing an internal origin is an explicit
+    trust decision by the operator.
+
+    Args:
+        api_url: BifrostDocs API URL whose origin is always allowed.
+        extra_hosts: Optional comma-separated URL entries with explicit scheme.
+
+    Returns:
+        Frozen set of allowed (scheme, host, port) origins.
+
+    Raises:
+        ValueError: If the API URL or any entry is not a valid http(s) origin.
+    """
+    allowed = {_parse_origin(api_url, what="API URL")}
+    for raw in (extra_hosts or "").split(","):
+        entry = raw.strip()
+        if entry:
+            allowed.add(_parse_origin(entry, what="--allowed-hosts entry"))
     return frozenset(allowed)
 
 
@@ -3326,20 +3349,20 @@ def _probe_single_hop(
 def _check_url_reachable(
     url: str,
     *,
-    allowed_hosts: frozenset[str] = frozenset(),
+    allowed_origins: frozenset[tuple[str, str, int]] = frozenset(),
     timeout_seconds: float = 10.0,
 ) -> bool:
     """Check whether a migrated URL is reachable without downloading it.
 
     Read-only: issues HEAD, falling back to GET for servers that reject HEAD.
-    Only allowlisted ``http``/``https`` destinations are requested, and every
-    redirect hop is re-validated, so crafted export or API content cannot turn
-    ``--check-urls`` into requests toward unlisted (including
-    private/link-local) destinations.
+    Only allowlisted origins are requested, and every redirect hop is
+    re-validated against the same exact-origin policy, so crafted export or
+    API content cannot turn ``--check-urls`` into requests toward unlisted
+    (including private/link-local) destinations.
 
     Args:
         url: Absolute URL to check.
-        allowed_hosts: Hostnames permitted as probe destinations.
+        allowed_origins: (scheme, host, port) origins permitted as destinations.
         timeout_seconds: Per-request timeout.
 
     Returns:
@@ -3348,13 +3371,10 @@ def _check_url_reachable(
     current = url
     for _ in range(4):
         try:
-            parsed = urlsplit(current)
+            origin = _parse_origin(current, what="Probe target")
         except ValueError:
             return False
-        if parsed.scheme not in ("http", "https"):
-            return False
-        host = (parsed.hostname or "").casefold()
-        if not host or host not in allowed_hosts:
+        if origin not in allowed_origins:
             return False
         status, location = _probe_single_hop(current, timeout_seconds)
         if status is None:
@@ -3688,9 +3708,13 @@ async def _run_verify(
     else:
         orgs_to_verify = parsed.organizations
 
-    allowed = _probe_allowed_hosts(api_url, allowed_hosts)
+    try:
+        allowed = _probe_allowed_origins(api_url, allowed_hosts)
+    except ValueError as e:
+        error_console.print(f"[red]Error:[/red] {e}")
+        return 1
     url_checker = (
-        partial(_check_url_reachable, allowed_hosts=allowed) if check_urls else None
+        partial(_check_url_reachable, allowed_origins=allowed) if check_urls else None
     )
     report: dict[str, Any] = {
         "schema_version": 1,
@@ -3698,7 +3722,7 @@ async def _run_verify(
         "export_path": str(export_path),
         "target": target_org or "all",
         "check_urls": check_urls,
-        "allowed_hosts": sorted(allowed),
+        "allowed_origins": sorted(f"{scheme}://{host}:{port}" for scheme, host, port in allowed),
         "organizations": [],
     }
 
@@ -3833,8 +3857,9 @@ def verify(
         typer.Option(
             "--allowed-hosts",
             help=(
-                "Comma-separated extra hosts permitted for --check-urls "
-                "probes (the API host is always allowed)"
+                "Comma-separated extra origins (scheme://host[:port]) "
+                "permitted for --check-urls probes "
+                "(the API origin is always allowed)"
             ),
         ),
     ] = None,

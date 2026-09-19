@@ -526,6 +526,24 @@ async def test_run_verify_sparse_attachment_records_fail(
     assert any("att-no-entity" in failure["message"] for failure in failures)
 
 
+@pytest.mark.asyncio
+async def test_run_verify_rejects_invalid_allowed_hosts(tmp_path: Path) -> None:
+    """A malformed --allowed-hosts entry fails fast instead of probing."""
+    export = _copy_fixture(tmp_path)
+
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=True,
+        output=None,
+        allowed_hosts="cdn.example.com",
+    )
+
+    assert exit_code == 1
+
+
 def test_verify_command_requires_org_or_all(tmp_path: Path) -> None:
     """The wrapper rejects missing and conflicting org selection."""
     runner = CliRunner()

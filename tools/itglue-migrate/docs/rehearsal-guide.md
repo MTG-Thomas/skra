@@ -150,13 +150,16 @@ python -m itglue_migrate.cli verify \
 - Use `--org "Name"` for a single organization or `--all` for every
   organization in the export.
 - Add `--check-urls` to also probe migrated download/image URLs for
-  reachability (HEAD with GET fallback). Probes follow an explicit
-  allowlist: the API host plus `--allowed-hosts "storage.example.com,..."`.
-  Unlisted destinations (including private/link-local redirect targets) are
-  refused without a request, and every redirect hop is re-validated. Name
-  every storage/image host explicitly; listing an internal host is an
-  explicit trust decision. Without `--check-urls`, verification is fully
-  offline-safe apart from the required read-only API listing calls.
+  reachability (HEAD with GET fallback). Probes follow an explicit origin
+  allowlist: the API origin plus
+  `--allowed-hosts "https://storage.example.com,..."`. Origins match exactly
+  (scheme + host + effective port), so the same host on another port is
+  refused; unlisted destinations (including private/link-local redirect
+  targets) are refused without a request, and every redirect hop is
+  re-validated. Name every storage/image origin explicitly with its scheme;
+  invalid entries fail fast, and listing an internal origin is an explicit
+  trust decision. Without `--check-urls`, verification is fully offline-safe
+  apart from the required read-only API listing calls.
 - The command is read-only: it issues GET requests (plus HEAD/GET probes
   with `--check-urls`) and never creates, updates, or deletes anything.
 - Exit code is `0` when clean and `1` when any failure is found, so rehearsal
