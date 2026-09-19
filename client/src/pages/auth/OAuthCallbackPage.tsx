@@ -5,7 +5,7 @@
  * Extracts code and state from URL params, exchanges for tokens, and redirects.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +35,18 @@ export function OAuthCallbackPage() {
   const [state, setState] = useState<CallbackState>("processing");
   const [error, setError] = useState<string | null>(null);
 
+  // Guards against double-processing the same callback (React StrictMode
+  // remounts effects in dev, which would otherwise exchange/validate twice
+  // and let the second pass overwrite the first result after cleanup).
+  const handledKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const callbackKey = `${provider ?? ""}:${searchParams.get("code") ?? ""}:${searchParams.get("state") ?? ""}`;
+    if (handledKeyRef.current === callbackKey) {
+      return;
+    }
+    handledKeyRef.current = callbackKey;
+
     const handleCallback = async () => {
       try {
         // Get code and state from URL
@@ -61,9 +72,22 @@ export function OAuthCallbackPage() {
           throw new Error("No provider specified");
         }
 
-        // Verify state matches what we stored
+        // Bind the callback to the provider that initiated the flow. Fail
+        // closed: a missing or mismatched stored provider must reject,
+        // otherwise the user-controlled path segment alone selects which
+        // provider exchange receives the authorization code (CodeQL
+        // js/user-controlled-bypass on the presence guard, see issue #90).
+        const storedProvider = sessionStorage.getItem("oauth_provider");
+        if (!storedProvider || storedProvider !== provider) {
+          throw new Error("Provider mismatch - possible CSRF attack");
+        }
+
+        // Verify state matches what we stored. Fail closed: a missing
+        // stored state must also reject, otherwise the check is skipped
+        // exactly when there is nothing to compare against, allowing
+        // login CSRF (CodeQL flag on this condition, see issue #90).
         const storedState = sessionStorage.getItem("oauth_state");
-        if (storedState && storedState !== returnedState) {
+        if (!storedState || storedState !== returnedState) {
           throw new Error("State mismatch - possible CSRF attack");
         }
 
@@ -85,12 +109,11 @@ export function OAuthCallbackPage() {
           throw new Error("No tokens received from server");
         }
 
-        // Store tokens and get user info
-        localStorage.setItem("access_token", loginData.access_token);
+        // Session cookies were set by the callback exchange; fetch identity
         const userResponse = await authApi.me();
 
         // Complete login
-        login(userResponse.data, loginData.access_token, loginData.refresh_token);
+        login(userResponse.data);
 
         // Clean up session storage
         sessionStorage.removeItem("oauth_state");

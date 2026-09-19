@@ -40,13 +40,10 @@ export function ImageWithSkeleton({ node }: NodeViewProps) {
           throw new Error("Refusing to fetch cross-origin document image");
         }
 
-        const token = localStorage.getItem("access_token");
-        const headers: HeadersInit = {};
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-
-        const response = await fetch(imageUrl.toString(), { headers });
+        // Session authenticates via HttpOnly cookies (issue #90).
+        const response = await fetch(imageUrl.toString(), {
+          credentials: "include",
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to load image: ${response.status}`);

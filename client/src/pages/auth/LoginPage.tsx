@@ -103,11 +103,11 @@ export function LoginPage() {
     },
   });
 
-  // Complete login after successful authentication
-  const completeLogin = async (accessToken: string, refreshToken: string) => {
-    localStorage.setItem("access_token", accessToken);
+  // Complete login after successful authentication. The session lives in
+  // the HttpOnly cookies the API set on login — nothing is persisted here.
+  const completeLogin = async () => {
     const userResponse = await authApi.me();
-    login(userResponse.data, accessToken, refreshToken);
+    login(userResponse.data);
     toast.success("Welcome back!");
     navigate("/");
   };
@@ -116,8 +116,8 @@ export function LoginPage() {
   const handlePasskeyLogin = async () => {
     setIsPasskeyLoading(true);
     try {
-      const result = await authenticateWithPasskey();
-      await completeLogin(result.access_token, result.refresh_token);
+      await authenticateWithPasskey();
+      await completeLogin();
     } catch (error) {
       // Only show error if it's not a user cancellation
       if (
@@ -202,7 +202,7 @@ export function LoginPage() {
       }
 
       if (loginData.access_token && loginData.refresh_token) {
-        await completeLogin(loginData.access_token, loginData.refresh_token);
+        await completeLogin();
       }
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { detail?: string } } };

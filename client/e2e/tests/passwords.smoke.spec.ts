@@ -14,7 +14,10 @@ test.describe('Passwords', () => {
     await expect(page.getByRole('heading', { name: 'Passwords' })).toBeVisible();
     
     // Should see add button
-    await expect(page.getByRole('button', { name: 'Add Password' })).toBeVisible();
+    // Header icon and empty-state buttons share the name on empty orgs.
+    await expect(
+      page.getByRole('button', { name: 'Add Password' }).first()
+    ).toBeVisible();
     
     // Table should load (or empty state)
     const tableOrEmpty = page.locator('[data-testid="data-table"], [data-testid="empty-state"]');
@@ -25,7 +28,7 @@ test.describe('Passwords', () => {
     await navigateToEntity(page, 'test-org', 'passwords');
     
     // Click add button
-    await page.getByRole('button', { name: 'Add Password' }).click();
+    await page.getByRole('button', { name: 'Add Password' }).first().click();
     
     // Fill in form
     const testName = `Test Password ${Date.now()}`;

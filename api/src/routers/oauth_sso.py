@@ -307,6 +307,20 @@ async def oauth_callback(
             detail="Invalid OAuth state data",
         ) from e
 
+    # Bind the exchange to the provider that initiated the flow. The request
+    # provider is user-controlled; without this check an attacker could route
+    # a victim's valid (code, state) to a different provider exchange. Fail
+    # closed on a missing or mismatched stored provider, before consuming the
+    # single-use state.
+    if state_data.get("provider") != callback_data.provider:
+        # Log a static message only: the request provider is untrusted input
+        # and must not reach log output (log injection).
+        logger.warning("OAuth callback provider mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth provider does not match initiated flow",
+        )
+
     # Delete state before provider token exchange so parsed state remains single-use.
     await r.delete(state_key)
 

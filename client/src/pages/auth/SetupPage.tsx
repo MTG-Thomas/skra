@@ -82,12 +82,11 @@ export function SetupPage() {
 
     try {
       // Create the user with passkey
-      const result = await setupWithPasskey(email, name);
+      await setupWithPasskey(email, name);
 
-      // Fetch user info and login
-      localStorage.setItem("access_token", result.access_token);
+      // Fetch user info and login (session cookies were set on setup)
       const userResponse = await authApi.me();
-      login(userResponse.data, result.access_token, result.refresh_token);
+      login(userResponse.data);
 
       toast.success("Account created successfully!");
       navigate("/");
