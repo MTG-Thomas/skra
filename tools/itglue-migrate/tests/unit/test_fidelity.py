@@ -65,6 +65,41 @@ def test_reconcile_migrated_attachments_reports_missing_and_unexpected() -> None
     assert missing["filename"] == "manual.pdf"
 
 
+def test_reconcile_migrated_attachments_counts_duplicate_filenames() -> None:
+    """Same-name files must be counted per occurrence, not collapsed."""
+    result = reconcile_migrated_attachments(
+        [
+            ("configurations", "123", "manual.pdf"),
+            ("configurations", "123", "manual.pdf"),
+        ],
+        [("configurations", "123", "manual.pdf")],
+    )
+
+    assert result.ok is False
+    assert result.expected_count == 2
+    assert result.migrated_count == 1
+    assert len(result.failures) == 1
+    assert result.failures[0].category == MISSING_UPLOAD
+    assert result.failures[0].filename == "manual.pdf"
+
+
+def test_reconcile_migrated_attachments_counts_duplicate_records() -> None:
+    """Extra same-name migrated records must surface as unexpected uploads."""
+    result = reconcile_migrated_attachments(
+        [("configurations", "123", "manual.pdf")],
+        [
+            ("configurations", "123", "manual.pdf"),
+            ("configurations", "123", "manual.pdf"),
+        ],
+    )
+
+    assert result.ok is False
+    assert result.expected_count == 1
+    assert result.migrated_count == 2
+    assert len(result.failures) == 1
+    assert result.failures[0].category == UNEXPECTED_UPLOAD
+
+
 def test_reconcile_migrated_attachments_reports_unresolved_entities() -> None:
     result = reconcile_migrated_attachments(
         [],

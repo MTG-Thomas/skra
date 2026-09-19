@@ -160,7 +160,9 @@ python -m itglue_migrate.cli verify \
 Failure categories (shared with the reconciliation vocabulary):
 
 - `missing_upload` — export file (or exported image) with no migrated
-  counterpart
+  counterpart, or an exported document absent from the API (its images are
+  then unverifiable). Same-name files are counted per occurrence, so a
+  duplicated filename missing one copy still fails.
 - `unexpected_upload` — migrated attachment with no matching export file
 - `unresolved_entity` — migrated attachment whose entity could not be matched
   to the export via `metadata.itglue_id` (investigate before deleting)

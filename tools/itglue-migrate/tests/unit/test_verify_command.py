@@ -177,9 +177,23 @@ async def test_run_verify_reports_missing_upload(
 async def test_run_verify_clean_export_exits_zero(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Matching empty sets verify clean with exit 0."""
+    """Fully migrated export with no gaps verifies clean with exit 0."""
     export = _copy_fixture(tmp_path)
-    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client())
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            document_content="# Guide with no images.\n",
+        ),
+    )
 
     exit_code = await _run_verify(
         export_path=export,
@@ -404,6 +418,58 @@ async def test_run_verify_accessible_attachment_url_clean(
     )
 
     assert exit_code == 0
+
+
+@pytest.mark.asyncio
+async def test_run_verify_missing_migrated_document_with_images_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An export doc with images but no migrated counterpart must fail loudly."""
+    export = _copy_fixture(tmp_path)
+    doc_dir = export / "documents" / "DOC-1001-3001 Test Onboarding Guide"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "present.png").write_bytes(b"PNG")
+    (doc_dir / "index.html").write_text(
+        '<p>guide</p><img src="present.png">', encoding="utf-8"
+    )
+    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(documents=[]))
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    failures = report["organizations"][0]["embedded_images"]["failures"]
+    assert len(failures) == 1
+    assert failures[0]["category"] == "missing_upload"
+    assert failures[0]["document_id"] == "3001"
+
+
+@pytest.mark.asyncio
+async def test_run_verify_missing_migrated_document_without_images_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A never-migrated document fails even when it has no images to check."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(documents=[]))
+
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=None,
+    )
+
+    assert exit_code == 1
 
 
 def test_verify_command_requires_org_or_all(tmp_path: Path) -> None:

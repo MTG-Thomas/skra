@@ -3327,7 +3327,8 @@ async def _verify_org_fidelity(
 
     scanner = AttachmentScanner()
     all_attachments = scanner.get_all_attachments(export_path)
-    expected: set[tuple[str, str, str]] = set()
+    # Lists preserve duplicate same-name files so each occurrence is verified.
+    expected: list[tuple[str, str, str]] = []
     for (folder_type, entity_id), paths in all_attachments.items():
         entity_id = str(entity_id)
         if folder_type in core_ids:
@@ -3339,11 +3340,10 @@ async def _verify_org_fidelity(
                 continue
             export_type = "custom_assets"
         for path in paths:
-            expected.add((export_type, entity_id, path.name))
+            expected.append((export_type, entity_id, path.name))
 
     identities = _invert_entity_identities(state)
-    migrated: set[tuple[str, str, str]] = set()
-    record_ids: dict[tuple[str, str, str], str] = {}
+    migrated_pairs: list[tuple[tuple[str, str, str], str]] = []
     unresolved: list[MigratedAttachment] = []
     skipped_records = 0
     attachment_result = None
@@ -3383,25 +3383,29 @@ async def _verify_org_fidelity(
         else:
             export_type, itglue_id = identity
             key = (export_type, itglue_id, str(filename))
-            migrated.add(key)
-            record_ids[key] = str(record.get("id", ""))
+            migrated_pairs.append((key, str(record.get("id", ""))))
     if skipped_records:
         warnings.append(
             f"Skipped {skipped_records} migrated attachment records "
             "with missing filename or entity reference."
         )
     if attachment_result is None:
-        attachment_result = reconcile_migrated_attachments(expected, migrated, unresolved)
+        attachment_result = reconcile_migrated_attachments(
+            expected,
+            [triple for triple, _ in migrated_pairs],
+            unresolved,
+        )
 
     # --- Attachment accessibility (opt-in URL checks only) ---
     if url_checker is not None:
-        for key in sorted(migrated):
-            export_type, itglue_id, filename = key
+        for (export_type, itglue_id, filename), attachment_id in sorted(
+            migrated_pairs
+        ):
             detail = f"{export_type}/{itglue_id}/{filename}"
             message = f"Migrated attachment {detail} was not accessible."
             try:
                 download = await fetcher.client.get_attachment_download_url(
-                    org_uuid, record_ids[key]
+                    org_uuid, attachment_id
                 )
                 reachable = url_checker(str(download.get("download_url", "")))
             except APIError as e:
@@ -3438,9 +3442,17 @@ async def _verify_org_fidelity(
         doc_name = str(doc.get("name", doc_id))
         migrated_uuid = state.document_by_itglue_id.get(doc_id)
         if not migrated_uuid:
-            warnings.append(
-                f"Document '{doc_name}' (IT Glue ID {doc_id}) not found in "
-                "the API; migrated image check skipped."
+            expected_images = refs_by_doc.get(doc_id, 0)
+            image_failures.append(
+                VerificationFailure(
+                    category=MISSING_UPLOAD,
+                    message=(
+                        f"Document '{doc_name}' (IT Glue ID {doc_id}) was not "
+                        f"found in the API; {expected_images} exported "
+                        "image(s) could not be verified."
+                    ),
+                    document_id=doc_id,
+                )
             )
             continue
         try:

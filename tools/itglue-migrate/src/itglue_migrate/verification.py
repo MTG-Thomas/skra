@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -338,8 +339,10 @@ def reconcile_migrated_attachments(
 
     Both ``expected`` and ``migrated`` use ``(entity_type, entity_id, filename)``
     triples in export vocabulary, so the caller resolves API entity UUIDs to
-    IT Glue identities first. Records that cannot be resolved are reported
-    separately as :data:`UNRESOLVED_ENTITY` instead of being filename-matched.
+    IT Glue identities first. Triples are counted per occurrence, so duplicate
+    same-name files are reported individually rather than collapsed. Records
+    that cannot be resolved are reported separately as :data:`UNRESOLVED_ENTITY`
+    instead of being filename-matched.
 
     Args:
         expected: Export-side files, one triple per file.
@@ -350,31 +353,39 @@ def reconcile_migrated_attachments(
         Structured fidelity result using ``missing_upload``,
         ``unexpected_upload``, and ``unresolved_entity`` categories.
     """
-    expected_set = set(expected)
-    migrated_set = set(migrated)
+    expected_counts = Counter(tuple(triple) for triple in expected)
+    migrated_counts = Counter(tuple(triple) for triple in migrated)
     failures: list[VerificationFailure] = []
 
-    for entity_type, entity_id, filename in sorted(expected_set - migrated_set):
-        failures.append(
-            VerificationFailure(
-                category=MISSING_UPLOAD,
-                message="Export attachment file has no matching migrated record.",
-                entity_type=entity_type,
-                entity_id=entity_id,
-                filename=filename,
+    for entity_type, entity_id, filename in sorted(set(expected_counts)):
+        deficit = expected_counts[(entity_type, entity_id, filename)] - migrated_counts[
+            (entity_type, entity_id, filename)
+        ]
+        for _ in range(deficit):
+            failures.append(
+                VerificationFailure(
+                    category=MISSING_UPLOAD,
+                    message="Export attachment file has no matching migrated record.",
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    filename=filename,
+                )
             )
-        )
 
-    for entity_type, entity_id, filename in sorted(migrated_set - expected_set):
-        failures.append(
-            VerificationFailure(
-                category=UNEXPECTED_UPLOAD,
-                message="Migrated attachment has no matching export file.",
-                entity_type=entity_type,
-                entity_id=entity_id,
-                filename=filename,
+    for entity_type, entity_id, filename in sorted(set(migrated_counts)):
+        surplus = migrated_counts[(entity_type, entity_id, filename)] - expected_counts[
+            (entity_type, entity_id, filename)
+        ]
+        for _ in range(surplus):
+            failures.append(
+                VerificationFailure(
+                    category=UNEXPECTED_UPLOAD,
+                    message="Migrated attachment has no matching export file.",
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    filename=filename,
+                )
             )
-        )
 
     for record in unresolved:
         failures.append(
@@ -388,8 +399,8 @@ def reconcile_migrated_attachments(
         )
 
     return MigratedAttachmentReconciliation(
-        expected_count=len(expected_set),
-        migrated_count=len(migrated_set),
+        expected_count=sum(expected_counts.values()),
+        migrated_count=sum(migrated_counts.values()),
         failures=failures,
     )
 
