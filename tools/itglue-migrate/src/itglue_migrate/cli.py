@@ -3284,7 +3284,9 @@ def _probe_allowed_hosts(api_url: str, extra_hosts: str | None) -> frozenset[str
         if not entry:
             continue
         if "://" not in entry:
-            entry = f"http://{entry}"
+            # Scheme-relative form: the entry is parsed for its hostname
+            # only and is never requested, so no scheme is assumed.
+            entry = f"//{entry}"
         try:
             host = urlsplit(entry).hostname
         except ValueError:
@@ -3292,6 +3294,33 @@ def _probe_allowed_hosts(api_url: str, extra_hosts: str | None) -> frozenset[str
         if host:
             allowed.add(host.casefold())
     return frozenset(allowed)
+
+
+def _probe_single_hop(
+    url: str, timeout_seconds: float
+) -> tuple[int | None, str | None]:
+    """Issue one HEAD probe (GET fallback), never following redirects.
+
+    Args:
+        url: Already allowlisted absolute URL.
+        timeout_seconds: Per-request timeout.
+
+    Returns:
+        Tuple of (status code, redirect location), or (None, None) on error.
+    """
+    try:
+        response = httpx.head(url, follow_redirects=False, timeout=timeout_seconds)
+    except Exception:
+        return None, None
+    if response.status_code not in (403, 405, 501):
+        return response.status_code, response.headers.get("location")
+    try:
+        with httpx.stream(
+            "GET", url, follow_redirects=False, timeout=timeout_seconds
+        ) as stream:
+            return stream.status_code, stream.headers.get("location")
+    except Exception:
+        return None, None
 
 
 def _check_url_reachable(
@@ -3327,18 +3356,8 @@ def _check_url_reachable(
         host = (parsed.hostname or "").casefold()
         if not host or host not in allowed_hosts:
             return False
-        try:
-            response = httpx.head(current, follow_redirects=False, timeout=timeout_seconds)
-            if response.status_code in (403, 405, 501):
-                with httpx.stream(
-                    "GET", current, follow_redirects=False, timeout=timeout_seconds
-                ) as stream:
-                    status = stream.status_code
-                    location = stream.headers.get("location")
-            else:
-                status = response.status_code
-                location = response.headers.get("location")
-        except Exception:
+        status, location = _probe_single_hop(current, timeout_seconds)
+        if status is None:
             return False
         if status in (301, 302, 303, 307, 308) and location:
             current = urljoin(current, location)
