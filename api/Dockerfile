@@ -29,10 +29,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM python:3.11-slim
 
 # Install runtime dependencies
+# Apply Debian security updates for perl-base (CVE-2026-42496, CVE-2026-8376,
+# CVE-2026-13221, fixed in 5.40.1-6+deb13u1). The base image floats, so upgrade
+# explicitly instead of relying on the base snapshot date.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    && apt-get install -y --only-upgrade perl-base \
     && python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && rm -rf /var/lib/apt/lists/*
 
