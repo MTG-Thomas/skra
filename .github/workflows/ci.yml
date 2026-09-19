@@ -378,11 +378,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Guards the --profile client stack wiring (Vite dev stage on 3000 +
-    # node health probe + /health API proxy). Blocking: this profile was
-    # silently broken (issue #104), so failure must surface. Browser auth
-    # flow stays a VM-side proof until the E2E fixtures stabilize.
-    # (Deliberately not continue-on-error; also not yet a required branch
-    # status.)
+    # node health probe + /health API proxy) and runs the auth smoke suite
+    # against it. Blocking: this profile was silently broken (issue #104),
+    # so failure must surface. (Deliberately not continue-on-error; required
+    # branch status is configured separately on main.)
 
     steps:
       - name: Checkout code
@@ -407,6 +406,59 @@ jobs:
         run: |
           docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
           docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+      - name: Seed E2E user and organization
+        run: |
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T api python - <<'PYEOF'
+          import json
+          import urllib.request
+          from http.cookiejar import CookieJar
+          from urllib.request import Request, build_opener, HTTPCookieProcessor
+
+          BASE = "http://localhost:8000"
+          jar = CookieJar()
+          opener = build_opener(HTTPCookieProcessor(jar))
+
+          def post(path, payload, headers=None):
+              req = Request(
+                  BASE + path,
+                  data=json.dumps(payload).encode(),
+                  headers={"Content-Type": "application/json", **(headers or {})},
+              )
+              with opener.open(req) as res:
+                  return res.status, (res.read().decode() or "{}")
+
+          status, _ = post(
+              "/auth/register",
+              {"email": "test@example.com", "password": "TestPassword123!", "name": "E2E Smoke"},
+          )
+          assert status == 201, f"register: {status}"
+          status, _ = post(
+              "/auth/login",
+              {"email": "test@example.com", "password": "TestPassword123!"},
+          )
+          assert status == 200, f"login: {status}"
+          csrf = next((c.value for c in jar if "csrf" in c.name), "")
+          assert csrf, "no csrf cookie after login"
+          status, body = post(
+              "/api/organizations", {"name": "E2E Smoke Org"}, {"X-CSRF-Token": csrf}
+          )
+          assert status in (200, 201), f"org: {status} {body[:200]}"
+          print("seeded E2E Smoke user + org")
+          PYEOF
+
+      - name: Install client dependencies (Playwright container)
+        run: |
+          docker run --rm -v "${{ github.workspace }}/client:/work" -w /work \
+            mcr.microsoft.com/playwright:v1.59.1-noble npm ci --no-audit --no-fund
+
+      - name: Run auth smoke suite (chromium)
+        run: |
+          docker run --rm --network bifrost-docs-test_default \
+            -v "${{ github.workspace }}/client:/work" -w /work \
+            -e E2E_BASE_URL=http://client:3000 \
+            mcr.microsoft.com/playwright:v1.59.1-noble \
+            npx playwright test --project=chromium e2e/tests/auth.smoke.spec.ts
 
       - name: Tear down test stack
         if: always()
