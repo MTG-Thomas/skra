@@ -71,6 +71,50 @@ PLAN_VERSION = 1
 # Logger for this module
 logger = logging.getLogger(__name__)
 
+# Shared CLI options (single definition avoids drift between commands)
+ExportPathOption = Annotated[
+    Path,
+    typer.Option(
+        "--export-path",
+        "-e",
+        help="Path to the IT Glue export directory",
+        exists=False,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+]
+ApiUrlOption = Annotated[
+    str,
+    typer.Option(
+        "--api-url",
+        "-u",
+        help="BifrostDocs API URL (e.g., https://api.example.com)",
+        envvar="BIFROST_API_URL",
+    ),
+]
+ApiTokenOption = Annotated[
+    str,
+    typer.Option(
+        "--token",
+        "-t",
+        help="BifrostDocs API authentication token",
+        envvar="BIFROST_API_TOKEN",
+    ),
+]
+
+
+def _resolve_org_uuid(
+    all_orgs_state: ExistingState,
+    org_itglue_id: str,
+    org_name: str,
+) -> str | None:
+    """Resolve an export organization to its API UUID by IT Glue ID, then name."""
+    org_uuid = all_orgs_state.org_by_itglue_id.get(org_itglue_id)
+    if not org_uuid:
+        org_uuid = all_orgs_state.org_by_name.get(org_name.lower())
+    return org_uuid
+
 
 def _validate_export_path(export_path: Path) -> dict[str, Any]:
     """Validate the export path exists and has expected structure.
@@ -2794,9 +2838,7 @@ async def _run_sync(
             console.print(f"  [dim]ITGlue org ID: {org_itglue_id}[/dim]")
 
             # Resolve org to UUID
-            org_uuid = all_orgs_state.org_by_itglue_id.get(org_itglue_id)
-            if not org_uuid:
-                org_uuid = all_orgs_state.org_by_name.get(org_name.lower())
+            org_uuid = _resolve_org_uuid(all_orgs_state, org_itglue_id, org_name)
 
             if not org_uuid:
                 if dry_run:
@@ -3049,36 +3091,9 @@ async def _run_sync(
 
 @app.command()
 def sync(
-    export_path: Annotated[
-        Path,
-        typer.Option(
-            "--export-path",
-            "-e",
-            help="Path to the IT Glue export directory",
-            exists=False,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-        ),
-    ],
-    api_url: Annotated[
-        str,
-        typer.Option(
-            "--api-url",
-            "-u",
-            help="BifrostDocs API URL (e.g., https://api.example.com)",
-            envvar="BIFROST_API_URL",
-        ),
-    ],
-    token: Annotated[
-        str,
-        typer.Option(
-            "--token",
-            "-t",
-            help="BifrostDocs API authentication token",
-            envvar="BIFROST_API_TOKEN",
-        ),
-    ],
+    export_path: ExportPathOption,
+    api_url: ApiUrlOption,
+    token: ApiTokenOption,
     org: Annotated[
         str | None,
         typer.Option(
@@ -3523,9 +3538,7 @@ async def _run_verify(
             org_itglue_id = str(org.get("id", ""))
             console.print(f"[bold cyan]Verifying organization: {org_name}[/bold cyan]")
 
-            org_uuid = all_orgs_state.org_by_itglue_id.get(org_itglue_id)
-            if not org_uuid:
-                org_uuid = all_orgs_state.org_by_name.get(org_name.lower())
+            org_uuid = _resolve_org_uuid(all_orgs_state, org_itglue_id, org_name)
             if not org_uuid:
                 message = "Organization not found in API; verification skipped."
                 console.print(f"  [red]{message}[/red]")
@@ -3607,36 +3620,9 @@ async def _run_verify(
 
 @app.command()
 def verify(
-    export_path: Annotated[
-        Path,
-        typer.Option(
-            "--export-path",
-            "-e",
-            help="Path to the IT Glue export directory",
-            exists=False,
-            file_okay=False,
-            dir_okay=True,
-            resolve_path=True,
-        ),
-    ],
-    api_url: Annotated[
-        str,
-        typer.Option(
-            "--api-url",
-            "-u",
-            help="BifrostDocs API URL (e.g., https://api.example.com)",
-            envvar="BIFROST_API_URL",
-        ),
-    ],
-    token: Annotated[
-        str,
-        typer.Option(
-            "--token",
-            "-t",
-            help="BifrostDocs API authentication token",
-            envvar="BIFROST_API_TOKEN",
-        ),
-    ],
+    export_path: ExportPathOption,
+    api_url: ApiUrlOption,
+    token: ApiTokenOption,
     org: Annotated[
         str | None,
         typer.Option(
