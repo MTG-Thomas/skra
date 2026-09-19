@@ -1,7 +1,7 @@
 interface LogoProps {
-	type: "square" | "rectangle";
-	className?: string;
-	alt?: string;
+	readonly type: "square" | "rectangle";
+	readonly className?: string;
+	readonly alt?: string;
 }
 
 /**
