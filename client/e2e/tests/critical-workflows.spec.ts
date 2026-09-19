@@ -60,7 +60,9 @@ test.describe('Critical technician workflows (authenticated)', () => {
     const name = `Critical E2E Credential ${tag}`;
     const secret = `E2e-Secret-${tag}!`;
 
-    await page.getByRole('button', { name: 'Add Password' }).click();
+    // Header icon and empty-state buttons share the name; exactly one is
+    // actionable per list state, with the header first in DOM order.
+    await page.getByRole('button', { name: 'Add Password' }).first().click();
     // NOTE: labels carry " *" markers ('Name *', 'Password *') and 'Name'
     // substring-matches 'Username', so target the stable input names instead.
     const dialog = page.getByRole('dialog');
@@ -70,8 +72,11 @@ test.describe('Critical technician workflows (authenticated)', () => {
     await page.getByRole('button', { name: 'Create' }).click();
 
     // Lands on the password detail page showing the new credential.
+    // NOTE: the name also appears in a sidebar span, so assert the heading.
     await expect(page).toHaveURL(/\/org\/[^/]+\/passwords\/[^/]+/);
-    await expect(page.getByText(name)).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name, exact: true })
+    ).toBeVisible();
 
     // Secret is masked until explicitly revealed.
     await expect(page.getByText('************', { exact: true })).toBeVisible();

@@ -31,9 +31,13 @@ class TokenResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    """Token refresh request model."""
+    """Token refresh request model.
 
-    refresh_token: str
+    The token may be omitted when the browser supplies it via the HttpOnly
+    refresh_token cookie instead (issue #90 cookie sessions).
+    """
+
+    refresh_token: str | None = None
 
 
 class MFARequiredResponse(BaseModel):

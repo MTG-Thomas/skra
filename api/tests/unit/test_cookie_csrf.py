@@ -248,6 +248,45 @@ class TestRefreshCookieCsrf:
 
         assert exc_info.value.status_code == 403
 
+    async def test_empty_body_model_uses_cookie_path(self, monkeypatch):
+        """An empty JSON body ({}) must parse and fall back to the cookie.
+
+        Regression: with a required refresh_token field the browser's {}
+        refresh hit 422 before CSRF was even evaluated.
+        """
+        from uuid import uuid4
+
+        from src.models.contracts.auth import RefreshTokenRequest
+
+        user_id = uuid4()
+        token = self._refresh_token_for(user_id)
+        csrf_cookie, csrf_header = _csrf_pair()
+
+        from unittest.mock import AsyncMock
+
+        from starlette.responses import Response
+
+        import src.routers.auth as auth_router
+
+        repo = AsyncMock()
+        repo.get_by_id.return_value = self._active_user(user_id)
+        monkeypatch.setattr(auth_router.UserRepository, "get_by_id", repo.get_by_id)
+
+        handler = getattr(auth_router.refresh_token, "__wrapped__", auth_router.refresh_token)
+        result = await handler(
+            request=_make_request(
+                "POST",
+                cookies={"refresh_token": token, "csrf_token": csrf_cookie},
+                headers={"X-CSRF-Token": csrf_header},
+            ),
+            response=Response(),
+            db=AsyncMock(),
+            token_data=RefreshTokenRequest(),
+        )
+
+        assert result.access_token
+        assert result.refresh_token
+
     async def test_body_refresh_without_csrf_succeeds(self, monkeypatch):
         from uuid import uuid4
 

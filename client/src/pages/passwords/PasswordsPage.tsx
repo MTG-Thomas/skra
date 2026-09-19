@@ -280,7 +280,12 @@ export function PasswordsPage() {
           </p>
         </div>
         {canEdit && (
-          <Button variant="outline" size="icon" onClick={() => setFormOpen(true)}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setFormOpen(true)}
+            aria-label="Add Password"
+          >
             <Plus className="h-5 w-5" />
           </Button>
         )}

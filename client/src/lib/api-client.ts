@@ -78,8 +78,8 @@ const refreshState: RefreshState = {
   pendingRequests: [],
 };
 
-// Lock for openapi-fetch requests
-let openapiRefreshPromise: Promise<void> | null = null;
+// (Single-flight rotation lives in refreshAccessToken above; both API
+// clients and the WebSocket service share it.)
 
 function processPendingRequests() {
   // Retried requests re-authenticate via the HttpOnly session cookie that
@@ -100,16 +100,44 @@ function rejectPendingRequests(error: unknown) {
 // Token Refresh Function
 // =============================================================================
 
-async function refreshAccessToken(): Promise<void> {
+/**
+ * Single in-flight session rotation shared by the axios client, the
+ * openapi-fetch client, and the WebSocket service. This matters because
+ * every rotation issues a NEW csrf_token cookie: two concurrent rotations
+ * would leave the loser holding a stale CSRF pair, and the API would
+ * answer its next mutation with 403 and log the user out.
+ */
+let inflightRefresh: Promise<void> | null = null;
+
+async function rotateSessionCookies(): Promise<void> {
   // Cookie-based refresh: the browser attaches the HttpOnly refresh_token
-  // cookie automatically (credentials included). The server rotates both
-  // cookies in the response. No token is readable or persisted here.
-  // Use raw axios to avoid interceptor loops.
+  // cookie automatically (credentials included). The server rotates auth
+  // and CSRF cookies in the response. No token is readable or persisted.
+  // Use raw axios to avoid interceptor loops — so the CSRF double-submit
+  // header must be attached explicitly (no interceptors run here). Without
+  // it the API answers 403 on the cookie path.
+  const csrfToken = getCookie("csrf_token");
   await axios.post(
     `${import.meta.env.VITE_API_URL || ""}/auth/refresh`,
     {},
-    { withCredentials: true }
+    {
+      withCredentials: true,
+      headers: csrfToken ? { "X-CSRF-Token": csrfToken } : {},
+    }
   );
+}
+
+async function refreshAccessToken(): Promise<void> {
+  if (inflightRefresh) {
+    await inflightRefresh;
+    return;
+  }
+  inflightRefresh = rotateSessionCookies();
+  try {
+    await inflightRefresh;
+  } finally {
+    inflightRefresh = null;
+  }
 }
 
 // Export for use by WebSocket service
@@ -252,24 +280,18 @@ const AUTH_ENDPOINTS = [
 ];
 
 /**
- * Serialize cookie-refresh attempts so concurrent 401s share one rotation.
- * Resolves when fresh session cookies are set, rejects when refresh fails.
+ * Route openapi-fetch rotations through the same single in-flight promise
+ * as the axios client (see refreshAccessToken), so concurrent 401s across
+ * both clients share exactly one rotation.
  */
 async function sharedCookieRefresh(): Promise<void> {
-  if (openapiRefreshPromise) {
-    await openapiRefreshPromise;
-    return;
-  }
+  await refreshAccessToken();
+}
 
-  openapiRefreshPromise = (async () => {
-    await refreshAccessToken();
-  })();
-
-  try {
-    await openapiRefreshPromise;
-  } finally {
-    openapiRefreshPromise = null;
-  }
+/** Rebuild the CSRF header from the live cookie (post-rotation value). */
+function currentCsrfHeader(): Record<string, string> {
+  const csrfToken = getCookie("csrf_token");
+  return csrfToken ? { "X-CSRF-Token": csrfToken } : {};
 }
 
 // Create base openapi-fetch client. Credentials are included so the
@@ -302,10 +324,17 @@ baseClient.use({
       const url = request.url;
       if (!AUTH_ENDPOINTS.some((ep) => url.includes(ep))) {
         // Try to refresh the session cookies and retry. The retry
-        // re-authenticates via cookie; never inject a Bearer [REDACTED]
+        // re-authenticates via cookie; never inject a Bearer [REDACTED] The
+        // CSRF header is rebuilt from the live cookie because rotation
+        // issues a new csrf_token value.
         try {
           await sharedCookieRefresh();
-          return fetch(request.clone(), { credentials: "include" });
+          const retryRequest = request.clone();
+          const freshCsrf = currentCsrfHeader();
+          for (const [name, value] of Object.entries(freshCsrf)) {
+            retryRequest.headers.set(name, value);
+          }
+          return fetch(retryRequest, { credentials: "include" });
         } catch {
           // Refresh failed - redirect to login
           clearAuthAndRedirect();
