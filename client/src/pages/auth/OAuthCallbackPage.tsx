@@ -61,6 +61,16 @@ export function OAuthCallbackPage() {
           throw new Error("No provider specified");
         }
 
+        // Bind the callback to the provider that initiated the flow. Fail
+        // closed: a missing or mismatched stored provider must reject,
+        // otherwise the user-controlled path segment alone selects which
+        // provider exchange receives the authorization code (CodeQL
+        // js/user-controlled-bypass on the presence guard, see issue #90).
+        const storedProvider = sessionStorage.getItem("oauth_provider");
+        if (!storedProvider || storedProvider !== provider) {
+          throw new Error("Provider mismatch - possible CSRF attack");
+        }
+
         // Verify state matches what we stored. Fail closed: a missing
         // stored state must also reject, otherwise the check is skipped
         // exactly when there is nothing to compare against, allowing

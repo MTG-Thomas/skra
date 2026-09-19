@@ -81,6 +81,23 @@ test.describe('Cookie session auth', () => {
     ).toBeVisible();
   });
 
+  test('OAuth callback rejects provider mismatch', async ({ page }) => {
+    // Stored state matches, but the path provider differs from the one
+    // that initiated the flow: the callback must fail closed instead of
+    // routing the code to the attacker's provider exchange.
+    await page.goto('/login');
+    await page.evaluate(() => {
+      sessionStorage.setItem('oauth_state', 'stored-state');
+      sessionStorage.setItem('oauth_provider', 'github');
+    });
+    await page.goto('/auth/callback/gitlab?code=fake-code&state=stored-state');
+
+    await expect(page.getByText('Authentication Failed')).toBeVisible();
+    await expect(
+      page.getByText('Provider mismatch - possible CSRF attack')
+    ).toBeVisible();
+  });
+
   test('logout ends the session', async ({ page }) => {
     await page.getByTestId('user-menu-trigger').click();
     await page.getByRole('menuitem', { name: 'Log out' }).click();
