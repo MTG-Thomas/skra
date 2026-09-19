@@ -212,9 +212,7 @@ def _public_from_attrs(public_cls: type[T], attrs: dict[str, object]) -> T:
 
 def test_organization_public_exposes_sync_metadata() -> None:
     """Organization responses expose non-secret sync provenance (issue #34)."""
-    public = _public_from_attrs(
-        OrganizationPublic, _base_attrs(name="Acme")
-    )
+    public = _public_from_attrs(OrganizationPublic, _base_attrs(name="Acme"))
 
     assert public.sync_metadata is not None
     assert public.sync_metadata.external_id == "ext-001"
@@ -270,12 +268,7 @@ def test_create_update_contracts_accept_sync_metadata() -> None:
     assert OrganizationUpdate(**payload).sync_metadata is not None
     assert LocationCreate(name="HQ", **payload).sync_metadata is not None
     assert LocationUpdate(**payload).sync_metadata is not None
-    assert (
-        DocumentCreate(path="/R", name="D", **payload).sync_metadata is not None
-    )
+    assert DocumentCreate(path="/R", name="D", **payload).sync_metadata is not None
     assert DocumentUpdate(**payload).sync_metadata is not None
-    assert (
-        PasswordCreate(name="P", password="secret", **payload).sync_metadata
-        is not None
-    )
+    assert PasswordCreate(name="P", password="secret", **payload).sync_metadata is not None
     assert PasswordUpdate(**payload).sync_metadata is not None
