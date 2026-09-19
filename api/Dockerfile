@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
 # Production stage
-FROM python:3.11-slim
+FROM python:3.11-slim AS runtime-base
 
 # Install runtime dependencies
 # Apply Debian security updates for perl-base (CVE-2026-42496, CVE-2026-8376,
@@ -100,3 +100,19 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 
 # Default command
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Development stage: runtime-base plus debug tooling. Built only when
+# explicitly targeted (docker-compose.dev.yml sets `target: dev`); the
+# default build target below stays production, so published images and
+# plain `docker build` never include this layer. uv is copied from the same
+# pinned image as the builder stage and stays in the dev image only.
+FROM runtime-base AS dev
+USER root
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /usr/local/bin/uv
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --python /opt/venv/bin/python "debugpy==1.8.22"
+USER app
+
+# Default target: keep production the implicit build (CI publishes ./api
+# with no target; see ci.yml).
+FROM runtime-base AS production
