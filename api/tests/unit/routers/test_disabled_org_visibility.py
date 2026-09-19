@@ -468,3 +468,62 @@ class TestDisabledOrgVisibilityMatrix:
             response = await client.post("/api/exports", json={})
 
         assert response.status_code == 403
+
+    async def test_visible_org_ids_returns_enabled_only(self, org_a_id):
+        """Helper queries enabled org IDs for the default listing."""
+        from src.routers.global_view import _visible_org_ids
+
+        statements = []
+
+        async def fake_execute(stmt, *args, **kwargs):
+            statements.append(stmt)
+            result = MagicMock()
+            result.fetchall = MagicMock(return_value=[(org_a_id,)])
+            return result
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(side_effect=fake_execute)
+
+        assert await _visible_org_ids(mock_db, False) == [org_a_id]
+        assert len(statements) == 1
+        assert "is_enabled" in str(statements[0])
+
+    async def test_visible_org_ids_opt_in_skips_query(self):
+        """show_disabled=true means unfiltered: no org query at all."""
+        from src.routers.global_view import _visible_org_ids
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock()
+
+        assert await _visible_org_ids(mock_db, True) is None
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        "route,repo_path",
+        [
+            ("/api/global/configurations", "src.routers.global_view.ConfigurationRepository"),
+            ("/api/global/locations", "src.routers.global_view.LocationRepository"),
+            ("/api/global/documents", "src.routers.global_view.DocumentRepository"),
+        ],
+    )
+    async def test_global_entity_lists_hide_disabled_by_default(
+        self, client: AsyncClient, org_a_id, org_b_id, route, repo_path
+    ):
+        """Remaining global list endpoints filter to the enabled org."""
+        mock_repo = AsyncMock()
+        mock_repo.get_paginated = AsyncMock(return_value=([], 0))
+
+        with auth_as(make_principal(UserRole.READER)):
+            with (
+                patch(repo_path, return_value=mock_repo),
+                patch(
+                    "src.routers.global_view._visible_org_ids",
+                    new=AsyncMock(return_value=[org_a_id]),
+                ),
+            ):
+                response = await client.get(route)
+
+        assert response.status_code == 200
+        sql = _filter_sql(mock_repo.get_paginated.await_args.kwargs["filters"])
+        assert _hex(org_a_id) in sql
+        assert _hex(org_b_id) not in sql
