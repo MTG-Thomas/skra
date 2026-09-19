@@ -143,7 +143,7 @@ key_has_full_access() {
     printf '%s' "${KEYS_REGION}" | tr '\n\t' '  ' | awk -v id="${GARAGE_ACCESS_KEY_ID}" '
         { buf = buf $0 }
         END {
-            n = split(buf, recs, /}, *{/)
+            n = split(buf, recs, /}[, ]*[{]/)
             for (i = 1; i <= n; i++) {
                 pat = "\"accessKeyId\" *: *\"" id "\""
                 if (recs[i] ~ pat &&
