@@ -16,9 +16,11 @@ Bifrost runs connectors; Skra owns documentation mapping and reconciliation.
 
 ## 1. Define organization access before changing auth
 
-`api/src/core/auth.py` says a regular user's execution context always has an
-organization, while platform users can have `org_id=None`. Verify that every
-router actually enforces this rule. The existing global view and persisted
+`api/src/core/auth.py` has a contradictory contract: the `ExecutionContext`
+docstring says regular users always have an organization, but
+`get_execution_context()` returns `org_id=None` for every user. Resolve that
+contract and verify how each router actually authorizes records. The global
+view and persisted
 `currentOrg` in `client/src/stores/organization.store.ts` need one explicit
 meaning for all roles. Decide whether the product has per-organization
 membership or global roles. Do not recreate membership tables merely because
