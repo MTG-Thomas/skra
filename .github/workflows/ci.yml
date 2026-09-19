@@ -425,6 +425,7 @@ jobs:
           scanners: 'vuln'
           format: 'sarif'
           output: 'trivy-api-results.sarif'
+          trivyignores: .trivyignore.yaml
 
       - name: Run Trivy vulnerability scanner on Client
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -459,6 +460,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           skip-setup-trivy: true
+          trivyignores: .trivyignore.yaml
 
       - name: Gate Client image on fixed high/critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
