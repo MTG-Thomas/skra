@@ -161,3 +161,147 @@ class TestCookieCsrfEnforcement:
             )
             is None
         )
+
+
+class TestRefreshCookieCsrf:
+    """CSRF matrix for POST /auth/refresh (issue #90 review finding).
+
+    The endpoint reads the refresh cookie directly instead of going
+    through get_current_user_optional, so it enforces the pair itself.
+    Body-token (API client) callers stay exempt.
+    """
+
+    def _refresh_token_for(self, user_id):
+        from src.core.security import create_refresh_token
+
+        token, _jti = create_refresh_token(data={"sub": str(user_id)})
+        return token
+
+    def _active_user(self, user_id):
+        from types import SimpleNamespace
+
+        from src.models.enums import UserRole
+
+        return SimpleNamespace(
+            id=user_id,
+            email="e2e-tech@example.com",
+            name="E2E Technician",
+            role=UserRole.OWNER,
+            is_active=True,
+        )
+
+    async def _call_refresh(self, monkeypatch, user, cookies=None,
+                            headers=None, body_token=None):
+        from unittest.mock import AsyncMock
+
+        from starlette.responses import Response
+
+        import src.routers.auth as auth_router
+        from src.models.contracts.auth import RefreshTokenRequest
+
+        repo = AsyncMock()
+        repo.get_by_id.return_value = user
+        monkeypatch.setattr(
+            auth_router.UserRepository, "get_by_id", repo.get_by_id
+        )
+
+        request = _make_request(
+            "POST", cookies=cookies, headers=headers
+        )
+        token_data = (
+            RefreshTokenRequest(refresh_token=body_token)
+            if body_token is not None
+            else None
+        )
+        # Bypass the slowapi rate-limit wrapper (needs live Redis); the
+        # tests target the endpoint's auth logic, not rate limiting.
+        handler = getattr(
+            auth_router.refresh_token, "__wrapped__", auth_router.refresh_token
+        )
+        return await handler(
+            request=request,
+            response=Response(),
+            db=AsyncMock(),
+            token_data=token_data,
+        )
+
+    async def test_cookie_refresh_with_valid_pair_succeeds(self, monkeypatch):
+        from uuid import uuid4
+
+        user_id = uuid4()
+        token = self._refresh_token_for(user_id)
+        csrf_cookie, csrf_header = _csrf_pair()
+
+        result = await self._call_refresh(
+            monkeypatch,
+            self._active_user(user_id),
+            cookies={"refresh_token": token, "csrf_token": csrf_cookie},
+            headers={"X-CSRF-Token": csrf_header},
+        )
+
+        assert result.access_token
+        assert result.refresh_token
+
+    async def test_cookie_refresh_without_csrf_raises_403(self, monkeypatch):
+        from uuid import uuid4
+
+        user_id = uuid4()
+        token = self._refresh_token_for(user_id)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self._call_refresh(
+                monkeypatch,
+                self._active_user(user_id),
+                cookies={"refresh_token": token},
+            )
+
+        assert exc_info.value.status_code == 403
+
+    async def test_cookie_refresh_with_mismatched_pair_raises_403(
+        self, monkeypatch
+    ):
+        from uuid import uuid4
+
+        user_id = uuid4()
+        token = self._refresh_token_for(user_id)
+        csrf_cookie, _ = _csrf_pair()
+        other_cookie, _ = _csrf_pair()
+        assert other_cookie != csrf_cookie
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self._call_refresh(
+                monkeypatch,
+                self._active_user(user_id),
+                cookies={
+                    "refresh_token": token,
+                    "csrf_token": csrf_cookie,
+                },
+                headers={"X-CSRF-Token": other_cookie},
+            )
+
+        assert exc_info.value.status_code == 403
+
+    async def test_body_refresh_without_csrf_succeeds(self, monkeypatch):
+        from uuid import uuid4
+
+        user_id = uuid4()
+        token = self._refresh_token_for(user_id)
+
+        result = await self._call_refresh(
+            monkeypatch,
+            self._active_user(user_id),
+            body_token=token,
+        )
+
+        assert result.access_token
+        assert result.refresh_token
+
+    async def test_refresh_without_any_token_raises_401(self, monkeypatch):
+        from uuid import uuid4
+
+        with pytest.raises(HTTPException) as exc_info:
+            await self._call_refresh(
+                monkeypatch, self._active_user(uuid4())
+            )
+
+        assert exc_info.value.status_code == 401

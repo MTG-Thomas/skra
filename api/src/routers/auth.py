@@ -25,6 +25,7 @@ from src.core.security import (
     decode_token,
     generate_csrf_token,
     get_password_hash,
+    validate_csrf_token,
     verify_password,
 )
 from src.models.contracts.auth import (
@@ -266,12 +267,18 @@ async def refresh_token(
     Raises:
         HTTPException: If refresh token is invalid
     """
-    # Get refresh token from body or cookie
+    # Get refresh token from body (API clients) or cookie (browsers).
+    # A cookie-supplied refresh on this state-changing route must present
+    # the CSRF double-submit pair, exactly like other cookie-authenticated
+    # mutations (see get_current_user_optional). Body-token callers are
+    # exempt: they already authenticate with an explicit credential.
     refresh_token_value = None
+    from_cookie = False
     if token_data and token_data.refresh_token:
         refresh_token_value = token_data.refresh_token
     else:
         refresh_token_value = request.cookies.get("refresh_token")
+        from_cookie = True
 
     if not refresh_token_value:
         raise HTTPException(
@@ -289,6 +296,15 @@ async def refresh_token(
             detail="Invalid refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if from_cookie:
+        csrf_cookie = request.cookies.get("csrf_token")
+        csrf_header = request.headers.get("x-csrf-token")
+        if not validate_csrf_token(csrf_cookie or "", csrf_header or ""):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF validation failed",
+            )
 
     user_id = payload.get("sub")
     if not user_id:
