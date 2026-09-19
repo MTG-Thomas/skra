@@ -1468,6 +1468,10 @@ class SyncExecutor:
         """
         audit_results: list[RelationshipAuditResult] = []
         existing_relationship_keys = self.state.relationships if self.state else set()
+        # Run-local view of known links, seeded from the pre-run fetch. Keys
+        # created (or 409-confirmed) during this run are added so repeats and
+        # resume retries short-circuit without another POST.
+        seen_keys = set(existing_relationship_keys)
 
         for entity in plan.relationships.to_create:
             source_id = entity.get("source_id", "")
@@ -1518,7 +1522,7 @@ class SyncExecutor:
                 }
                 preflight_audit = classify_relationship(
                     resolved_entity,
-                    existing_relationship_keys=existing_relationship_keys,
+                    existing_relationship_keys=seen_keys,
                 )
 
                 if preflight_audit.status.value == "duplicate_existing":
@@ -1533,12 +1537,26 @@ class SyncExecutor:
                     result.skipped["relationships"] = (
                         result.skipped.get("relationships", 0) + 1
                     )
-                    audit_results.append(preflight_audit)
                     source_desc = source_id or f"itglue:{source_itglue_id}"
                     target_desc = target_id or f"itglue:{target_itglue_id}"
+                    missing_side = (
+                        f"source {entity.get('source_type', '')} ({source_desc})"
+                        if not source_id
+                        else f"target {entity.get('target_type', '')} ({target_desc})"
+                    )
+                    skip_audit = classify_relationship(
+                        resolved_entity,
+                        existing_relationship_keys=seen_keys,
+                        reason=(
+                            f"could not resolve {missing_side}; sync the "
+                            f"{'source' if not source_id else 'target'} entity "
+                            f"first (link {source_desc} -> {target_desc}), then "
+                            "re-run relationship sync"
+                        ),
+                    )
+                    audit_results.append(skip_audit)
                     logger.warning(
-                        f"Skipping relationship: could not resolve IDs "
-                        f"(source={source_desc}, target={target_desc})"
+                        f"Skipping relationship: {skip_audit.reason}"
                     )
                     continue
 
@@ -1560,6 +1578,8 @@ class SyncExecutor:
                 result.created["relationships"] = (
                     result.created.get("relationships", 0) + 1
                 )
+                if preflight_audit.relationship_key:
+                    seen_keys.add(preflight_audit.relationship_key)
                 audit_results.append(preflight_audit)
 
             except APIError as e:
@@ -1571,7 +1591,7 @@ class SyncExecutor:
                 }
                 audit = classify_relationship(
                     resolved_entity,
-                    existing_relationship_keys=existing_relationship_keys,
+                    existing_relationship_keys=seen_keys,
                     error=e,
                 )
                 audit_results.append(audit)
@@ -1579,6 +1599,8 @@ class SyncExecutor:
                     result.skipped["relationships"] = (
                         result.skipped.get("relationships", 0) + 1
                     )
+                    if audit.relationship_key:
+                        seen_keys.add(audit.relationship_key)
                 else:
                     result.failed["relationships"] = (
                         result.failed.get("relationships", 0) + 1
@@ -1596,7 +1618,7 @@ class SyncExecutor:
                 audit_results.append(
                     classify_relationship(
                         resolved_entity,
-                        existing_relationship_keys=existing_relationship_keys,
+                        existing_relationship_keys=seen_keys,
                         error=e,
                     )
                 )

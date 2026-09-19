@@ -2673,6 +2673,8 @@ def _display_sync_result(result: SyncResult) -> None:
 
     console.print(table)
 
+    _display_relationship_breakdown(result)
+
     # Display errors if any
     if result.errors:
         console.print()
@@ -2681,6 +2683,33 @@ def _display_sync_result(result: SyncResult) -> None:
             console.print(f"  - {error}")
         if len(result.errors) > 10:
             console.print(f"  ... and {len(result.errors) - 10} more errors")
+
+
+def _display_relationship_breakdown(result: SyncResult) -> None:
+    """Display the audited relationship outcome breakdown, if any.
+
+    The coarse table above lumps duplicates, missing references, and
+    transient errors under skipped/failed. This section exposes the
+    auditable buckets so operators can decide the resume action:
+    re-run for transient errors, migrate entities first for missing
+    references, and no action for duplicates.
+    """
+    summary = result.relationship_summary
+    if not summary or not any(summary.values()):
+        return
+
+    console.print()
+    console.print("[bold]Relationship detail:[/bold]")
+    for key in (
+        "created",
+        "skipped",
+        "duplicate",
+        "failed",
+        "missing_source",
+        "missing_target",
+        "transient_error",
+    ):
+        console.print(f"  {key}: {summary.get(key, 0)}")
 
 
 def _build_attachment_validation_summary(
@@ -3021,6 +3050,11 @@ async def _run_sync(
                         if result.relationship_summary
                         else None
                     )
+                    relationship_audit = (
+                        list(result.relationship_audit)
+                        if result.relationship_audit
+                        else None
+                    )
             else:
                 console.print()
                 console.print("Executing sync...")
@@ -3064,6 +3098,11 @@ async def _run_sync(
                 relationship_summary = (
                     result.relationship_summary if result.relationship_summary else None
                 )
+                relationship_audit = (
+                    list(result.relationship_audit)
+                    if result.relationship_audit
+                    else None
+                )
 
                 _display_sync_result(result)
 
@@ -3079,6 +3118,7 @@ async def _run_sync(
                         errors=org_errors,
                         attachment_summary=attachment_summary,
                         relationship_summary=relationship_summary,
+                        relationship_audit=relationship_audit,
                     )
                 )
             console.print()

@@ -192,17 +192,46 @@ python -m itglue_migrate.cli run \
 
 ### 2.5 Execute Relationship Sync (Second Pass)
 
+Relationships sync last, after all entities exist. The sync is stateless:
+it re-reads what already migrated from the API on every run, so re-running
+is safe — already-created links are detected and skipped, never recreated.
+
 ```bash
-# Third pass: Relationships (requires API)
-python -m itglue_migrate.cli sync-relationships \
-    --itglue-api-key $ITGLUE_API_KEY \
+# Dry run first: review the relationship plan without creating links
+python -m itglue_migrate.cli sync \
+    --export-path /path/to/itglue-export \
     --api-url $BIFROST_API_URL \
     --token $BIFROST_TOKEN \
-    --output /tmp/relationship-sync-results.json
+    --org "Company Name" \
+    --dry-run
+
+# Live run with a reconciliation report for the audit trail
+python -m itglue_migrate.cli sync \
+    --export-path /path/to/itglue-export \
+    --api-url $BIFROST_API_URL \
+    --token $BIFROST_TOKEN \
+    --org "Company Name" \
+    --reconciliation-output /tmp/relationship-sync-results.json
 ```
 
-- [ ] Relationship sync completed
-- [ ] Related items linked correctly
+**Reading the "Relationship detail" breakdown:**
+
+| Bucket | Meaning | Resume action |
+|--------|---------|---------------|
+| `created` | Links created this run | None |
+| `duplicate` | Link already existed (pre-run or earlier in this run) | None — safe to ignore |
+| `missing_source` / `missing_target` | Referenced entity has no migrated UUID | Sync the named entity first (the audit `reason` gives the IT Glue ID), then re-run |
+| `transient_error` | Retryable API failure (timeout, 429, 5xx) | Simply re-run |
+| `failed` | Hard failure (e.g. 400) | Inspect `errors`, fix, re-run |
+
+Each skipped link carries an actionable `reason` in the reconciliation JSON
+(`organizations[].relationship_audit[].reason`). The command exits nonzero
+when `failed` is nonzero; `duplicate` and resolved-missing links never fail
+the run on a later pass once their cause is fixed.
+
+- [ ] Relationship sync completed (exit 0, or only expected missing refs)
+- [ ] `missing_*` reasons reviewed; source entities queued if needed
+- [ ] Reconciliation JSON archived for the cutover record
 
 ---
 
