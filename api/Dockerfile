@@ -33,6 +33,14 @@ FROM python:3.11-slim
 # Apply Debian security updates for perl-base (CVE-2026-42496, CVE-2026-8376,
 # CVE-2026-13221, fixed in 5.40.1-6+deb13u1). The base image floats, so upgrade
 # explicitly instead of relying on the base snapshot date.
+#
+# Retained runtime tooling (issue #84: remove only with VM-gated proof):
+# - curl: required by the HEALTHCHECK below.
+# - pip/setuptools/wheel in system site-packages: base-image tooling, kept so
+#   the image stays debuggable with standard Python tooling; the application
+#   itself runs from /opt/venv and never invokes them. Removal (which would
+#   also drop pip's vendored SBOM manifests flagged in issue #82) is deferred
+#   to VM-gated evaluation, tracked in issue #91.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
