@@ -23,6 +23,7 @@ from src.models.contracts.organization import (
     OrganizationCreate,
     OrganizationPublic,
     OrganizationUpdate,
+    OrganizationWithFrequent,
 )
 from src.models.contracts.password import (
     PasswordCreate,
@@ -243,6 +244,25 @@ def test_password_public_exposes_sync_metadata_without_secrets() -> None:
     assert public.sync_metadata is not None
     assert public.sync_metadata.external_id == "ext-001"
     assert not hasattr(public, "password")
+
+
+def test_organization_with_frequent_coerces_raw_sync_metadata() -> None:
+    """The get-organization path validates raw storage dicts (issue #34)."""
+    now = datetime.now(UTC)
+    public = OrganizationWithFrequent.model_validate(
+        {
+            "id": uuid4(),
+            "name": "Acme",
+            "is_enabled": True,
+            "created_at": now,
+            "updated_at": now,
+            "metadata": {},
+            "sync_metadata": dict(SYNC_ATTRS),
+        }
+    )
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.external_id == "ext-001"
 
 
 def test_public_contracts_default_sync_metadata_to_none() -> None:
