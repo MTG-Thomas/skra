@@ -49,8 +49,13 @@ export async function performLogin(page: Page, email: string, password: string):
   // Submit form
   await page.getByRole('button', { name: 'Sign in' }).click();
   
-  // Wait for navigation to complete (either org selector or dashboard)
-  await page.waitForURL(/\/(org\/[^/]+|organizations)/, { timeout: 10000 });
+  // Wait for navigation to complete (dashboard root, org page, or org list).
+  // LoginPage navigates to "/" on success, so the bare root must match.
+  // NOTE: Playwright matches against the full URL (including origin), so
+  // the pattern must not anchor at string start.
+  await page.waitForURL(/\/(org\/[^/]+|organizations)?([?#]|$)/, {
+    timeout: 10000,
+  });
 }
 
 /**

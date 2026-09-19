@@ -36,8 +36,8 @@ pwTest.describe('Critical technician workflows', () => {
   pwTest('technician can log in', async ({ page }) => {
     await performLogin(page, TEST_USER.email, TEST_USER.password);
 
-    // Login lands on the org dashboard or the organizations list.
-    await expect(page).toHaveURL(/\/(org\/[^/]+|organizations)/);
+    // Login lands on the dashboard root, an org page, or the org list.
+    await expect(page).toHaveURL(/\/(org\/[^/]+|organizations)?([?#]|$)/);
   });
 });
 
@@ -61,9 +61,12 @@ test.describe('Critical technician workflows (authenticated)', () => {
     const secret = `E2e-Secret-${tag}!`;
 
     await page.getByRole('button', { name: 'Add Password' }).click();
-    await page.getByLabel('Name').fill(name);
-    await page.getByLabel('Username').fill('e2e-technician');
-    await page.getByLabel('Password', { exact: true }).fill(secret);
+    // NOTE: labels carry " *" markers ('Name *', 'Password *') and 'Name'
+    // substring-matches 'Username', so target the stable input names instead.
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('input[name="name"]').fill(name);
+    await dialog.locator('input[name="username"]').fill('e2e-technician');
+    await dialog.locator('input[name="password"]').fill(secret);
     await page.getByRole('button', { name: 'Create' }).click();
 
     // Lands on the password detail page showing the new credential.
@@ -92,7 +95,8 @@ test.describe('Critical technician workflows (authenticated)', () => {
     await page.getByRole('button', { name: 'Save' }).click();
 
     // Save navigates to the new document detail page (read path).
-    await expect(page).toHaveURL(/\/org\/[^/]+\/documents\/[^/]+/);
+    // The (?!new) guard keeps this from matching the /new editor itself.
+    await expect(page).toHaveURL(/\/org\/[^/]+\/documents\/(?!new\b)[^/]+/);
     await expect(
       page.getByRole('heading', { name: title, exact: true })
     ).toBeVisible();
