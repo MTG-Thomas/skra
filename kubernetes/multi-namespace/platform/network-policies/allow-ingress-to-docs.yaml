@@ -1,13 +1,13 @@
-# Allow ingress from the shared ingress controller to bifrost-docs
+# Allow ingress from the shared ingress controller to skra
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-ingress-controller
-  namespace: bifrost-docs
+  namespace: skra
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/part-of: bifrost-docs
+      app.kubernetes.io/part-of: skra
   policyTypes:
     - Ingress
   ingress:

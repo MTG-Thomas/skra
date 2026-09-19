@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 15
 
     env:
-      API_URL: https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
-      ZAP_AUTH_HEADER_VALUE: Bearer ${{ secrets.BIFROST_DOCS_ZAP_API_TOKEN }}
+      API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
+      ZAP_AUTH_HEADER_VALUE: Bearer ${{ secrets.SKRA_ZAP_API_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
       - name: Verify scan token is configured
         run: |
           if [ -z "${ZAP_AUTH_HEADER_VALUE#Bearer }" ]; then
-            echo "BIFROST_DOCS_ZAP_API_TOKEN is not configured for the azure-neon-proof environment." >&2
+            echo "SKRA_ZAP_API_TOKEN is not configured for the azure-neon-proof environment." >&2
             exit 1
           fi
 

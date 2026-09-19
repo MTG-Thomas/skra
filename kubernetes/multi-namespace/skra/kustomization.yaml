@@ -1,7 +1,7 @@
-# Kustomization for bifrost-docs namespace
+# Kustomization for skra namespace
 # This is a reference structure - actual app resources should be imported from existing manifests
 
-namespace: bifrost-docs
+namespace: skra
 
 resources:
   - namespace.yaml
@@ -20,18 +20,18 @@ resources:
 patches:
   - target:
       kind: Deployment
-      namespace: bifrost-docs
+      namespace: skra
     patch: |
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/0/configMapRef/name
-        value: bifrost-docs-config
+        value: skra-config
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
-        value: bifrost-docs-secrets
+        value: skra-secrets
   - target:
       kind: ConfigMap
-      name: bifrost-docs-config
+      name: skra-config
     patch: |
       - op: add
         path: /data/BIFROST_API_URL
-        value: "http://external-bifrost-api.bifrost-docs.svc.cluster.local:8000"
+        value: "http://external-bifrost-api.skra.svc.cluster.local:8000"

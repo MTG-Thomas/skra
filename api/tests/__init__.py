@@ -1,1 +1,1 @@
-"""Tests for Bifrost Docs API."""
+"""Tests for Skra API."""

@@ -1,4 +1,4 @@
-"""Organization matching for IT Glue to BifrostDocs migration.
+"""Organization matching for IT Glue to Skra migration.
 
 This module matches IT Glue organizations to existing organizations in the
 target system, supporting migration resume by detecting previously migrated

@@ -1,5 +1,5 @@
 """
-DCIM (Data Center Infrastructure Management) models for Bifrost.
+DCIM (Data Center Infrastructure Management) models for Skra.
 
 Rack and RackDevice models for physical infrastructure tracking.
 """

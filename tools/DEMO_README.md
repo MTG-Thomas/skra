@@ -1,13 +1,13 @@
 # Quick Demo Setup
 
-Generate realistic MSP data for your Bifrost Docs demo in under 2 minutes.
+Generate realistic MSP data for your Skra demo in under 2 minutes.
 
 ## Quick Start (Bash Script)
 
 ### Prerequisites
-1. Bifrost Docs running locally (`docker compose up -d`)
+1. Skra running locally (`docker compose up -d`)
 2. Logged in to the web UI (create first user at http://localhost:8080)
-3. JWT token from browser (Dev Tools > Application > Local Storage > `bifrost_token`)
+3. JWT token from browser (Dev Tools > Application > Local Storage > `skra-auth`)
 
 ### Run the Demo Script
 
@@ -31,13 +31,13 @@ cd tools
 1. Open http://localhost:8080 and login
 2. Press `F12` → Application tab
 3. Local Storage → http://localhost:8080
-4. Copy value of `bifrost_token`
+4. Copy value of `skra-auth`
 
 ### Firefox:
 1. Open http://localhost:8080 and login
 2. Press `F12` → Storage tab
 3. Local Storage → http://localhost:8080
-4. Copy value of `bifrost_token`
+4. Copy value of `skra-auth`
 
 ## Demo Highlights
 

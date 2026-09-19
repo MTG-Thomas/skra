@@ -1,4 +1,4 @@
-name: bifrost-codeql
+name: skra-codeql
 
 paths:
   - api/src

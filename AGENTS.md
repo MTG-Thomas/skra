@@ -1,4 +1,4 @@
-# Bifrost Docs — Agent Context
+# Skra — Agent Context
 
 Open-source MSP documentation platform. FOSS alternative to IT Glue / Hudu.
 Managed services providers use it to document client environments (passwords, configs, locations, documents, custom assets).
@@ -18,7 +18,7 @@ Managed services providers use it to document client environments (passwords, co
 ## Directory Layout
 
 ```text
-bifrost-docs/
+skra/
 ├── api/
 │   ├── src/
 │   │   ├── core/          # config.py, database.py, auth.py, pubsub.py, security.py
@@ -160,7 +160,7 @@ This repo uses multi-agent development with OpenCode and Kilo. See:
 ## Reference
 
 - `upstream`: `jackmusick/bifrost-docs` (FOSS origin)
-- `origin`: `MTG-Thomas/bifrost-docs` (our fork)
+- `origin`: `MTG-Thomas/skra` (our fork, renamed from `bifrost-docs`)
 - Design docs and implementation notes: `docs/plans/`
 
 ## GitHub Tokens

@@ -62,7 +62,7 @@ class OrganizationReconciliation:
 
     name: str
     itglue_id: str
-    bifrost_id: str | None
+    skra_id: str | None
     dry_run: bool
     entities: dict[str, EntityReconciliation] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -76,7 +76,7 @@ class OrganizationReconciliation:
         return {
             "name": self.name,
             "itglue_id": self.itglue_id,
-            "bifrost_id": self.bifrost_id,
+            "skra_id": self.skra_id,
             "dry_run": self.dry_run,
             "entities": {
                 entity_type: counts.to_dict()

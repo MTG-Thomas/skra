@@ -1,10 +1,10 @@
 param(
-    [string]$VmHost = "bifrost-docs-dev.netbird.cloud",
+    [string]$VmHost = "skra-dev.netbird.cloud",
     [string]$VmUser = "thomas",
-    [string]$DeployRoot = "/home/thomas/deploy/bifrost-docs-main",
-    [string]$ComposeProject = "bifrost-docs-dev",
+    [string]$DeployRoot = "/home/thomas/deploy/skra-main",
+    [string]$ComposeProject = "skra-dev",
     [string]$OutputDirectory = ".migration-runs/azure-neon-proof",
-    [string]$OutputPrefix = "bifrost-docs-dev"
+    [string]$OutputPrefix = "skra-dev"
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,7 +29,7 @@ $sshOptions = @(
 )
 
 $sshTarget = "$VmUser@$VmHost"
-$dumpCommand = "cd '$DeployRoot' && $compose exec -T postgres pg_dump -U bifrost_docs -d bifrost_docs --format=custom --no-owner --no-acl > '$remoteDump'"
+$dumpCommand = "cd '$DeployRoot' && $compose exec -T postgres pg_dump -U skra -d skra --format=custom --no-owner --no-acl > '$remoteDump'"
 ssh @sshOptions $sshTarget $dumpCommand
 if ($LASTEXITCODE -ne 0) { throw "Remote pg_dump failed with exit code $LASTEXITCODE" }
 
@@ -37,7 +37,7 @@ scp @sshOptions "$sshTarget`:$remoteDump" $localDump
 if ($LASTEXITCODE -ne 0) { throw "scp dump failed with exit code $LASTEXITCODE" }
 
 $statsSql = @"
-SELECT pg_size_pretty(pg_database_size('bifrost_docs')) AS database_size;
+SELECT pg_size_pretty(pg_database_size('skra')) AS database_size;
 SELECT 'organizations' AS table_name, COUNT(*) AS row_count FROM organizations
 UNION ALL SELECT 'documents', COUNT(*) FROM documents
 UNION ALL SELECT 'attachments', COUNT(*) FROM attachments
@@ -47,7 +47,7 @@ UNION ALL SELECT 'embedding_index', COUNT(*) FROM embedding_index
 ORDER BY table_name;
 "@
 $statsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($statsSql))
-$statsCommand = "cd '$DeployRoot' && printf '%s' '$statsBase64' | base64 -d | $compose exec -T postgres psql -U bifrost_docs -d bifrost_docs -v ON_ERROR_STOP=1 > '$remoteStats'"
+$statsCommand = "cd '$DeployRoot' && printf '%s' '$statsBase64' | base64 -d | $compose exec -T postgres psql -U skra -d skra -v ON_ERROR_STOP=1 > '$remoteStats'"
 ssh @sshOptions $sshTarget $statsCommand
 if ($LASTEXITCODE -ne 0) { throw "Remote stats query failed with exit code $LASTEXITCODE" }
 

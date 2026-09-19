@@ -5,12 +5,65 @@ Uses pydantic-settings for environment variable loading with validation.
 All configuration is centralized here for easy management.
 """
 
+import os
+import warnings
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, computed_field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    EnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+#: Previous env prefix, honored as a one-release fallback (see _LegacyEnvSource).
+#: Remove after all operators have migrated to SKRA_*.
+LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
+
+_warned_legacy_keys: set[str] = set()
+
+
+class _LegacyEnvSource(EnvSettingsSource):
+    """
+    Fallback source that reads BIFROST_DOCS_* variables for fields not set
+    via SKRA_* (or init kwargs). Emits a one-time DeprecationWarning per key.
+    """
+
+    def __call__(self) -> dict[str, Any]:
+        values = super().__call__() or {}
+        dotenv_values = self._legacy_dotenv_values()
+        for field_name in self.settings_cls.model_fields:
+            if field_name in values:
+                continue
+            legacy_key = f"{LEGACY_ENV_PREFIX}{field_name.upper()}"
+            if legacy_key in os.environ:
+                values[field_name] = os.environ[legacy_key]
+            elif field_name in dotenv_values:
+                values[field_name] = dotenv_values[field_name]
+            else:
+                continue
+            if legacy_key not in _warned_legacy_keys:
+                _warned_legacy_keys.add(legacy_key)
+                warnings.warn(
+                    f"{legacy_key} is deprecated, use SKRA_{field_name.upper()} instead",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+        return values
+
+    def _legacy_dotenv_values(self) -> dict[str, Any]:
+        """Legacy-prefixed values from the .env file (field-mapped)."""
+        env_file = self.settings_cls.model_config.get("env_file")
+        if not env_file:
+            return {}
+        source = DotEnvSettingsSource(
+            self.settings_cls, env_file=env_file, env_prefix=LEGACY_ENV_PREFIX
+        )
+        return source() or {}  # type: ignore[no-any-return]
 
 
 def _read_env_file(path: str) -> dict[str, str]:
@@ -42,12 +95,25 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="BIFROST_DOCS_",
+        env_prefix="SKRA_",
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        # Legacy BIFROST_DOCS_* vars apply only when SKRA_* is unset.
+        # dotenv_settings is kept so .env-file values keep working as before.
+        return (init_settings, env_settings, dotenv_settings, _LegacyEnvSource(settings_cls))
 
     # ==========================================================================
     # Environment
@@ -62,12 +128,12 @@ class Settings(BaseSettings):
     # Database (PostgreSQL)
     # ==========================================================================
     database_url: str = Field(
-        default="postgresql+asyncpg://bifrost_docs:bifrost_docsdev@localhost:5433/bifrost_docs",
+        default="postgresql+asyncpg://skra:skradev@localhost:5433/skra",
         description="Async PostgreSQL connection URL",
     )
 
     database_url_sync: str = Field(
-        default="postgresql://bifrost_docs:bifrost_docsdev@localhost:5433/bifrost_docs",
+        default="postgresql://skra:skradev@localhost:5433/skra",
         description="Sync PostgreSQL connection URL (for Alembic)",
     )
 
@@ -90,7 +156,7 @@ class Settings(BaseSettings):
     # Security
     # ==========================================================================
     secret_key: str = Field(
-        description="Secret key for JWT signing and encryption (BIFROST_DOCS_SECRET_KEY env var required)",
+        description="Secret key for JWT signing and encryption (SKRA_SECRET_KEY env var required)",
         min_length=32,
     )
 
@@ -105,13 +171,16 @@ class Settings(BaseSettings):
     )
 
     jwt_issuer: str = Field(
-        default="bifrost-docs-api", description="JWT issuer claim for token validation"
+        default="skra-api", description="JWT issuer claim for token validation"
     )
 
     jwt_audience: str = Field(
-        default="bifrost-docs-client", description="JWT audience claim for token validation"
+        default="skra-client", description="JWT audience claim for token validation"
     )
 
+    # NOTE: default retained from bifrost-docs on purpose. It feeds HKDF key
+    # derivation together with the info string in core/security.py — changing
+    # either default silently destroys access to already-encrypted secrets.
     fernet_salt: str = Field(
         default="bifrost_docssecrets_v1",
         description="Salt for Fernet key derivation (override for different encryption keys)",
@@ -148,7 +217,7 @@ class Settings(BaseSettings):
         default=True, description="Whether MFA is required for password authentication"
     )
 
-    mfa_totp_issuer: str = Field(default="BifrostDocs", description="Issuer name for TOTP QR codes")
+    mfa_totp_issuer: str = Field(default="Skra", description="Issuer name for TOTP QR codes")
 
     mfa_recovery_code_count: int = Field(
         default=10, description="Number of recovery codes to generate for MFA"
@@ -175,7 +244,7 @@ class Settings(BaseSettings):
     )
 
     webauthn_rp_name: str = Field(
-        default="Bifrost Docs", description="WebAuthn Relying Party display name"
+        default="Skra", description="WebAuthn Relying Party display name"
     )
 
     webauthn_origin: str = Field(
@@ -192,7 +261,7 @@ class Settings(BaseSettings):
     # File Storage (Local)
     # ==========================================================================
     temp_location: str = Field(
-        default="/tmp/bifrost_docs", description="Path to temporary storage directory"
+        default="/tmp/skra", description="Path to temporary storage directory"
     )
 
     storage_backend: Literal["s3", "azure_blob"] = Field(
@@ -259,7 +328,7 @@ class Settings(BaseSettings):
             self.s3_secret_key = secret_key
         return self
 
-    s3_bucket: str = Field(default="bifrost-docs", description="S3 bucket name for file storage")
+    s3_bucket: str = Field(default="skra", description="S3 bucket name for file storage")
 
     s3_region: str = Field(default="us-east-1", description="S3 region (use us-east-1 for MinIO)")
 
@@ -296,7 +365,7 @@ class Settings(BaseSettings):
     )
 
     azure_blob_container: str = Field(
-        default="bifrost-docs",
+        default="skra",
         description="Azure Blob container name for file storage.",
     )
 

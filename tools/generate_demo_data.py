@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate sample MSP data for Bifrost Docs demo.
+Generate sample MSP data for Skra demo.
 
 Creates realistic organizations, configurations, passwords, documents, etc.
 for demonstration purposes.
@@ -183,7 +183,7 @@ SOP_DOCUMENTS = [
 
 
 class DemoDataGenerator:
-    """Generates realistic demo data for Bifrost Docs."""
+    """Generates realistic demo data for Skra."""
 
     def __init__(self, base_url: str, token: str | None = None):
         self.base_url = base_url.rstrip("/")
@@ -493,9 +493,9 @@ class DemoDataGenerator:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Generate demo data for Bifrost Docs")
+    parser = argparse.ArgumentParser(description="Generate demo data for Skra")
     parser.add_argument("--api-url", default="http://localhost:8080", help="API base URL")
-    parser.add_argument("--token", help="JWT auth token (or set BIFROST_TOKEN env var)")
+    parser.add_argument("--token", help="JWT auth token (or set SKRA_TOKEN env var)")
     parser.add_argument("--cleanup", action="store_true", help="Remove demo data after creation")
     
     args = parser.parse_args()

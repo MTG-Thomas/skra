@@ -1,4 +1,4 @@
-"""Migration state persistence for IT Glue to BifrostDocs migration.
+"""Migration state persistence for IT Glue to Skra migration.
 
 This module provides state tracking and persistence for resuming interrupted
 migrations. It tracks completed entities, failures, and warnings per phase,

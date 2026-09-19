@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the key features of the IT Glue to BifrostDocs migration tool, with emphasis on how IT Glue data fields are mapped to BifrostDocs entities.
+This document describes the key features of the IT Glue to Skra migration tool, with emphasis on how IT Glue data fields are mapped to Skra entities.
 
 ## Key Features
 
@@ -61,7 +61,7 @@ def map_org_status_to_is_enabled(status: str | None) -> bool:
 
 ### 3. Location Notes Formatting
 
-Location address fields are formatted as HTML for display in BifrostDocs:
+Location address fields are formatted as HTML for display in Skra:
 
 ```python
 def format_location_notes_html(row: dict[str, Any]) -> str:
@@ -109,7 +109,7 @@ The tool handles two document folder structures:
 ### Phase 1: Analysis
 
 1. **CSV Parsing**: Parse IT Glue CSV exports
-2. **Organization Matching**: Match IT Glue orgs to BifrostDocs orgs
+2. **Organization Matching**: Match IT Glue orgs to Skra orgs
 3. **Schema Inference**: Analyze custom asset types and infer schemas
 4. **Review**: Review and approve the migration plan
 
@@ -135,9 +135,9 @@ The tool handles two document folder structures:
 ### Environment Variables
 
 ```bash
-# BifrostDocs API Configuration
-BIFROST_DOCS_BASE_URL=https://your-bifrostdocs-instance.com
-BIFROST_DOCS_API_KEY=your-api-key
+# Skra API Configuration
+SKRA_BASE_URL=https://your-skra-instance.com
+SKRA_API_KEY=your-api-key
 
 # Export Configuration
 ITGLUE_EXPORT_PATH=/path/to/itglue/export
@@ -156,8 +156,8 @@ The migration uses a `plan.json` file to track migration configuration:
         "itglue_id": "123",
         "itglue_name": "Acme Corp",
         "status": "matched",
-        "bifrost_id": "uuid-here",
-        "bifrost_name": "Acme Corp"
+        "skra_id": "uuid-here",
+        "skra_name": "Acme Corp"
       }
     ]
   },
@@ -219,18 +219,18 @@ pytest tests/integration/
 ## Best Practices
 
 1. **Test Migration**: Run a test migration with a small subset of data first
-2. **Backup**: Always backup your BifrostDocs instance before running a migration
+2. **Backup**: Always backup your Skra instance before running a migration
 3. **Validation**: After migration, verify counts and spot-check critical data
 4. **Disabled Entities**: Review disabled entities separately to ensure correct mapping
 5. **Custom Asset Types**: Review inferred schemas before creating types in production
 
 ## Data Mapping Reference
 
-### IT Glue → BifrostDocs Field Mappings
+### IT Glue → Skra Field Mappings
 
 #### Organizations
 
-| IT Glue Field | BifrostDocs Field | Notes |
+| IT Glue Field | Skra Field | Notes |
 |--------------|------------------|-------|
 | id | metadata.itglue_id | Stored in metadata |
 | name | name | Direct mapping |
@@ -240,7 +240,7 @@ pytest tests/integration/
 
 #### Configurations
 
-| IT Glue Field | BifrostDocs Field | Notes |
+| IT Glue Field | Skra Field | Notes |
 |--------------|------------------|-------|
 | id | metadata.itglue_id | Stored in metadata |
 | name | name | Direct mapping |
@@ -252,7 +252,7 @@ pytest tests/integration/
 
 #### Custom Assets
 
-| IT Glue Field | BifrostDocs Field | Notes |
+| IT Glue Field | Skra Field | Notes |
 |--------------|------------------|-------|
 | id | metadata.itglue_id | Stored in metadata |
 | archived | is_enabled | "Yes" → False, "No"/missing → True |
@@ -260,7 +260,7 @@ pytest tests/integration/
 
 #### Documents
 
-| IT Glue Field | BifrostDocs Field | Notes |
+| IT Glue Field | Skra Field | Notes |
 |--------------|------------------|-------|
 | id | metadata.itglue_id | Stored in metadata |
 | name | name | Direct mapping |
@@ -269,7 +269,7 @@ pytest tests/integration/
 
 #### Passwords
 
-| IT Glue Field | BifrostDocs Field | Notes |
+| IT Glue Field | Skra Field | Notes |
 |--------------|------------------|-------|
 | id | metadata.itglue_id | Stored in metadata |
 | name | name | Direct mapping |

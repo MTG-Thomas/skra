@@ -1,5 +1,5 @@
 """
-Pytest fixtures for Bifrost Docs API testing infrastructure.
+Pytest fixtures for Skra API testing infrastructure.
 
 This module provides:
 1. Database fixtures (PostgreSQL with SQLAlchemy async)
@@ -25,34 +25,34 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Set environment variables BEFORE any imports that might load settings
 # This must happen at module level, not in fixtures, to run before test collection
-os.environ.setdefault("BIFROST_DOCS_ENVIRONMENT", "testing")
-os.environ.setdefault("BIFROST_DOCS_SECRET_KEY", "test-secret-key-for-testing-must-be-32-chars")
+os.environ.setdefault("SKRA_ENVIRONMENT", "testing")
+os.environ.setdefault("SKRA_SECRET_KEY", "test-secret-key-for-testing-must-be-32-chars")
 os.environ.setdefault(
-    "BIFROST_DOCS_DATABASE_URL",
-    "postgresql+asyncpg://bifrost_docs:bifrost_docstest@localhost:5433/bifrost_docs_test",
+    "SKRA_DATABASE_URL",
+    "postgresql+asyncpg://skra:skratest@localhost:5433/skra_test",
 )
 os.environ.setdefault(
-    "BIFROST_DOCS_DATABASE_URL_SYNC",
-    "postgresql://bifrost_docs:bifrost_docstest@localhost:5433/bifrost_docs_test",
+    "SKRA_DATABASE_URL_SYNC",
+    "postgresql://skra:skratest@localhost:5433/skra_test",
 )
-os.environ.setdefault("BIFROST_DOCS_REDIS_URL", "redis://localhost:6380/0")
+os.environ.setdefault("SKRA_REDIS_URL", "redis://localhost:6380/0")
 
 
 # ==================== CONFIGURATION ====================
 
 # Test database URL (prefer env provided by docker-compose; fall back to local defaults)
 TEST_DATABASE_URL = os.getenv(
-    "BIFROST_DOCS_DATABASE_URL",
-    "postgresql+asyncpg://bifrost_docs:bifrost_docstest@localhost:5433/bifrost_docs_test",
+    "SKRA_DATABASE_URL",
+    "postgresql+asyncpg://skra:skratest@localhost:5433/skra_test",
 )
 
 TEST_DATABASE_URL_SYNC = os.getenv(
-    "BIFROST_DOCS_DATABASE_URL_SYNC",
-    "postgresql://bifrost_docs:bifrost_docstest@localhost:5433/bifrost_docs_test",
+    "SKRA_DATABASE_URL_SYNC",
+    "postgresql://skra:skratest@localhost:5433/skra_test",
 )
 
 TEST_REDIS_URL = os.getenv(
-    "BIFROST_DOCS_REDIS_URL",
+    "SKRA_REDIS_URL",
     "redis://localhost:6380/0",
 )
 
@@ -66,16 +66,16 @@ TEST_API_URL = os.getenv("TEST_API_URL", "http://localhost:8001")
 def setup_test_environment(tmp_path_factory):
     """Set up test environment variables once per session."""
     # Set environment variables for testing
-    os.environ["BIFROST_DOCS_ENVIRONMENT"] = "testing"
-    os.environ["BIFROST_DOCS_DATABASE_URL"] = TEST_DATABASE_URL
-    os.environ["BIFROST_DOCS_DATABASE_URL_SYNC"] = TEST_DATABASE_URL_SYNC
-    os.environ["BIFROST_DOCS_REDIS_URL"] = TEST_REDIS_URL
-    os.environ["BIFROST_DOCS_SECRET_KEY"] = "test-secret-key-for-testing-must-be-32-chars"
+    os.environ["SKRA_ENVIRONMENT"] = "testing"
+    os.environ["SKRA_DATABASE_URL"] = TEST_DATABASE_URL
+    os.environ["SKRA_DATABASE_URL_SYNC"] = TEST_DATABASE_URL_SYNC
+    os.environ["SKRA_REDIS_URL"] = TEST_REDIS_URL
+    os.environ["SKRA_SECRET_KEY"] = "test-secret-key-for-testing-must-be-32-chars"
 
     # Set up temp locations for tests
-    test_temp = Path("/tmp/bifrost_docs/temp")
+    test_temp = Path("/tmp/skra/temp")
     test_temp.mkdir(parents=True, exist_ok=True)
-    os.environ["BIFROST_DOCS_TEMP_LOCATION"] = str(test_temp)
+    os.environ["SKRA_TEMP_LOCATION"] = str(test_temp)
 
     # Reset global database state to ensure it uses test settings
     from src.core.database import reset_db_state

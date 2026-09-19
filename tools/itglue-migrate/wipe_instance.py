@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DANGEROUS: This script will DELETE ALL DATA from your BifrostDocs instance.
+DANGEROUS: This script will DELETE ALL DATA from your Skra instance.
 
 This includes:
   - All organizations (and all their data via cascade)
@@ -19,7 +19,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from itglue_migrate.api_client import BifrostDocsClient, APIError
+from itglue_migrate.api_client import SkraClient, APIError
 
 
 RED = "\033[91m"
@@ -52,7 +52,7 @@ def print_banner():
 """)
 
 
-async def get_counts(client: BifrostDocsClient) -> dict[str, int]:
+async def get_counts(client: SkraClient) -> dict[str, int]:
     """Get counts of all entities."""
     counts = {
         "organizations": 0,
@@ -92,7 +92,7 @@ async def wipe_instance(api_url: str, token: str) -> None:
     """Wipe the entire instance."""
     global _deletion_started
 
-    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+    async with SkraClient(base_url=api_url, api_key=token) as client:
         # Get initial counts
         print(f"\n{YELLOW}Fetching current data counts...{RESET}\n")
         counts = await get_counts(client)
@@ -203,21 +203,21 @@ async def wipe_instance(api_url: str, token: str) -> None:
 def main():
     print_banner()
 
-    api_url = os.environ.get("BIFROST_API_URL")
-    token = os.environ.get("BIFROST_API_TOKEN")
+    api_url = os.environ.get("SKRA_API_URL")
+    token = os.environ.get("SKRA_API_TOKEN")
 
     if not api_url:
-        print(f"{RED}Error: BIFROST_API_URL environment variable not set{RESET}")
+        print(f"{RED}Error: SKRA_API_URL environment variable not set{RESET}")
         sys.exit(1)
 
     if not token:
-        print(f"{RED}Error: BIFROST_API_TOKEN environment variable not set{RESET}")
+        print(f"{RED}Error: SKRA_API_TOKEN environment variable not set{RESET}")
         sys.exit(1)
 
     print(f"Target API: {BOLD}{api_url}{RESET}")
     print()
 
-    # Safety check for production
+    # Safety check for production (legacy bifrostdocs.com kept: old prod URLs must still trip this)
     if "prod" in api_url.lower() or "bifrostdocs.com" in api_url.lower():
         print(f"{RED}{BOLD}ERROR: This appears to be a production URL!{RESET}")
         print(f"{RED}This script is intended for development/testing only.{RESET}")

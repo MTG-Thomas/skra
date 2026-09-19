@@ -1,6 +1,6 @@
-# Bifrost Open-Source Security Baseline
+# Skra Open-Source Security Baseline
 
-This baseline is intentionally tuned to Bifrost Docs: a FastAPI API, Vite/React
+This baseline is intentionally tuned to Skra: a FastAPI API, Vite/React
 client, Docker/Compose runtime, Kubernetes manifests, Azure Bicep, and migration
 tooling that may handle customer documentation exports and vendor API tokens.
 
@@ -10,7 +10,7 @@ Run the fast local checks before security-sensitive changes:
 
 ```bash
 python -m pip install semgrep==1.161.0 pip-audit
-semgrep scan --config .semgrep/bifrost-docs.yml --exclude client/src/lib/v1.d.ts --exclude client/playwright-report --exclude client/test-results --severity ERROR --error
+semgrep scan --config .semgrep/skra.yml --exclude client/src/lib/v1.d.ts --exclude client/playwright-report --exclude client/test-results --severity ERROR --error
 python -m pip install ./api
 pip-audit --strict
 npm --prefix client audit --audit-level=high --omit=dev

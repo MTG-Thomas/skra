@@ -7,7 +7,7 @@ The unauthenticated baseline workflow is `.github/workflows/zap-baseline.yml`.
 Approved targets are hardcoded:
 
 - `https://azure-docs.midtowntg.com`
-- `https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
+- `https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
 
 Run it manually from GitHub Actions with target `all`, `frontend`, or `api`. Reports are uploaded as workflow artifacts. Do not add arbitrary scan URLs.
 
@@ -19,9 +19,9 @@ The authenticated API workflow is `.github/workflows/zap-authenticated-api.yml`.
 
 It scans the proof API OpenAPI document with an `Authorization: Bearer` header injected by ZAP replacer configuration. The token comes from the `azure-neon-proof` GitHub environment secret:
 
-`BIFROST_DOCS_ZAP_API_TOKEN`
+`SKRA_ZAP_API_TOKEN`
 
-The token should belong to a dedicated low-privilege Bifrost Docs scan identity, preferably `READER`, and should only have access to proof data.
+The token should belong to a dedicated low-privilege Skra scan identity, preferably `READER`, and should only have access to proof data.
 
 Never print tokens, cookies, TOTP seeds, or API keys in workflow logs.
 
@@ -48,7 +48,7 @@ Azure proof deployment uses Entra workload identity federation for GitHub Action
 
 The federated credential must match:
 
-`repo:MTG-Thomas/bifrost-docs:environment:azure-neon-proof`
+`repo:MTG-Thomas/skra:environment:azure-neon-proof`
 
 Manual ACA patching is only a fallback while the federated credential is missing.
 

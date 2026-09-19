@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth/mfa", tags=["mfa"])
 
-MFA_ISSUER = "Bifrost Docs"
+MFA_ISSUER = "Skra"
 RECOVERY_CODE_COUNT = 10
 
 

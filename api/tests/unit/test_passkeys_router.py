@@ -39,7 +39,7 @@ async def test_registration_options_route_accepts_rate_limited_request(monkeypat
 
         async def generate_registration_options(self, user_id):
             assert user_id == user.user_id
-            return {"challenge": "abc123", "rp": {"name": "Bifrost Docs"}}
+            return {"challenge": "abc123", "rp": {"name": "Skra"}}
 
     app.dependency_overrides[get_current_active_user] = lambda: user
     app.dependency_overrides[get_db] = lambda: object()
@@ -49,7 +49,7 @@ async def test_registration_options_route_accepts_rate_limited_request(monkeypat
         response = await client.post("/auth/passkeys/register/options", json={})
 
     assert response.status_code == 200
-    assert response.json() == {"options": {"challenge": "abc123", "rp": {"name": "Bifrost Docs"}}}
+    assert response.json() == {"options": {"challenge": "abc123", "rp": {"name": "Skra"}}}
 
 
 @pytest.mark.asyncio

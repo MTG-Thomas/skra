@@ -1,7 +1,7 @@
 """
 User ORM model.
 
-Represents users in the Bifrost Docs platform.
+Represents users in the Skra platform.
 """
 
 from datetime import UTC, datetime

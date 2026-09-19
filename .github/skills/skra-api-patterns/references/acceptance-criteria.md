@@ -1,6 +1,6 @@
-# Acceptance Criteria: bifrost-docs-api-patterns
+# Acceptance Criteria: skra-api-patterns
 
-**Repository:** `MTG-Thomas/bifrost-docs`  
+**Repository:** `MTG-Thomas/skra`  
 **Purpose:** Validate backend patterns for FastAPI + SQLAlchemy development
 
 ---

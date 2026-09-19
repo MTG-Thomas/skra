@@ -1,6 +1,6 @@
 # CI/CD Pipeline
 
-Bifrost Docs uses GitHub Actions for continuous integration and deployment.
+Skra uses GitHub Actions for continuous integration and deployment.
 
 ## Overview
 
@@ -101,15 +101,15 @@ Manual deploys expect that CI has already published the matching short-SHA image
 
 **Environments:**
 
-#### Bifrost Docs Dev (Automatic)
+#### Skra Dev (Automatic)
 - Connects the GitHub-hosted runner to NetBird
-- Deploys over SSH to `bifrost-docs-dev`
+- Deploys over SSH to `skra-dev`
 - Uses the CI-published short-SHA GHCR image tags, not mutable `latest`
-- Uses an isolated checkout at `/home/thomas/deploy/bifrost-docs-main`
-- Preserves the VM's existing `.env` and Garage config from `/home/thomas/workspace/bifrost-docs`
+- Uses an isolated checkout at `/home/thomas/deploy/skra-main`
+- Preserves the VM's existing `.env` and Garage config from `/home/thomas/workspace/skra`
 - Runs Docker Compose with `docker-compose.yml`, `docker-compose.test-vm.yml`, and `docker-compose.ssl.yml`
-- Uses Compose project `bifrost-docs-dev` to upgrade the existing test VM stack and reuse its data volumes
-- Uses GitHub Environment `bifrost-docs-dev`
+- Uses Compose project `skra-dev` to upgrade the existing test VM stack and reuse its data volumes
+- Uses GitHub Environment `skra-dev`
 - Verifies `https://dev.docs.midtowntg.com/health`
 
 ## Local CI Checks
@@ -132,8 +132,8 @@ Run the same checks locally before pushing:
 Images are published to **GitHub Container Registry (GHCR)**:
 
 ```
-ghcr.io/mtg-thomas/bifrost-docs-api:latest
-ghcr.io/mtg-thomas/bifrost-docs-client:latest
+ghcr.io/mtg-thomas/skra-api:latest
+ghcr.io/mtg-thomas/skra-client:latest
 ```
 
 ### Pulling Images
@@ -143,8 +143,8 @@ ghcr.io/mtg-thomas/bifrost-docs-client:latest
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Pull images
-docker pull ghcr.io/mtg-thomas/bifrost-docs-api:latest
-docker pull ghcr.io/mtg-thomas/bifrost-docs-client:latest
+docker pull ghcr.io/mtg-thomas/skra-api:latest
+docker pull ghcr.io/mtg-thomas/skra-client:latest
 ```
 
 ## Deployment Configuration
@@ -157,7 +157,7 @@ For CI/CD to work, add these secrets in GitHub repository settings:
 - `NETBIRD_SETUP_KEY`: Setup key that lets the GitHub runner join the NetBird network
 - `TEST_VM_SSH_KEY`: Private key authorized for `thomas@100.103.235.51`
 
-Store deployment credentials as `bifrost-docs-dev` environment secrets when possible. Repository-level secrets remain compatible with the workflow during bootstrap. The workflow uses the built-in `GITHUB_TOKEN` for temporary GHCR pulls during the deploy job.
+Store deployment credentials as `skra-dev` environment secrets when possible. Repository-level secrets remain compatible with the workflow during bootstrap. The workflow uses the built-in `GITHUB_TOKEN` for temporary GHCR pulls during the deploy job.
 
 #### For SonarQube
 - `SONAR_TOKEN`: SonarCloud/SonarQube token for project analysis
@@ -173,21 +173,21 @@ To use the CI-built images in production:
 # docker-compose.test-vm.yml
 services:
   api:
-    image: ${BIFROST_DOCS_API_IMAGE}
+    image: ${SKRA_API_IMAGE}
     
   client:
-    image: ${BIFROST_DOCS_CLIENT_IMAGE}
+    image: ${SKRA_CLIENT_IMAGE}
     
   worker:
-    image: ${BIFROST_DOCS_API_IMAGE}
+    image: ${SKRA_API_IMAGE}
 ```
 
 Deploy:
 ```bash
-export BIFROST_DOCS_API_IMAGE=ghcr.io/mtg-thomas/bifrost-docs-api:<short-sha>
-export BIFROST_DOCS_CLIENT_IMAGE=ghcr.io/mtg-thomas/bifrost-docs-client:<short-sha>
-docker compose -p bifrost-docs-dev -f docker-compose.yml -f docker-compose.test-vm.yml -f docker-compose.ssl.yml pull
-docker compose -p bifrost-docs-dev -f docker-compose.yml -f docker-compose.test-vm.yml -f docker-compose.ssl.yml up -d
+export SKRA_API_IMAGE=ghcr.io/mtg-thomas/skra-api:<short-sha>
+export SKRA_CLIENT_IMAGE=ghcr.io/mtg-thomas/skra-client:<short-sha>
+docker compose -p skra-dev -f docker-compose.yml -f docker-compose.test-vm.yml -f docker-compose.ssl.yml pull
+docker compose -p skra-dev -f docker-compose.yml -f docker-compose.test-vm.yml -f docker-compose.ssl.yml up -d
 ```
 
 ## Workflow Badges
@@ -195,8 +195,8 @@ docker compose -p bifrost-docs-dev -f docker-compose.yml -f docker-compose.test-
 Add to your README.md:
 
 ```markdown
-![CI](https://github.com/MTG-Thomas/bifrost-docs/actions/workflows/ci.yml/badge.svg)
-![CD](https://github.com/MTG-Thomas/bifrost-docs/actions/workflows/cd.yml/badge.svg)
+![CI](https://github.com/MTG-Thomas/skra/actions/workflows/ci.yml/badge.svg)
+![CD](https://github.com/MTG-Thomas/skra/actions/workflows/cd.yml/badge.svg)
 ```
 
 ## Troubleshooting

@@ -252,6 +252,9 @@ def _get_fernet_key() -> bytes:
         algorithm=hashes.SHA256(),
         length=32,
         salt=settings.fernet_salt.encode(),
+        # NOTE: frozen since bifrost-docs. This info string (with fernet_salt)
+        # derives every stored encryption key — changing it destroys access
+        # to already-encrypted secrets. Never rename.
         info=b"bifrost-docs-secrets-encryption",
     )
 
@@ -346,11 +349,23 @@ def hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()
 
 
+#: Prefix for newly issued API keys.
+API_KEY_PREFIX = "skra_"
+
+#: Prefix of keys issued before the skra rename; still accepted for auth.
+LEGACY_API_KEY_PREFIX = "bifrost_docs"
+
+
+def is_api_key_token(token: str) -> bool:
+    """Check whether a bearer token is an API key (current or legacy prefix)."""
+    return token.startswith((API_KEY_PREFIX, LEGACY_API_KEY_PREFIX))
+
+
 def generate_api_key() -> str:
     """
     Generate a new API key.
 
     Returns:
-        A URL-safe random string prefixed with 'bifrost_docs'
+        A URL-safe random string prefixed with 'skra_'
     """
-    return f"bifrost_docs{secrets.token_urlsafe(32)}"
+    return f"{API_KEY_PREFIX}{secrets.token_urlsafe(32)}"

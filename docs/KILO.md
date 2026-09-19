@@ -1,6 +1,6 @@
 # Hello Kilo! 👋
 
-Welcome to the Bifrost Docs multi-agent workflow. This guide will get you started.
+Welcome to the Skra multi-agent workflow. This guide will get you started.
 
 ## Quick Start
 

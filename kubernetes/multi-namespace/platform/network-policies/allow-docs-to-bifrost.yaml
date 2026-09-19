@@ -1,4 +1,4 @@
-# Allow bifrost-docs API to call bifrost API for integration features
+# Allow skra API to call bifrost API for integration features
 # This is the ONLY cross-namespace API call allowed
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -16,11 +16,11 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: bifrost-docs
+              app.kubernetes.io/name: skra
         - podSelector:
             matchLabels:
               app.kubernetes.io/component: api
-              app.kubernetes.io/part-of: bifrost-docs
+              app.kubernetes.io/part-of: skra
       ports:
         - protocol: TCP
           port: 8000

@@ -1,7 +1,7 @@
 """
 Organization ORM model.
 
-Represents tenant organizations in the Bifrost Docs platform.
+Represents tenant organizations in the Skra platform.
 """
 
 from datetime import UTC, datetime

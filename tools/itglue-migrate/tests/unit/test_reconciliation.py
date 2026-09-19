@@ -66,7 +66,7 @@ def test_report_summary_flags_follow_up_for_failures() -> None:
         OrganizationReconciliation(
             name="Midtown",
             itglue_id="1",
-            bifrost_id="org-1",
+            skra_id="org-1",
             dry_run=False,
             entities=apply_result_counts(
                 build_plan_counts(SyncPlan()),
@@ -93,7 +93,7 @@ def test_report_summary_ignores_clean_attachment_and_relationship_summaries() ->
         OrganizationReconciliation(
             name="Midtown",
             itglue_id="1",
-            bifrost_id="org-1",
+            skra_id="org-1",
             dry_run=False,
             entities=build_plan_counts(SyncPlan()),
             attachment_summary={
@@ -131,7 +131,7 @@ def test_report_summary_flags_follow_up_for_validation_issues() -> None:
         OrganizationReconciliation(
             name="Midtown",
             itglue_id="1",
-            bifrost_id="org-1",
+            skra_id="org-1",
             dry_run=False,
             entities=build_plan_counts(SyncPlan()),
             attachment_summary={

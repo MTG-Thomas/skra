@@ -242,8 +242,8 @@ class TestAPIKeyFunctions:
 
         key = generate_api_key()
 
-        # Should start with bifrost_docs
-        assert key.startswith("bifrost_docs")
+        # Should start with skra_
+        assert key.startswith("skra_")
 
         # Should be a reasonable length
         assert len(key) > 40

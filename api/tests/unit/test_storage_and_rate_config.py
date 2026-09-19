@@ -40,8 +40,8 @@ def test_storage_configured_is_false_for_incomplete_azure_blob_backend():
 
 
 def test_rate_limiting_can_be_disabled(monkeypatch):
-    monkeypatch.setenv("BIFROST_DOCS_SECRET_KEY", "x" * 32)
-    monkeypatch.setenv("BIFROST_DOCS_RATE_LIMITING_ENABLED", "false")
+    monkeypatch.setenv("SKRA_SECRET_KEY", "x" * 32)
+    monkeypatch.setenv("SKRA_RATE_LIMITING_ENABLED", "false")
 
     import src.config as config
     import src.core.rate_limiting as rate_limiting

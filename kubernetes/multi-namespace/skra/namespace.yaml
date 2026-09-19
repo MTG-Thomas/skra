@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: bifrost-docs
+  name: skra
   labels:
-    app.kubernetes.io/name: bifrost-docs
-    app.kubernetes.io/part-of: bifrost-docs
-    app: bifrost-docs
+    app.kubernetes.io/name: skra
+    app.kubernetes.io/part-of: skra
+    app: skra

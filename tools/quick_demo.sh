@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Quick Demo Data Generator for Bifrost Docs
+# Quick Demo Data Generator for Skra
 # 
 # Creates sample organizations, configurations, passwords, and documents
 # using the API directly with curl.
@@ -9,7 +9,7 @@
 #   ./quick_demo.sh http://localhost:8080 <jwt_token>
 #   
 # Or if you're already logged in to the web UI, grab the token from
-# browser dev tools (Application > Local Storage > bifrost_token)
+# browser dev tools (Application > Local Storage > skra-auth)
 
 set -e
 
@@ -24,7 +24,7 @@ if [ -z "$TOKEN" ]; then
     echo "  1. Login to the web UI at $API_URL"
     echo "  2. Open browser dev tools (F12)"
     echo "  3. Go to Application > Local Storage"
-    echo "  4. Copy the 'bifrost_token' value"
+    echo "  4. Copy the 'skra-auth' value"
     exit 1
 fi
 

@@ -1,5 +1,5 @@
 """
-Bifrost Docs API - FastAPI Application
+Skra API - FastAPI Application
 
 Main entry point for the FastAPI application.
 """
@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from src.core.pubsub import get_connection_manager
 
     # Startup
-    logger.info("Starting Bifrost Docs API...")
+    logger.info("Starting Skra API...")
     settings = get_settings()
 
     # Initialize database
@@ -84,22 +84,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.default_user_email and settings.default_user_password:
         await create_default_user()
 
-    logger.info(f"Bifrost Docs API started in {settings.environment} mode")
+    logger.info(f"Skra API started in {settings.environment} mode")
 
     yield
 
     # Shutdown
-    logger.info("Shutting down Bifrost Docs API...")
+    logger.info("Shutting down Skra API...")
     await manager.stop_pubsub()
     await close_db()
-    logger.info("Bifrost Docs API shutdown complete")
+    logger.info("Skra API shutdown complete")
 
 
 async def create_default_user() -> None:
     """
     Create default admin user if it doesn't exist.
 
-    Only runs if BIFROST_DOCS_DEFAULT_USER_EMAIL and BIFROST_DOCS_DEFAULT_USER_PASSWORD
+    Only runs if SKRA_DEFAULT_USER_EMAIL and SKRA_DEFAULT_USER_PASSWORD
     environment variables are set.
     """
     from src.core.database import get_db_context
@@ -151,7 +151,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Bifrost Docs API",
+        title="Skra API",
         description="MSP documentation platform API",
         version="1.0.0",
         docs_url="/docs",
@@ -330,7 +330,7 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def root():
         return {
-            "name": "Bifrost Docs API",
+            "name": "Skra API",
             "version": "1.0.0",
             "docs": "/docs",
         }

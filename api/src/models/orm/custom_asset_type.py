@@ -1,7 +1,7 @@
 """
 Custom Asset Type ORM model.
 
-Represents custom asset type definitions (schemas) in the Bifrost Docs platform.
+Represents custom asset type definitions (schemas) in the Skra platform.
 Each custom asset type defines the field structure for a category of custom assets.
 These are global types shared across all organizations.
 """

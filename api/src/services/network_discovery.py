@@ -1,7 +1,7 @@
 """
 External platform integration for network discovery.
 
-Syncs device data from NinjaOne and Meraki into Bifrost configurations,
+Syncs device data from NinjaOne and Meraki into Skra configurations,
 enabling auto-generated topology diagrams from live data.
 """
 
@@ -307,7 +307,7 @@ class MerakiIntegration:
 
 
 class DiscoverySyncService:
-    """Sync discovered devices to Bifrost configurations."""
+    """Sync discovered devices to Skra configurations."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -322,7 +322,7 @@ class DiscoverySyncService:
         """Sync discovered devices to configurations.
 
         Args:
-            org_id: Bifrost organization ID
+            org_id: Skra organization ID
             devices: Discovered devices to sync
             dry_run: If True, don't actually create/update
 
@@ -460,7 +460,7 @@ class DiscoverySyncService:
 # Example usage in CLI/scheduler:
 async def run_ninjaone_sync(
     db: AsyncSession,
-    bifrost_org_id: UUID,
+    org_id: UUID,
     ninja_api_url: str,
     ninja_client_id: str,
     ninja_client_secret: str,
@@ -473,18 +473,18 @@ async def run_ninjaone_sync(
 
     # Sync to configurations
     sync_service = DiscoverySyncService(db)
-    stats = await sync_service.sync_devices(bifrost_org_id, devices)
+    stats = await sync_service.sync_devices(org_id, devices)
 
     logger.info(f"NinjaOne sync complete: {stats}")
 
     # Generate topology diagram
-    doc_id = await sync_service.generate_topology_diagram(bifrost_org_id)
+    doc_id = await sync_service.generate_topology_diagram(org_id)
     logger.info(f"Topology diagram: {doc_id}")
 
 
 async def run_meraki_sync(
     db: AsyncSession,
-    bifrost_org_id: UUID,
+    org_id: UUID,
     meraki_api_key: str,
     meraki_org_id: str,
 ) -> None:
@@ -496,10 +496,10 @@ async def run_meraki_sync(
 
     # Sync to configurations
     sync_service = DiscoverySyncService(db)
-    stats = await sync_service.sync_devices(bifrost_org_id, devices)
+    stats = await sync_service.sync_devices(org_id, devices)
 
     logger.info(f"Meraki sync complete: {stats}")
 
     # Generate topology diagram
-    doc_id = await sync_service.generate_topology_diagram(bifrost_org_id)
+    doc_id = await sync_service.generate_topology_diagram(org_id)
     logger.info(f"Topology diagram: {doc_id}")

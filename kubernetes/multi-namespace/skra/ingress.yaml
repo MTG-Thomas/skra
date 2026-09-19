@@ -1,10 +1,10 @@
-# Example ingress for bifrost-docs
+# Example ingress for skra
 # Note: ingress controller runs in bifrost-platform namespace
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: bifrost-docs
-  namespace: bifrost-docs
+  name: skra
+  namespace: skra
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: letsencrypt-prod
@@ -19,17 +19,17 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: bifrost-docs-api
+                name: skra-api
                 port:
                   number: 8000
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: bifrost-docs-client
+                name: skra-client
                 port:
                   number: 80
   tls:
     - hosts:
         - dev.docs.midtowntg.com
-      secretName: bifrost-docs-tls
+      secretName: skra-tls

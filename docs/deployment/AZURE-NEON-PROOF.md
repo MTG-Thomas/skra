@@ -1,10 +1,10 @@
 # Azure + Neon Proof Deployment
 
-This runbook stands up Bifrost Docs with Azure hosting the app/platform services and Neon hosting Postgres.
+This runbook stands up Skra with Azure hosting the app/platform services and Neon hosting Postgres.
 
 ## Architecture
 
-- Azure Resource Group: `rg-bifrost-docs-neon-dev`
+- Azure Resource Group: `rg-skra-neon-dev`
 - Azure Container Apps: FastAPI API from the pinned GHCR image
 - Azure Container Apps Job: one-shot `scripts.init_container` migrations/default setup
 - Azure Storage:
@@ -20,11 +20,11 @@ The first proof intentionally defers Redis-backed ARQ workers and WebSocket fano
 ## Prerequisites
 
 - Azure CLI authenticated to the Azure Sponsorship subscription.
-- Neon project created with a database/user for Bifrost Docs.
+- Neon project created with a database/user for Skra.
 - Neon direct/sync connection string: `postgresql://...`
 - Neon async connection string: `postgresql+asyncpg://...`
 - PostgreSQL client tools available locally if restoring a dump from this workstation.
-- Latest CI image available in GHCR, for example `ghcr.io/mtg-thomas/bifrost-docs-api:<short-sha>`.
+- Latest CI image available in GHCR, for example `ghcr.io/mtg-thomas/skra-api:<short-sha>`.
 
 Enable pgvector in Neon:
 
@@ -50,7 +50,7 @@ The current dev VM DB was measured at about 15 MB, so it fits comfortably in Neo
 
 ```powershell
 .\scripts\restore-neon-db.ps1 `
-  -DumpPath ".migration-runs\azure-neon-proof\<timestamp>\bifrost-docs-dev.dump" `
+  -DumpPath ".migration-runs\azure-neon-proof\<timestamp>\skra-dev.dump" `
   -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 ```
 
@@ -72,10 +72,10 @@ ORDER BY table_name;
 ```powershell
 .\scripts\deploy-azure-neon-proof.ps1 `
   -SubscriptionName "Azure Sponsorship" `
-  -ResourceGroupName "rg-bifrost-docs-neon-dev" `
+  -ResourceGroupName "rg-skra-neon-dev" `
   -Location "eastus" `
   -EnvironmentName "neon-dev" `
-  -ApiImage "ghcr.io/mtg-thomas/bifrost-docs-api:<short-sha>" `
+  -ApiImage "ghcr.io/mtg-thomas/skra-api:<short-sha>" `
   -DatabaseUrl "postgresql+asyncpg://USER:PASSWORD@HOST/DB?ssl=require" `
   -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 ```
@@ -93,10 +93,10 @@ The script:
 
 The API uses:
 
-- `BIFROST_DOCS_STORAGE_BACKEND=azure_blob`
-- `BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_URL=<storage blob endpoint>`
-- `BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_KEY=<generated account key>`
-- `BIFROST_DOCS_AZURE_BLOB_CONTAINER=attachments`
+- `SKRA_STORAGE_BACKEND=azure_blob`
+- `SKRA_AZURE_STORAGE_ACCOUNT_URL=<storage blob endpoint>`
+- `SKRA_AZURE_STORAGE_ACCOUNT_KEY=<generated account key>`
+- `SKRA_AZURE_BLOB_CONTAINER=attachments`
 
 The attachment table and API contracts still use the existing `s3_key` field name. Treat it as an object key, not as proof the backing store is S3.
 
@@ -109,7 +109,7 @@ The API deploy uses GitHub Actions OIDC instead of a stored Azure client secret.
 ```json
 {
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:MTG-Thomas/bifrost-docs:environment:azure-neon-proof",
+  "subject": "repo:MTG-Thomas/skra:environment:azure-neon-proof",
   "audiences": ["api://AzureADTokenExchange"]
 }
 ```
@@ -117,7 +117,7 @@ The API deploy uses GitHub Actions OIDC instead of a stored Azure client secret.
 The app also needs permission to update:
 
 ```text
-/subscriptions/a1d63b24-1202-4bfa-9086-cf32d1d352fc/resourceGroups/rg-bifrost-docs-neon-dev/providers/Microsoft.App/containerApps/ca-bifrost-docs-api-neon-dev
+/subscriptions/a1d63b24-1202-4bfa-9086-cf32d1d352fc/resourceGroups/rg-skra-neon-dev/providers/Microsoft.App/containerApps/ca-skra-api-neon-dev
 ```
 
 ## Validation

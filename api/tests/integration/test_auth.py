@@ -52,7 +52,7 @@ class TestRootEndpoint:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["name"] == "Bifrost Docs API"
+        assert data["name"] == "Skra API"
         assert data["version"] == "1.0.0"
 
 

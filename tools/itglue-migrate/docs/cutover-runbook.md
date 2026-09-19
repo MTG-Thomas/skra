@@ -1,10 +1,10 @@
 # Midtown Migration Cutover Runbook
 
-> **For:** Midtown migration from IT Glue to Bifrost Docs  
+> **For:** Midtown migration from IT Glue to Skra  
 > **When:** Production cutover day  
 > **Owner:** Migration operator (you!)  
 
-This runbook provides step-by-step procedures for executing the Midtown migration cutover from IT Glue to Bifrost Docs. Follow this guide to ensure a safe, reversible migration with minimal downtime.
+This runbook provides step-by-step procedures for executing the Midtown migration cutover from IT Glue to Skra. Follow this guide to ensure a safe, reversible migration with minimal downtime.
 
 ---
 
@@ -13,7 +13,7 @@ This runbook provides step-by-step procedures for executing the Midtown migratio
 | Item | Value |
 |------|-------|
 | **Source** | IT Glue export (178 orgs, ~25K entities) |
-| **Target** | Bifrost Docs production instance |
+| **Target** | Skra production instance |
 | **Estimated Cutover Time** | 4-8 hours |
 | **Rollback Window** | 24 hours (keep IT Glue access) |
 | **Support Channel** | #migration-support (Slack) |
@@ -25,11 +25,11 @@ This runbook provides step-by-step procedures for executing the Midtown migratio
 
 ### 0.1 Environment Preparation Checklist
 
-- [ ] Bifrost Docs production deployment verified healthy
-- [ ] `curl $BIFROST_API_URL/api/health` returns 200
+- [ ] Skra production deployment verified healthy
+- [ ] `curl $SKRA_API_URL/api/health` returns 200
 - [ ] Database backups scheduled and tested
-- [ ] Migration operator has admin access to both IT Glue and Bifrost Docs
-- [ ] API token generated with `owner` role in Bifrost Docs
+- [ ] Migration operator has admin access to both IT Glue and Skra
+- [ ] API token generated with `owner` role in Skra
 - [ ] IT Glue export downloaded and validated (less than 7 days old)
 - [ ] Export size verified: ~2.1GB, ~2,100 attachments expected
 - [ ] `itglue-migrate` CLI installed: `pip install -e tools/itglue-migrate`
@@ -46,11 +46,11 @@ This runbook provides step-by-step procedures for executing the Midtown migratio
   python -m itglue_migrate.cli run \
       --export /path/to/export \
       --org "Acme Corp" \
-      --api-url $BIFROST_API_URL \
-      --token $BIFROST_TOKEN \
+      --api-url $SKRA_API_URL \
+      --token $SKRA_TOKEN \
       --dry-run
   ```
-- [ ] Pilot org verified in Bifrost Docs UI
+- [ ] Pilot org verified in Skra UI
 - [ ] Entity counts match: Orgs=1, Configs=N, Passwords=N, etc.
 - [ ] No critical errors in logs
 
@@ -58,7 +58,7 @@ This runbook provides step-by-step procedures for executing the Midtown migratio
 
 - [ ] Cutover date announced to Midtown staff (T-3 days minimum)
 - [ ] IT Glue "read-only" notice scheduled for cutover day
-- [ ] Bifrost Docs training session completed for key users
+- [ ] Skra training session completed for key users
 - [ ] Support contact list distributed
 
 ---
@@ -68,9 +68,9 @@ This runbook provides step-by-step procedures for executing the Midtown migratio
 ### 1.1 Final Health Checks
 
 ```bash
-# Test Bifrost Docs API connectivity
-curl -H "Authorization: Bearer $BIFROST_TOKEN" \
-    $BIFROST_API_URL/api/health
+# Test Skra API connectivity
+curl -H "Authorization: Bearer $SKRA_TOKEN" \
+    $SKRA_API_URL/api/health
 
 # Expected: {"status": "healthy", "database": "connected"}
 ```
@@ -82,10 +82,10 @@ curl -H "Authorization: Bearer $BIFROST_TOKEN" \
 
 ### 1.2 Backup Verification
 
-- [ ] Bifrost Docs database backup completed
+- [ ] Skra database backup completed
   ```bash
   # Verify backup exists
-  ls -la /backups/bifrost-docs-$(date +%Y%m%d)*
+  ls -la /backups/skra-$(date +%Y%m%d)*
   ```
 - [ ] Backup restoration tested in staging environment
 - [ ] Rollback plan documented (see Phase 5)
@@ -108,7 +108,7 @@ python -m itglue_migrate.cli validate \
 ### 1.4 Resource Check
 
 - [ ] Disk space: > 50GB free on target system
-- [ ] Network: Stable connection to Bifrost Docs
+- [ ] Network: Stable connection to Skra
 - [ ] Time: 4-8 hour window available
 - [ ] Coffee: ☕ Fully stocked
 
@@ -124,8 +124,8 @@ cd tools/itglue-migrate
 # Generate the migration plan
 python -m itglue_migrate.cli preview \
     --export /path/to/itglue-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --output /tmp/midtown-migration-plan.json
 ```
 
@@ -158,8 +158,8 @@ jq '.summary' /tmp/midtown-migration-plan.json
 python -m itglue_migrate.cli run \
     --export /path/to/itglue-export \
     --plan /tmp/midtown-migration-plan.json \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --skip-attachments \
     --output /tmp/migration-results-core.json
 ```
@@ -180,8 +180,8 @@ python -m itglue_migrate.cli run \
 python -m itglue_migrate.cli run \
     --export /path/to/itglue-export \
     --plan /tmp/midtown-migration-plan.json \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --only-attachments \
     --output /tmp/migration-results-attachments.json
 ```
@@ -200,16 +200,16 @@ is safe — already-created links are detected and skipped, never recreated.
 # Dry run first: review the relationship plan without creating links
 python -m itglue_migrate.cli sync \
     --export-path /path/to/itglue-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --org "Company Name" \
     --dry-run
 
 # Live run with a reconciliation report for the audit trail
 python -m itglue_migrate.cli sync \
     --export-path /path/to/itglue-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --org "Company Name" \
     --reconciliation-output /tmp/relationship-sync-results.json
 ```
@@ -244,14 +244,14 @@ the run on a later pass once their cause is fixed.
 cd tools/itglue-migrate
 python -m itglue_migrate.cli validate-migration \
     --export /path/to/itglue-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --report /tmp/migration-validation-report.json
 ```
 
 ### 3.2 Entity Count Verification
 
-| Entity Type | IT Glue Source | Bifrost Target | Match |
+| Entity Type | IT Glue Source | Skra Target | Match |
 |-------------|----------------|----------------|-------|
 | Organizations | 178 | ___ | [ ] |
 | Configurations | ~6,191 | ___ | [ ] |
@@ -312,18 +312,18 @@ python -m itglue_migrate.cli validate-migration \
 - [ ] **GO** - All gates pass → Continue to 4.2
 - [ ] **NO-GO** - Any gate fails → Execute rollback (Phase 5)
 
-### 4.2 Enable Bifrost Docs for Staff
+### 4.2 Enable Skra for Staff
 
 - [ ] Remove "maintenance mode" if enabled
 - [ ] Announce cutover complete to staff
-- [ ] Provide Bifrost Docs login URL
+- [ ] Provide Skra login URL
 - [ ] Share quick-start guide
 - [ ] Open support channel for questions
 
 ### 4.3 IT Glue Read-Only Transition
 
 - [ ] Set IT Glue to read-only for Midtown data
-- [ ] Post notice directing staff to Bifrost Docs
+- [ ] Post notice directing staff to Skra
 - [ ] Retain IT Glue access for 24 hours (rollback window)
 
 ### 4.4 Post-Cutover Monitoring
@@ -372,14 +372,14 @@ pkill -f "itglue-migrate"
 # Restore from pre-migration backup
 # (Work with your DBA or use documented restore procedure)
 pg_restore --clean --if-exists \
-    --dbname=bifrost_docs \
-    /backups/bifrost-docs-pre-migration.dump
+    --dbname=skra \
+    /backups/skra-pre-migration.dump
 ```
 
 **Step 3: Re-enable IT Glue Write Access**
 - [ ] Remove read-only restrictions in IT Glue
 - [ ] Notify staff to continue using IT Glue
-- [ ] Pause Bifrost Docs rollout
+- [ ] Pause Skra rollout
 
 **Step 4: Post-Rollback Analysis**
 - [ ] Document what failed
@@ -390,7 +390,7 @@ pg_restore --clean --if-exists \
 ### 5.3 Partial Rollback Option
 
 If only some organizations failed:
-- [ ] Wipe affected organizations from Bifrost Docs
+- [ ] Wipe affected organizations from Skra
 - [ ] Re-run migration for those orgs only
 - [ ] Validate before declaring success
 
@@ -408,14 +408,14 @@ If only some organizations failed:
 
 ### 6.2 Documentation Updates
 
-- [ ] Update internal wiki with Bifrost Docs procedures
+- [ ] Update internal wiki with Skra procedures
 - [ ] Archive IT Glue procedures (mark deprecated)
 - [ ] Document any workarounds discovered
 
 ### 6.3 Success Metrics
 
 Track these for 30 days post-cutover:
-- [ ] Daily active users in Bifrost Docs
+- [ ] Daily active users in Skra
 - [ ] Search query success rate
 - [ ] Average page load time
 - [ ] Support ticket volume (should decrease over time)
@@ -427,7 +427,7 @@ Track these for 30 days post-cutover:
 | Role | Contact | Phone/Slack |
 |------|---------|-------------|
 | Migration Lead | _____________ | @migration-lead |
-| Bifrost Docs Admin | _____________ | @bifrost-admin |
+| Skra Admin | _____________ | @skra-admin |
 | Database Admin | _____________ | @dba-oncall |
 | IT Glue Admin | _____________ | @itglue-admin |
 | Midtown IT Lead | _____________ | @midtown-it |

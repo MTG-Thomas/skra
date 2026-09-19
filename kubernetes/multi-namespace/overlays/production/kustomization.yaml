@@ -1,31 +1,31 @@
 # Production environment overlay
 # Full scale with all protections enabled
 
-namespace: bifrost-docs
+namespace: skra
 
 resources:
-  - ../bifrost-docs/
+  - ../skra/
   - ../platform/network-policies/
 
 patches:
   # Production replica counts
   - target:
       kind: Deployment
-      name: bifrost-docs-api
+      name: skra-api
     patch: |
       - op: replace
         path: /spec/replicas
         value: 3
   - target:
       kind: Deployment
-      name: bifrost-docs-client
+      name: skra-client
     patch: |
       - op: replace
         path: /spec/replicas
         value: 2
   - target:
       kind: Deployment
-      name: bifrost-docs-worker
+      name: skra-worker
     patch: |
       - op: replace
         path: /spec/replicas
@@ -33,7 +33,7 @@ patches:
   # Production hostname
   - target:
       kind: Ingress
-      name: bifrost-docs
+      name: skra
     patch: |
       - op: replace
         path: /spec/rules/0/host
@@ -43,12 +43,12 @@ patches:
         value: docs.example.com
       - op: replace
         path: /spec/tls/0/secretName
-        value: bifrost-docs-tls
+        value: skra-tls
 
 configMapGenerator:
-  - name: bifrost-docs-config
+  - name: skra-config
     behavior: merge
     literals:
-      - BIFROST_DOCS_ENVIRONMENT=production
-      - BIFROST_DOCS_DEBUG=false
-      - BIFROST_API_URL=http://external-bifrost-api.bifrost-docs.svc.cluster.local:8000
+      - SKRA_ENVIRONMENT=production
+      - SKRA_DEBUG=false
+      - BIFROST_API_URL=http://external-bifrost-api.skra.svc.cluster.local:8000

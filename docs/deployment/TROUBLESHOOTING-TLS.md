@@ -63,7 +63,7 @@ curl -I -L http://docs.example.com 2>&1 | grep -E "(HTTP|Location)"
 
 **Solutions:**
 1. **Application configuration:**
-   - Set `BIFROST_DOCS_WEBAUTHN_ORIGIN` to HTTPS URL
+   - Set `SKRA_WEBAUTHN_ORIGIN` to HTTPS URL
    - Ensure API returns HTTPS URLs in responses
 
 2. **Content-Security-Policy:**
@@ -155,14 +155,14 @@ openssl s_client -connect docs.example.com:443 -status 2>&1 | grep -A5 "OCSP res
 **Diagnosis:**
 ```bash
 # Check Certificate status
-kubectl describe certificate bifrost-docs-tls -n bifrost-docs
+kubectl describe certificate skra-tls -n skra
 
 # Check CertificateRequest
-kubectl get certificaterequests -n bifrost-docs
+kubectl get certificaterequests -n skra
 
 # Check Challenge
-kubectl get challenges -n bifrost-docs
-kubectl describe challenge <challenge-name> -n bifrost-docs
+kubectl get challenges -n skra
+kubectl describe challenge <challenge-name> -n skra
 ```
 
 **Common Solutions:**
@@ -179,7 +179,7 @@ kubectl describe challenge <challenge-name> -n bifrost-docs
 
 3. **Secret already exists:**
    ```bash
-   kubectl delete secret bifrost-docs-tls -n bifrost-docs
+   kubectl delete secret skra-tls -n skra
    # cert-manager will recreate it
    ```
 

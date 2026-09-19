@@ -15,7 +15,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.database import DbSession
-from src.core.security import decode_token, hash_api_key, validate_csrf_token
+from src.core.security import decode_token, hash_api_key, is_api_key_token, validate_csrf_token
 from src.models.enums import UserRole
 
 if TYPE_CHECKING:
@@ -184,8 +184,8 @@ async def get_current_user_optional(
     if not token:
         return None
 
-    # Check if it's an API key (starts with bifrost_docs)
-    if token.startswith("bifrost_docs"):
+    # API keys use the current 'skra_' prefix; pre-rename 'bifrost_docs' keys kept working
+    if is_api_key_token(token):
         return await _authenticate_api_key(db, token)
 
     # Otherwise treat as JWT

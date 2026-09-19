@@ -1,4 +1,4 @@
-# Bifrost Docs API Test Dockerfile
+# Skra API Test Dockerfile
 # Includes dev dependencies for running tests
 
 FROM python:3.11-slim AS builder

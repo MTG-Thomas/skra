@@ -1,7 +1,7 @@
 """
 Custom Asset ORM model.
 
-Represents instances of custom assets in the Bifrost Docs platform.
+Represents instances of custom assets in the Skra platform.
 Each custom asset belongs to a custom asset type and stores field values
 according to the type's field definitions.
 """

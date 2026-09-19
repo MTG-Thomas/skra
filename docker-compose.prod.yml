@@ -12,7 +12,7 @@ services:
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
-    container_name: bifrost-docs-nginx
+    container_name: skra-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -34,7 +34,7 @@ services:
 
   # API - Use pre-built image from GitHub Container Registry
   api:
-    image: ghcr.io/mtg-thomas/bifrost-docs-api:latest
+    image: ghcr.io/mtg-thomas/skra-api:latest
     pull_policy: always
     deploy:
       resources:
@@ -48,7 +48,7 @@ services:
 
   # Client - Use pre-built image
   client:
-    image: ghcr.io/mtg-thomas/bifrost-docs-client:latest
+    image: ghcr.io/mtg-thomas/skra-client:latest
     pull_policy: always
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:80 || exit 1"]
@@ -59,7 +59,7 @@ services:
 
   # Worker - Use pre-built image
   worker:
-    image: ghcr.io/mtg-thomas/bifrost-docs-api:latest
+    image: ghcr.io/mtg-thomas/skra-api:latest
     pull_policy: always
     deploy:
       resources:
@@ -73,7 +73,7 @@ services:
 
   # Backup service - runs scheduled backups
   backup:
-    image: ghcr.io/mtg-thomas/bifrost-docs-api:latest
+    image: ghcr.io/mtg-thomas/skra-api:latest
     command: >
       sh -c "
         echo '0 2 * * * /app/scripts/backup.sh --daily' | crontab - &&
@@ -83,10 +83,10 @@ services:
     volumes:
       - ./scripts:/app/scripts:ro
     environment:
-      - BIFROST_DOCS_SECRET_KEY=${BIFROST_DOCS_SECRET_KEY}
+      - SKRA_SECRET_KEY=${SKRA_SECRET_KEY}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - BIFROST_DOCS_S3_BUCKET=${BIFROST_DOCS_S3_BUCKET}
-      - BIFROST_DOCS_S3_ENDPOINT=${BIFROST_DOCS_S3_ENDPOINT}
+      - SKRA_S3_BUCKET=${SKRA_S3_BUCKET}
+      - SKRA_S3_ENDPOINT=${SKRA_S3_ENDPOINT}
     depends_on:
       - postgres
     restart: unless-stopped

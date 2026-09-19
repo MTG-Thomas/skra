@@ -1,4 +1,4 @@
-# TLS Certificate for Bifrost Docs
+# TLS Certificate for Skra
 #
 # This Certificate resource requests a TLS certificate from the Let's Encrypt
 # ClusterIssuer. cert-manager will automatically create and renew the certificate.
@@ -9,14 +9,14 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: bifrost-docs-tls
-  namespace: bifrost-docs
+  name: skra-tls
+  namespace: skra
   labels:
-    app.kubernetes.io/name: bifrost-docs-tls
-    app.kubernetes.io/part-of: bifrost-docs
+    app.kubernetes.io/name: skra-tls
+    app.kubernetes.io/part-of: skra
 spec:
   # Secret name where the certificate will be stored
-  secretName: bifrost-docs-tls
+  secretName: skra-tls
   
   # DNS names the certificate will be valid for
   dnsNames:

@@ -16,11 +16,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Configuration
-S3_BUCKET="${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}"
-S3_ENDPOINT="${BIFROST_DOCS_S3_ENDPOINT:-http://localhost:3900}"
+S3_BUCKET="${SKRA_S3_BUCKET:-skra}"
+S3_ENDPOINT="${SKRA_S3_ENDPOINT:-http://localhost:3900}"
 BACKUP_DIR="${BACKUP_DIR:-/tmp/backup-verify}"
-TEMP_DB_NAME="${POSTGRES_DB:-bifrost_docs}_verify_$(date +%s)"
-DB_USER="${POSTGRES_USER:-bifrost_docs}"
+TEMP_DB_NAME="${POSTGRES_DB:-skra}_verify_$(date +%s)"
+DB_USER="${POSTGRES_USER:-skra}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5433}"
 DB_PASSWORD="${POSTGRES_PASSWORD:-}"
@@ -51,13 +51,13 @@ Options:
 
 Examples:
     # Verify a specific backup file
-    $0 /backups/bifrost_docs_daily_20260406_120000.sql.gz
+    $0 /backups/skra_daily_20260406_120000.sql.gz
 
     # Verify latest daily backup
     $0 --latest --daily
 
     # Verify S3 backup with full restore test
-    $0 --s3 s3://bifrost-docs/backups/daily/2026-04-06/bifrost_docs_daily_20260406_120000.sql.gz --full
+    $0 --s3 s3://skra/backups/daily/2026-04-06/skra_daily_20260406_120000.sql.gz --full
 EOF
 }
 

@@ -1,4 +1,4 @@
-# Bifrost Docs Client - Development Container Image
+# Skra Client - Development Container Image
 # Installs dependencies only - all code comes from volume mounts
 # Prevents stale code and build cache issues
 

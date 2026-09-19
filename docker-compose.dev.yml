@@ -1,4 +1,4 @@
-name: bifrost-docs-dev
+name: skra-dev
 
 # Development overrides for docker-compose.yml
 #
@@ -16,7 +16,7 @@ services:
   # PostgreSQL - expose port for direct access (e.g. psql, TablePlus)
   postgres:
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bifrost_docsdev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skradev}
     ports:
       - "5433:5432"
 
@@ -37,9 +37,9 @@ services:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD:-bifrost_docsdev}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:${POSTGRES_PASSWORD:-bifrost_docsdev}@pgbouncer:5432/bifrost_docs
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
     volumes:
       - ./api/alembic:/app/alembic:ro
       - ./api/alembic.ini:/app/alembic.ini:ro
@@ -56,14 +56,14 @@ services:
       - "8000:8000"
       - "5678:5678" # debugpy attach (ENABLE_DEBUG=true only)
     environment:
-      BIFROST_DOCS_ENVIRONMENT: development
-      BIFROST_DOCS_DEBUG: ${BIFROST_DOCS_DEBUG:-true}
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD:-bifrost_docsdev}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:${POSTGRES_PASSWORD:-bifrost_docsdev}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_S3_SECRET_KEY: ${GARAGE_SECRET_ACCESS_KEY:-bifrostdocsdevsecret00000000000}
-      BIFROST_DOCS_S3_ACCESS_KEY: ${GARAGE_ACCESS_KEY_ID:-bifrostdocsdevkey}
-      BIFROST_DOCS_S3_PUBLIC_ENDPOINT: ${BIFROST_DOCS_S3_PUBLIC_ENDPOINT:-http://localhost:3900}
+      SKRA_ENVIRONMENT: development
+      SKRA_DEBUG: ${SKRA_DEBUG:-true}
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_S3_SECRET_KEY: ${GARAGE_SECRET_ACCESS_KEY:-skradevsecret00000000000}
+      SKRA_S3_ACCESS_KEY: ${GARAGE_ACCESS_KEY_ID:-skradevkey}
+      SKRA_S3_PUBLIC_ENDPOINT: ${SKRA_S3_PUBLIC_ENDPOINT:-http://localhost:3900}
       # Debugging (optional - enables debugpy)
       ENABLE_DEBUG: ${ENABLE_DEBUG:-false}
     volumes:
@@ -88,9 +88,9 @@ services:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD:-bifrost_docsdev}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_REDIS_URL: redis://valkey:6379/0
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_REDIS_URL: redis://valkey:6379/0
     volumes:
       - ./api/src:/app/src:ro
     command: arq src.worker.WorkerSettings --watch ./src

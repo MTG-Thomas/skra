@@ -17,7 +17,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: bifrost-docs-test-vm
+  group: skra-test-vm
   cancel-in-progress: false
 
 env:
@@ -27,13 +27,13 @@ env:
 
 jobs:
   deploy-test-vm:
-    name: Deploy to bifrost-docs-dev
+    name: Deploy to skra-dev
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     environment:
-      name: bifrost-docs-dev
+      name: skra-dev
       url: https://dev.docs.midtowntg.com
     env:
       NETBIRD_SETUP_KEY_PRESENT: ${{ secrets.NETBIRD_SETUP_KEY != '' }}
@@ -83,8 +83,8 @@ jobs:
           {
             echo "deploy_sha=${DEPLOY_SHA}"
             echo "deploy_sha_short=${DEPLOY_SHA_SHORT}"
-            echo "api_image=ghcr.io/mtg-thomas/bifrost-docs-api:${DEPLOY_SHA_SHORT}"
-            echo "client_image=ghcr.io/mtg-thomas/bifrost-docs-client:${DEPLOY_SHA_SHORT}"
+            echo "api_image=ghcr.io/mtg-thomas/skra-api:${DEPLOY_SHA_SHORT}"
+            echo "client_image=ghcr.io/mtg-thomas/skra-client:${DEPLOY_SHA_SHORT}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Connect runner to NetBird
@@ -111,12 +111,12 @@ jobs:
         env:
           DEPLOY_SHA: ${{ steps.image.outputs.deploy_sha }}
           DEPLOY_SHA_SHORT: ${{ steps.image.outputs.deploy_sha_short }}
-          BIFROST_DOCS_API_IMAGE: ${{ steps.image.outputs.api_image }}
-          BIFROST_DOCS_CLIENT_IMAGE: ${{ steps.image.outputs.client_image }}
+          SKRA_API_IMAGE: ${{ steps.image.outputs.api_image }}
+          SKRA_CLIENT_IMAGE: ${{ steps.image.outputs.client_image }}
           GHCR_READ_USER: ${{ github.actor }}
           GHCR_READ_TOKEN: ${{ github.token }}
         run: |
-          tar -czf /tmp/bifrost-docs-deploy.tgz \
+          tar -czf /tmp/skra-deploy.tgz \
             scripts/deploy-test-vm.sh \
             docker-compose.yml \
             docker-compose.test-vm.yml \
@@ -124,12 +124,12 @@ jobs:
           {
             printf 'DEPLOY_SHA=%q\n' "${DEPLOY_SHA}"
             printf 'DEPLOY_SHA_SHORT=%q\n' "${DEPLOY_SHA_SHORT}"
-            printf 'BIFROST_DOCS_API_IMAGE=%q\n' "${BIFROST_DOCS_API_IMAGE}"
-            printf 'BIFROST_DOCS_CLIENT_IMAGE=%q\n' "${BIFROST_DOCS_CLIENT_IMAGE}"
+            printf 'SKRA_API_IMAGE=%q\n' "${SKRA_API_IMAGE}"
+            printf 'SKRA_CLIENT_IMAGE=%q\n' "${SKRA_CLIENT_IMAGE}"
             printf 'GHCR_READ_USER=%q\n' "${GHCR_READ_USER}"
             printf 'HEALTH_URL=%q\n' "${HEALTH_URL}"
-          } > /tmp/bifrost-docs-deploy.env
-          chmod 600 /tmp/bifrost-docs-deploy.env
+          } > /tmp/skra-deploy.env
+          chmod 600 /tmp/skra-deploy.env
 
           for attempt in $(seq 1 12); do
             if ssh -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "${TEST_VM_USER}@${TEST_VM_HOST}" "true"; then
@@ -142,27 +142,27 @@ jobs:
             sleep 5
           done
 
-          scp -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 /tmp/bifrost-docs-deploy.tgz \
-            "${TEST_VM_USER}@${TEST_VM_HOST}:/tmp/bifrost-docs-deploy.tgz"
+          scp -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 /tmp/skra-deploy.tgz \
+            "${TEST_VM_USER}@${TEST_VM_HOST}:/tmp/skra-deploy.tgz"
 
-          scp -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 /tmp/bifrost-docs-deploy.env \
-            "${TEST_VM_USER}@${TEST_VM_HOST}:/tmp/bifrost-docs-deploy.env"
+          scp -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 /tmp/skra-deploy.env \
+            "${TEST_VM_USER}@${TEST_VM_HOST}:/tmp/skra-deploy.env"
 
           ssh -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "${TEST_VM_USER}@${TEST_VM_HOST}" \
-            "mkdir -p /tmp/bifrost-docs-deploy && tar -xzf /tmp/bifrost-docs-deploy.tgz -C /tmp/bifrost-docs-deploy"
+            "mkdir -p /tmp/skra-deploy && tar -xzf /tmp/skra-deploy.tgz -C /tmp/skra-deploy"
 
           printf '%s' "${GHCR_READ_TOKEN}" | \
             ssh -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "${TEST_VM_USER}@${TEST_VM_HOST}" \
               'set -euo pipefail
-              chmod 600 /tmp/bifrost-docs-deploy.env
-              trap "rm -f /tmp/bifrost-docs-deploy.env; docker logout ghcr.io >/dev/null 2>&1 || true" EXIT
+              chmod 600 /tmp/skra-deploy.env
+              trap "rm -f /tmp/skra-deploy.env; docker logout ghcr.io >/dev/null 2>&1 || true" EXIT
               set -a
-              . /tmp/bifrost-docs-deploy.env
+              . /tmp/skra-deploy.env
               set +a
               ghcr_token="$(cat)"
               printf "%s" "${ghcr_token}" | docker login ghcr.io -u "${GHCR_READ_USER:-MTG-Thomas}" --password-stdin
               unset ghcr_token
-              bash /tmp/bifrost-docs-deploy/scripts/deploy-test-vm.sh'
+              bash /tmp/skra-deploy/scripts/deploy-test-vm.sh'
 
       - name: Verify public health
         run: curl -fsS "${HEALTH_URL}"

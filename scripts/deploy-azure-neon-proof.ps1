@@ -1,6 +1,6 @@
 param(
     [string]$SubscriptionName = "Azure Sponsorship",
-    [string]$ResourceGroupName = "rg-bifrost-docs-neon-dev",
+    [string]$ResourceGroupName = "rg-skra-neon-dev",
     [string]$Location = "eastus",
     [string]$EnvironmentName = "neon-dev",
     [string]$ApiImage = "",
@@ -10,7 +10,7 @@ param(
     [string]$DatabaseUrl,
     [Parameter(Mandatory = $true)]
     [string]$DatabaseUrlSync,
-    [string]$BifrostDocsSecretKey = "",
+    [string]$SkraSecretKey = "",
     [switch]$SkipFrontendBuild,
     [switch]$SkipInitJob
 )
@@ -28,13 +28,13 @@ Require-Command git
 
 if (-not $ApiImage) {
     $shortSha = (git rev-parse --short=7 HEAD).Trim()
-    $ApiImage = "ghcr.io/mtg-thomas/bifrost-docs-api:$shortSha"
+    $ApiImage = "ghcr.io/mtg-thomas/skra-api:$shortSha"
 }
 
-if (-not $BifrostDocsSecretKey) {
+if (-not $SkraSecretKey) {
     $bytes = [byte[]]::new(48)
     [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-    $BifrostDocsSecretKey = [Convert]::ToBase64String($bytes)
+    $SkraSecretKey = [Convert]::ToBase64String($bytes)
 }
 
 Write-Host "Using subscription: $SubscriptionName"
@@ -59,7 +59,7 @@ $deployment = az deployment group create `
         corsOrigins=$placeholderOrigin `
         webauthnRpId=$placeholderRpId `
         webauthnOrigin=$placeholderOrigin `
-        bifrostDocsSecretKey=$BifrostDocsSecretKey `
+        skraSecretKey=$SkraSecretKey `
         databaseUrl=$DatabaseUrl `
         databaseUrlSync=$DatabaseUrlSync `
     --query properties.outputs `
@@ -70,7 +70,7 @@ $apiFqdn = $deployment.apiFqdn.value
 $staticWebsiteUrl = ($deployment.staticWebsiteUrl.value).TrimEnd("/")
 $storageAccountName = $deployment.storageAccountName.value
 $initJobName = $deployment.initJobName.value
-$apiContainerAppName = "ca-bifrost-docs-api-$EnvironmentName"
+$apiContainerAppName = "ca-skra-api-$EnvironmentName"
 $storageKey = az storage account keys list `
     --resource-group $ResourceGroupName `
     --account-name $storageAccountName `
@@ -94,9 +94,9 @@ az containerapp update `
     --resource-group $ResourceGroupName `
     --name $apiContainerAppName `
     --set-env-vars `
-        "BIFROST_DOCS_CORS_ORIGINS=$staticWebsiteUrl" `
-        "BIFROST_DOCS_WEBAUTHN_ORIGIN=$staticWebsiteUrl" `
-        "BIFROST_DOCS_WEBAUTHN_RP_ID=$(($staticWebsiteUrl -replace '^https?://','' -replace '/$',''))" `
+        "SKRA_CORS_ORIGINS=$staticWebsiteUrl" `
+        "SKRA_WEBAUTHN_ORIGIN=$staticWebsiteUrl" `
+        "SKRA_WEBAUTHN_RP_ID=$(($staticWebsiteUrl -replace '^https?://','' -replace '/$',''))" `
     | Out-Null
 
 if (-not $SkipInitJob) {

@@ -5,13 +5,13 @@
 
 services:
   init:
-    image: ${BIFROST_DOCS_API_IMAGE:?BIFROST_DOCS_API_IMAGE is required}
+    image: ${SKRA_API_IMAGE:?SKRA_API_IMAGE is required}
 
   api:
-    image: ${BIFROST_DOCS_API_IMAGE:?BIFROST_DOCS_API_IMAGE is required}
+    image: ${SKRA_API_IMAGE:?SKRA_API_IMAGE is required}
 
   worker:
-    image: ${BIFROST_DOCS_API_IMAGE:?BIFROST_DOCS_API_IMAGE is required}
+    image: ${SKRA_API_IMAGE:?SKRA_API_IMAGE is required}
 
   client:
-    image: ${BIFROST_DOCS_CLIENT_IMAGE:?BIFROST_DOCS_CLIENT_IMAGE is required}
+    image: ${SKRA_CLIENT_IMAGE:?SKRA_CLIENT_IMAGE is required}

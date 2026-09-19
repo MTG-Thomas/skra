@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Bifrost Docs Client - Production Container Image
+# Skra Client - Production Container Image
 # Multi-stage build for optimized production image
 
 # =============================================================================

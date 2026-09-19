@@ -5,7 +5,7 @@ services:
   # SSL Reverse Proxy - terminates HTTPS and proxies to client
   ssl-proxy:
     image: nginx:alpine
-    container_name: bifrost-docs-ssl-proxy
+    container_name: skra-ssl-proxy
     ports:
       - "443:443"   # HTTPS
       - "80:80"     # HTTP (redirects to HTTPS)
@@ -28,7 +28,7 @@ services:
   # Auto-renewal service for certificates
   certbot-renew:
     image: certbot/certbot:latest
-    container_name: bifrost-docs-certbot-renew
+    container_name: skra-certbot-renew
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
       - ~/.secrets/certbot:/secrets:ro

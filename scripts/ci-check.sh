@@ -100,16 +100,16 @@ docker_checks() {
     
     # Build API image
     echo -e "${YELLOW}Building API Docker image...${NC}"
-    docker build -t bifrost-docs-api:ci-test ./api || { echo -e "${RED}API Docker build failed${NC}"; exit 1; }
+    docker build -t skra-api:ci-test ./api || { echo -e "${RED}API Docker build failed${NC}"; exit 1; }
     echo -e "${GREEN}✓ API Docker build successful${NC}"
     
     # Build Client image
     echo -e "${YELLOW}Building Client Docker image...${NC}"
-    docker build -t bifrost-docs-client:ci-test ./client || { echo -e "${RED}Client Docker build failed${NC}"; exit 1; }
+    docker build -t skra-client:ci-test ./client || { echo -e "${RED}Client Docker build failed${NC}"; exit 1; }
     echo -e "${GREEN}✓ Client Docker build successful${NC}"
     
     # Clean up test images
-    docker rmi bifrost-docs-api:ci-test bifrost-docs-client:ci-test 2>/dev/null || true
+    docker rmi skra-api:ci-test skra-client:ci-test 2>/dev/null || true
     
     echo -e "${GREEN}✓ Docker checks complete${NC}"
 }
@@ -121,7 +121,7 @@ e2e_checks() {
     echo -e "${YELLOW}=== Running E2E Test Checks ===${NC}"
     
     # Check if dev environment is running
-    if docker compose ps | grep -q "bifrost-docs-api"; then
+    if docker compose ps | grep -q "skra-api"; then
         echo -e "${YELLOW}Development environment detected. Running E2E tests...${NC}"
         
         cd client
@@ -143,7 +143,7 @@ e2e_checks() {
 # =============================================================================
 main() {
     echo -e "${YELLOW}========================================${NC}"
-    echo -e "${YELLOW}  Bifrost Docs CI Checks (Local)${NC}"
+    echo -e "${YELLOW}  Skra CI Checks (Local)${NC}"
     echo -e "${YELLOW}========================================${NC}"
     echo ""
     

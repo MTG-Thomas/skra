@@ -36,7 +36,7 @@ set -e
 ADMIN="${GARAGE_ADMIN_URL:-http://garage:3903}"
 AUTH="Authorization: Bearer ${GARAGE_ADMIN_TOKEN}"
 MODE="${GARAGE_KEY_MODE:-}"
-KEY_NAME="${GARAGE_KEY_NAME:-bifrost-docs-key}"
+KEY_NAME="${GARAGE_KEY_NAME:-skra-key}"
 CREDS_FILE="${GARAGE_CREDS_FILE:-/run/garage-creds/s3.env}"
 STATE_FILE="${GARAGE_CREDS_FILE%/*}/s3.keyname"
 
@@ -142,12 +142,12 @@ sleep 3
 BUCKET_RESP=$(wget -qO- \
   --header="${AUTH}" \
   --header="Content-Type: application/json" \
-  --post-data='{"globalAlias":"bifrost-docs"}' \
+  --post-data='{"globalAlias":"skra"}' \
   "${ADMIN}/v1/bucket" 2>/dev/null || true)
 
 # If bucket already existed, the creation returns error — fetch it directly
 if [ -z "${BUCKET_RESP}" ] || echo "${BUCKET_RESP}" | grep -qi "error\|already"; then
-  BUCKET_RESP=$(api_get "/v1/bucket?globalAlias=bifrost-docs")
+  BUCKET_RESP=$(api_get "/v1/bucket?globalAlias=skra")
 fi
 
 BUCKET_ID=$(echo "${BUCKET_RESP}" | grep -o '"id"[^,}]*' | grep -o '"[a-f0-9-][a-f0-9-]*"' | tr -d '"' | head -1)
@@ -357,7 +357,7 @@ fi
 
 bucket_keys_region() {
     # Print the bucket's keys array region for permission checks.
-    BUCKET_JSON=$(api_get "/v1/bucket?globalAlias=bifrost-docs")
+    BUCKET_JSON=$(api_get "/v1/bucket?globalAlias=skra")
     [ -n "${BUCKET_JSON}" ] || fail "empty bucket state response"
     printf '%s' "${BUCKET_JSON}" | sed -n '/"keys": *\[/,/"objects":/p'
 }

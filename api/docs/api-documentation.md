@@ -1,8 +1,8 @@
-# BifrostDocs API Documentation
+# Skra API Documentation
 
 ## Overview
 
-This document describes the BifrostDocs API endpoints, with a focus on the `is_enabled` field and `show_disabled` parameter functionality.
+This document describes the Skra API endpoints, with a focus on the `is_enabled` field and `show_disabled` parameter functionality.
 
 ## `is_enabled` Field
 

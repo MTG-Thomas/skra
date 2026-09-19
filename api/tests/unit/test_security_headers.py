@@ -90,7 +90,7 @@ class TestSecurityHeadersMiddleware:
         """Test CSP header is more permissive in development."""
         from src.config import clear_settings_cache
 
-        monkeypatch.setenv("BIFROST_DOCS_ENVIRONMENT", "development")
+        monkeypatch.setenv("SKRA_ENVIRONMENT", "development")
         clear_settings_cache()
 
         response = client.get("/test")
@@ -161,7 +161,7 @@ class TestHSTSHeader:
         """Test HSTS header is set in production."""
         from src.config import clear_settings_cache
 
-        monkeypatch.setenv("BIFROST_DOCS_ENVIRONMENT", "production")
+        monkeypatch.setenv("SKRA_ENVIRONMENT", "production")
         clear_settings_cache()
 
         app = FastAPI()
@@ -185,7 +185,7 @@ class TestHSTSHeader:
         """Test HSTS header is NOT set in development (development is default in tests)."""
         from src.config import clear_settings_cache
 
-        monkeypatch.setenv("BIFROST_DOCS_ENVIRONMENT", "development")
+        monkeypatch.setenv("SKRA_ENVIRONMENT", "development")
         clear_settings_cache()
 
         # Create new client with development settings
@@ -209,7 +209,7 @@ class TestHSTSHeader:
         from src.config import clear_settings_cache
         from src.main import create_app
 
-        monkeypatch.setenv("BIFROST_DOCS_ENVIRONMENT", "production")
+        monkeypatch.setenv("SKRA_ENVIRONMENT", "production")
         clear_settings_cache()
 
         app = create_app()

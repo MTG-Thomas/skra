@@ -1,6 +1,6 @@
-# Acceptance Criteria: bifrost-docs-migration-patterns
+# Acceptance Criteria: skra-migration-patterns
 
-**Repository:** `MTG-Thomas/bifrost-docs`  
+**Repository:** `MTG-Thomas/skra`  
 **Tool:** `tools/itglue-migrate/`  
 **Purpose:** Validate migration tool patterns
 
@@ -203,13 +203,13 @@ class RelationshipMapper:
         source_id: str,
         target_id: str,
     ) -> tuple[UUID, UUID] | None:
-        source_bifrost = self.id_mapping.get(source_id)
-        target_bifrost = self.id_mapping.get(target_id)
+        source_skra = self.id_mapping.get(source_id)
+        target_skra = self.id_mapping.get(target_id)
         
-        if not source_bifrost or not target_bifrost:
+        if not source_skra or not target_skra:
             return None  # Can't map, skip
         
-        return (source_bifrost, target_bifrost)
+        return (source_skra, target_skra)
 ```
 
 ### ❌ INCORRECT: Assume All IDs Map

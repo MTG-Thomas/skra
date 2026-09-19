@@ -17,7 +17,7 @@ export function DashboardPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Welcome to Bifrost Docs, {user?.name || "User"}
+          Welcome to Skra, {user?.name || "User"}
         </p>
       </div>
 

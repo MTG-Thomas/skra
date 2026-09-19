@@ -1,7 +1,7 @@
 """Sync executor module for applying sync plans to the API.
 
 This module provides the SyncExecutor class that takes a SyncPlan and
-executes it against the BifrostDocs API, creating missing entities and
+executes it against the Skra API, creating missing entities and
 relationships. Supports dry-run mode for previewing changes.
 """
 
@@ -190,7 +190,7 @@ class SyncResult:
 
 
 class SyncExecutor:
-    """Executes a sync plan against the BifrostDocs API.
+    """Executes a sync plan against the Skra API.
 
     The executor processes a SyncPlan and creates/updates entities in the
     target system. Supports dry-run mode to preview changes without making
@@ -217,7 +217,7 @@ class SyncExecutor:
         """Initialize the sync executor.
 
         Args:
-            client: BifrostDocs API client instance.
+            client: Skra API client instance.
             org_id: Target organization UUID.
             dry_run: If True, count changes but don't make API calls.
             state: Existing state for lookups (required for cell_writes).
@@ -248,7 +248,7 @@ class SyncExecutor:
         Args:
             entity_type: IT Glue entity type (e.g., "configurations", "locations").
             itglue_id: IT Glue entity ID.
-            our_entity_id: Our BifrostDocs entity UUID.
+            our_entity_id: Our Skra entity UUID.
 
         Returns:
             Count of successfully uploaded attachments.
@@ -537,13 +537,13 @@ class SyncExecutor:
                     interfaces=interfaces,
                 )
 
-                if bifrost_id := response.get("id"):
-                    result.id_map[itglue_id] = bifrost_id
+                if skra_id := response.get("id"):
+                    result.id_map[itglue_id] = skra_id
 
                     # Upload attachments
                     if self.doc_processor and self.export_path:
                         attachment_count = await self._upload_entity_attachments(
-                            "configurations", itglue_id, bifrost_id
+                            "configurations", itglue_id, skra_id
                         )
                         if attachment_count > 0 and self.reporter:
                             self.reporter.info(f"Uploaded {attachment_count} attachments")
@@ -607,13 +607,13 @@ class SyncExecutor:
                     phone=entity.get("phone"),
                 )
 
-                if bifrost_id := response.get("id"):
-                    result.id_map[itglue_id] = bifrost_id
+                if skra_id := response.get("id"):
+                    result.id_map[itglue_id] = skra_id
 
                     # Upload attachments
                     if self.doc_processor and self.export_path:
                         attachment_count = await self._upload_entity_attachments(
-                            "locations", itglue_id, bifrost_id
+                            "locations", itglue_id, skra_id
                         )
                         if attachment_count > 0 and self.reporter:
                             self.reporter.info(f"Uploaded {attachment_count} attachments")
@@ -746,13 +746,13 @@ class SyncExecutor:
                     is_enabled=is_enabled,
                 )
 
-                if bifrost_id := response.get("id"):
-                    result.id_map[itglue_id] = bifrost_id
+                if skra_id := response.get("id"):
+                    result.id_map[itglue_id] = skra_id
 
                     # Upload attachments
                     if self.doc_processor and self.export_path:
                         attachment_count = await self._upload_entity_attachments(
-                            "documents", itglue_id, bifrost_id
+                            "documents", itglue_id, skra_id
                         )
                         if attachment_count > 0 and self.reporter:
                             self.reporter.info(f"Uploaded {attachment_count} attachments")
@@ -829,13 +829,13 @@ class SyncExecutor:
                     is_enabled=is_enabled,
                 )
 
-                if bifrost_id := response.get("id"):
-                    result.id_map[itglue_id] = bifrost_id
+                if skra_id := response.get("id"):
+                    result.id_map[itglue_id] = skra_id
 
                     # Upload attachments
                     if self.doc_processor and self.export_path:
                         attachment_count = await self._upload_entity_attachments(
-                            "passwords", itglue_id, bifrost_id
+                            "passwords", itglue_id, skra_id
                         )
                         if attachment_count > 0 and self.reporter:
                             self.reporter.info(f"Uploaded {attachment_count} attachments")
@@ -1317,8 +1317,8 @@ class SyncExecutor:
                     is_enabled=is_enabled,
                 )
 
-                if bifrost_id := response.get("id"):
-                    result.id_map[itglue_id] = bifrost_id
+                if skra_id := response.get("id"):
+                    result.id_map[itglue_id] = skra_id
                     # Track type_id for cell writes
                     result.asset_type_map[itglue_id] = type_id
 
@@ -1328,7 +1328,7 @@ class SyncExecutor:
                         asset_type_slug = entity.get("asset_type") or entity.get("_type_slug", "")
                         if asset_type_slug:
                             attachment_count = await self._upload_entity_attachments(
-                                asset_type_slug, itglue_id, bifrost_id
+                                asset_type_slug, itglue_id, skra_id
                             )
                             if attachment_count > 0 and self.reporter:
                                 self.reporter.info(f"Uploaded {attachment_count} attachments")

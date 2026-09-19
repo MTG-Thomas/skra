@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "itglue-migrate"
 version = "1.0.0"
-description = "IT Glue to BifrostDocs Migration Tool"
+description = "IT Glue to Skra Migration Tool"
 requires-python = ">=3.11"
 dependencies = [
     # HTTP Client

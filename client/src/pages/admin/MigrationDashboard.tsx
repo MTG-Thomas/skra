@@ -99,7 +99,7 @@ export function MigrationDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Migration Dashboard</h1>
           <p className="text-muted-foreground">
-            Overview of your IT Glue migration to Bifrost
+            Overview of your IT Glue migration to Skra
           </p>
         </div>
         <div className="flex gap-2">
