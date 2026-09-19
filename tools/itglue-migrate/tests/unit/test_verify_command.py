@@ -40,7 +40,7 @@ def make_fake_client(
     download_urls: dict[str, str] | None = None,
     forbid_download_url: bool = True,
 ) -> type:
-    """Build a fake read-only BifrostDocsClient class with canned data."""
+    """Build a fake read-only SkraClient class with canned data."""
     from itglue_migrate.api_client import APIError
 
     doc_list = documents if documents is not None else []
@@ -133,7 +133,7 @@ async def test_run_verify_reports_missing_upload(
 
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -181,7 +181,7 @@ async def test_run_verify_clean_export_exits_zero(
     export = _copy_fixture(tmp_path)
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -230,7 +230,7 @@ async def test_run_verify_missing_org_is_structured_failure(
 ) -> None:
     """One exported org absent from the API must fail loudly, not exit 0."""
     export = _copy_fixture(tmp_path)
-    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(orgs=[]))
+    monkeypatch.setattr(cli_module, "SkraClient", make_fake_client(orgs=[]))
 
     output = tmp_path / "fidelity.json"
     exit_code = await _run_verify(
@@ -261,7 +261,7 @@ async def test_run_verify_attachment_list_error_is_failure(
     """An API list error must not be a warning that produces a clean result."""
     export = _copy_fixture(tmp_path)
     monkeypatch.setattr(
-        cli_module, "BifrostDocsClient", make_fake_client(fail_list_attachments=True)
+        cli_module, "SkraClient", make_fake_client(fail_list_attachments=True)
     )
 
     exit_code = await _run_verify(
@@ -284,7 +284,7 @@ async def test_run_verify_document_fetch_error_is_failure(
     export = _copy_fixture(tmp_path)
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -328,7 +328,7 @@ async def test_run_verify_inaccessible_attachment_url(
     (attach_dir / "stray.pdf").write_bytes(b"PDF")
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -383,7 +383,7 @@ async def test_run_verify_accessible_attachment_url_clean(
     (attach_dir / "stray.pdf").write_bytes(b"PDF")
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -432,7 +432,7 @@ async def test_run_verify_missing_migrated_document_with_images_fails(
     (doc_dir / "index.html").write_text(
         '<p>guide</p><img src="present.png">', encoding="utf-8"
     )
-    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(documents=[]))
+    monkeypatch.setattr(cli_module, "SkraClient", make_fake_client(documents=[]))
 
     output = tmp_path / "fidelity.json"
     exit_code = await _run_verify(
@@ -458,7 +458,7 @@ async def test_run_verify_missing_migrated_document_without_images_fails(
 ) -> None:
     """A never-migrated document fails even when it has no images to check."""
     export = _copy_fixture(tmp_path)
-    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(documents=[]))
+    monkeypatch.setattr(cli_module, "SkraClient", make_fake_client(documents=[]))
 
     exit_code = await _run_verify(
         export_path=export,
@@ -480,7 +480,7 @@ async def test_run_verify_sparse_attachment_records_fail(
     export = _copy_fixture(tmp_path)
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -558,7 +558,7 @@ async def test_run_verify_document_image_record_attributed_via_content_link(
     )
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
@@ -605,7 +605,7 @@ async def test_run_verify_unreferenced_document_image_is_unexpected(
     export = _copy_fixture(tmp_path)
     monkeypatch.setattr(
         cli_module,
-        "BifrostDocsClient",
+        "SkraClient",
         make_fake_client(
             documents=[
                 {
