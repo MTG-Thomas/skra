@@ -69,6 +69,19 @@ test.describe('Cookie session auth', () => {
     expect(stored.refreshToken).toBeNull();
   });
 
+  test('OAuth callback rejects unverifiable state', async ({ page }) => {
+    // No oauth_state in session storage (fresh context): the callback must
+    // fail closed instead of exchanging the code without CSRF verification.
+    await page.goto('/auth/callback/github?code=fake-code&state=no-stored-state');
+
+    await expect(
+      page.getByRole('heading', { name: 'Authentication Failed' })
+    ).toBeVisible();
+    await expect(
+      page.getByText('State mismatch - possible CSRF attack')
+    ).toBeVisible();
+  });
+
   test('logout ends the session', async ({ page }) => {
     await page.getByTestId('user-menu-trigger').click();
     await page.getByRole('menuitem', { name: 'Log out' }).click();

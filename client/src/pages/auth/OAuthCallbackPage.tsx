@@ -61,9 +61,12 @@ export function OAuthCallbackPage() {
           throw new Error("No provider specified");
         }
 
-        // Verify state matches what we stored
+        // Verify state matches what we stored. Fail closed: a missing
+        // stored state must also reject, otherwise the check is skipped
+        // exactly when there is nothing to compare against, allowing
+        // login CSRF (CodeQL flag on this condition, see issue #90).
         const storedState = sessionStorage.getItem("oauth_state");
-        if (storedState && storedState !== returnedState) {
+        if (!storedState || storedState !== returnedState) {
           throw new Error("State mismatch - possible CSRF attack");
         }
 
