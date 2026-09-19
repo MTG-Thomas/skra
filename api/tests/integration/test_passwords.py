@@ -7,9 +7,11 @@ Tests the complete password management flow including:
 - Retrieving passwords (with and without revealing password value)
 - Updating passwords
 - Deleting passwords
-- Organization isolation
+- Cross-organization access under global roles (ADR-001)
 """
 
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -21,6 +23,22 @@ from src.core.auth import UserPrincipal, get_current_active_user
 from src.main import app
 from src.models.enums import UserRole
 from src.models.orm.password import Password
+
+
+@contextmanager
+def _patched_side_effects():
+    """Patch audit + search-index side effects so tests run without live infra."""
+    audit_service = MagicMock()
+    audit_service.log = AsyncMock()
+    with (
+        patch(
+            "src.routers.passwords.get_audit_service",
+            return_value=audit_service,
+        ),
+        patch("src.routers.passwords.index_entity_for_search", new=AsyncMock()),
+        patch("src.routers.passwords.remove_entity_from_search", new=AsyncMock()),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -104,16 +122,25 @@ class TestPasswordsCreate:
         created_password.username = "admin"
         created_password.url = "https://example.com"
         created_password.notes = "Main admin account"
-        created_password.created_at = MagicMock()
-        created_password.updated_at = MagicMock()
+        created_password.totp_secret_encrypted = None
+        created_password.metadata_ = {}
+        created_password.is_enabled = True
+        created_password.created_at = datetime.now(UTC)
+        created_password.updated_at = datetime.now(UTC)
+        created_password.updated_by_user_id = None
+        created_password.updated_by_user = None
         mock_password_repo.create = AsyncMock(return_value=created_password)
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.post(
                         f"/api/organizations/{test_org_id}/passwords",
@@ -134,23 +161,60 @@ class TestPasswordsCreate:
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_create_password_non_member_org(self, test_user, other_org_id):
-        """Test that users cannot create passwords in orgs they don't belong to."""
+    async def test_can_create_password_cross_org(self, test_user, other_org_id):
+        """Test that a contributor can create passwords in any org (ADR-001).
+
+        Organizations are documentation partitions, not authorization
+        boundaries: the route org ID selects records, not permissions.
+        """
         app.dependency_overrides[get_current_active_user] = lambda: test_user
+
+        mock_password_repo = AsyncMock()
+        created_password = MagicMock(spec=Password)
+        created_password.id = uuid4()
+        created_password.organization_id = other_org_id
+        created_password.name = "Test Password"
+        created_password.username = None
+        created_password.url = None
+        created_password.notes = None
+        created_password.totp_secret_encrypted = None
+        created_password.metadata_ = {}
+        created_password.is_enabled = True
+        created_password.created_at = datetime.now(UTC)
+        created_password.updated_at = datetime.now(UTC)
+        created_password.updated_by_user_id = None
+        created_password.updated_by_user = None
+        mock_password_repo.create = AsyncMock(return_value=created_password)
+        mock_audit_service = MagicMock()
+        mock_audit_service.log = AsyncMock()
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.post(
-                    f"/api/organizations/{other_org_id}/passwords",
-                    json={
-                        "name": "Test Password",
-                        "password": "secret123",
-                    },
-                )
+                with patch(
+                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                ):
+                    with (
+                        patch(
+                            "src.routers.passwords.get_audit_service",
+                            return_value=mock_audit_service,
+                        ),
+                        patch(
+                            "src.routers.passwords.index_entity_for_search",
+                            new=AsyncMock(),
+                        ),
+                    ):
+                        response = await client.post(
+                            f"/api/organizations/{other_org_id}/passwords",
+                            json={
+                                "name": "Test Password",
+                                "password": "secret123",
+                            },
+                        )
 
-            assert response.status_code == 404
+            assert response.status_code == 201
+            assert response.json()["organization_id"] == str(other_org_id)
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
@@ -171,8 +235,13 @@ class TestPasswordsRetrieve:
         mock_password.username = "testuser"
         mock_password.url = "https://test.com"
         mock_password.notes = "Test notes"
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.get_by_id_and_org = AsyncMock(return_value=mock_password)
@@ -181,8 +250,12 @@ class TestPasswordsRetrieve:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.get(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}"
@@ -215,8 +288,13 @@ class TestPasswordsRetrieve:
         mock_password.password_encrypted = encrypted_password
         mock_password.url = "https://test.com"
         mock_password.notes = "Test notes"
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.get_by_id_and_org = AsyncMock(return_value=mock_password)
@@ -225,8 +303,12 @@ class TestPasswordsRetrieve:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.get(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}/reveal"
@@ -251,8 +333,12 @@ class TestPasswordsRetrieve:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.get(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}"
@@ -264,37 +350,95 @@ class TestPasswordsRetrieve:
 
 
 @pytest.mark.integration
-class TestPasswordsOrganizationIsolation:
-    """Tests for organization-level password isolation."""
+class TestPasswordsCrossOrganizationAccess:
+    """Tests for cross-organization password access under global roles (ADR-001).
 
-    async def test_cannot_access_other_org_passwords(self, test_user, other_org_id):
-        """Test that users cannot access passwords from other organizations."""
+    A contributor's role applies workspace-wide, so reads and listings work
+    in every organization. Record absence is still 404.
+    """
+
+    async def test_can_access_other_org_passwords(self, test_user, other_org_id):
+        """Test that users can access passwords from other organizations."""
         app.dependency_overrides[get_current_active_user] = lambda: test_user
         password_id = uuid4()
 
+        mock_password = MagicMock(spec=Password)
+        mock_password.id = password_id
+        mock_password.organization_id = other_org_id
+        mock_password.name = "Other Org Password"
+        mock_password.username = "otheruser"
+        mock_password.url = None
+        mock_password.notes = None
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
+
+        mock_password_repo = AsyncMock()
+        mock_password_repo.get_by_id_and_org = AsyncMock(return_value=mock_password)
+        mock_audit_service = MagicMock()
+        mock_audit_service.log = AsyncMock()
+
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.get(
-                    f"/api/organizations/{other_org_id}/passwords/{password_id}"
-                )
+                with patch(
+                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                ):
+                    with patch(
+                        "src.routers.passwords.get_audit_service",
+                        return_value=mock_audit_service,
+                    ):
+                        response = await client.get(
+                            f"/api/organizations/{other_org_id}/passwords/{password_id}"
+                        )
 
-            assert response.status_code == 404
+            assert response.status_code == 200
+            assert response.json()["organization_id"] == str(other_org_id)
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_cannot_list_other_org_passwords(self, test_user, other_org_id):
-        """Test that users cannot list passwords from other organizations."""
+    async def test_can_list_other_org_passwords(self, test_user, other_org_id):
+        """Test that users can list passwords from other organizations."""
         app.dependency_overrides[get_current_active_user] = lambda: test_user
+
+        mock_password = MagicMock(spec=Password)
+        mock_password.id = uuid4()
+        mock_password.organization_id = other_org_id
+        mock_password.name = "Other Org Password"
+        mock_password.username = "otheruser"
+        mock_password.url = None
+        mock_password.notes = None
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
+
+        mock_password_repo = AsyncMock()
+        mock_password_repo.get_paginated_by_org = AsyncMock(return_value=([mock_password], 1))
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.get(f"/api/organizations/{other_org_id}/passwords")
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
+                ):
+                    response = await client.get(f"/api/organizations/{other_org_id}/passwords")
 
-            assert response.status_code == 404
+            assert response.status_code == 200
+            assert response.json()["total"] == 1
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
@@ -315,8 +459,13 @@ class TestPasswordsUpdate:
         mock_password.username = "olduser"
         mock_password.url = "https://old.com"
         mock_password.notes = "Old notes"
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.get_by_id_and_org = AsyncMock(return_value=mock_password)
@@ -326,8 +475,12 @@ class TestPasswordsUpdate:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.put(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}",
@@ -350,8 +503,12 @@ class TestPasswordsUpdate:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.put(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}",
@@ -384,8 +541,12 @@ class TestPasswordsDelete:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.delete(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}"
@@ -407,8 +568,12 @@ class TestPasswordsDelete:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                with patch(
-                    "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
+                with (
+                    patch(
+                        "src.routers.passwords.PasswordRepository",
+                        return_value=mock_password_repo,
+                    ),
+                    _patched_side_effects(),
                 ):
                     response = await client.delete(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}"

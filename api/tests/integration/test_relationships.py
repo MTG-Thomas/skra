@@ -7,7 +7,7 @@ Tests the complete relationship management flow including:
 - Preventing duplicate relationships
 - Resolved endpoint returning entity names
 - Deleting relationships
-- Organization isolation
+- Cross-organization access under global roles (ADR-001)
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -518,64 +518,115 @@ class TestRelationshipsDelete:
 
 
 @pytest.mark.integration
-class TestRelationshipsOrganizationIsolation:
-    """Tests for organization-level relationship isolation."""
+class TestRelationshipsCrossOrganizationAccess:
+    """Tests for cross-organization relationship access under global roles (ADR-001).
 
-    async def test_cannot_access_other_org_relationships(self, test_user, other_org_id):
-        """Test that users cannot access relationships from other organizations."""
+    A contributor's role applies workspace-wide: the route org ID selects
+    records, not permissions.
+    """
+
+    def _make_relationship(self, org_id):
+        """Create a mock Relationship record belonging to org_id."""
+        from datetime import UTC, datetime
+
+        relationship = MagicMock(spec=Relationship)
+        relationship.id = uuid4()
+        relationship.organization_id = org_id
+        relationship.source_type = "password"
+        relationship.source_id = uuid4()
+        relationship.target_type = "configuration"
+        relationship.target_id = uuid4()
+        relationship.created_at = datetime.now(UTC)
+        return relationship
+
+    async def test_can_access_other_org_relationships(self, test_user, other_org_id):
+        """Test that users can list relationships from other organizations."""
         app.dependency_overrides[get_current_active_user] = lambda: test_user
 
         entity_id = uuid4()
+        mock_repo = AsyncMock()
+        mock_repo.get_for_entity = AsyncMock(return_value=[self._make_relationship(other_org_id)])
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.get(
-                    f"/api/organizations/{other_org_id}/relationships",
-                    params={"entity_type": "password", "entity_id": str(entity_id)},
-                )
+                with patch(
+                    "src.routers.relationships.RelationshipRepository",
+                    return_value=mock_repo,
+                ):
+                    response = await client.get(
+                        f"/api/organizations/{other_org_id}/relationships",
+                        params={"entity_type": "password", "entity_id": str(entity_id)},
+                    )
 
-            assert response.status_code == 404
+            assert response.status_code == 200
+            assert response.json()[0]["organization_id"] == str(other_org_id)
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_cannot_create_in_other_org(self, test_user, other_org_id):
-        """Test that users cannot create relationships in other organizations."""
+    async def test_can_create_in_other_org(self, test_user, other_org_id):
+        """Test that contributors can create relationships in other organizations."""
         app.dependency_overrides[get_current_active_user] = lambda: test_user
 
+        mock_repo = AsyncMock()
+        mock_repo.find_existing = AsyncMock(return_value=None)
+        mock_repo.create_relationship = AsyncMock(
+            return_value=self._make_relationship(other_org_id)
+        )
+        mock_resolver = AsyncMock()
+        mock_resolver.get_entity_name = AsyncMock(return_value="Entity")
+
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.post(
-                    f"/api/organizations/{other_org_id}/relationships",
-                    json={
-                        "source_type": "password",
-                        "source_id": str(uuid4()),
-                        "target_type": "configuration",
-                        "target_id": str(uuid4()),
-                    },
-                )
+                with (
+                    patch(
+                        "src.routers.relationships.RelationshipRepository",
+                        return_value=mock_repo,
+                    ),
+                    patch(
+                        "src.routers.relationships.EntityResolver",
+                        return_value=mock_resolver,
+                    ),
+                ):
+                    response = await client.post(
+                        f"/api/organizations/{other_org_id}/relationships",
+                        json={
+                            "source_type": "password",
+                            "source_id": str(uuid4()),
+                            "target_type": "configuration",
+                            "target_id": str(uuid4()),
+                        },
+                    )
 
-            assert response.status_code == 404
+            assert response.status_code == 201
+            assert response.json()["organization_id"] == str(other_org_id)
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_cannot_delete_from_other_org(self, test_user, other_org_id):
-        """Test that users cannot delete relationships from other organizations."""
+    async def test_can_delete_from_other_org(self, test_user, other_org_id):
+        """Test that contributors can delete relationships in other organizations."""
         app.dependency_overrides[get_current_active_user] = lambda: test_user
 
         relationship_id = uuid4()
+        mock_repo = AsyncMock()
+        mock_repo.get_by_id_and_org = AsyncMock(return_value=self._make_relationship(other_org_id))
+        mock_repo.delete = AsyncMock()
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                response = await client.delete(
-                    f"/api/organizations/{other_org_id}/relationships/{relationship_id}"
-                )
+                with patch(
+                    "src.routers.relationships.RelationshipRepository",
+                    return_value=mock_repo,
+                ):
+                    response = await client.delete(
+                        f"/api/organizations/{other_org_id}/relationships/{relationship_id}"
+                    )
 
-            assert response.status_code == 404
+            assert response.status_code == 204
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
