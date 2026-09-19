@@ -74,12 +74,14 @@ services:
   # Backup service - runs scheduled backups
   backup:
     image: ghcr.io/mtg-thomas/skra-api:latest
-    command: >
-      sh -c "
+    # Exec form (list): never word-split by Compose, unlike the old shell string.
+    command:
+      - sh
+      - -c
+      - |
         echo '0 2 * * * /app/scripts/backup.sh --daily' | crontab - &&
         echo '0 3 * * 0 /app/scripts/backup.sh --weekly' | crontab - &&
         crond -f
-      "
     volumes:
       - ./scripts:/app/scripts:ro
     environment:

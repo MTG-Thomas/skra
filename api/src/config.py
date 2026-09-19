@@ -170,9 +170,7 @@ class Settings(BaseSettings):
         default=7, description="Refresh token expiration time in days"
     )
 
-    jwt_issuer: str = Field(
-        default="skra-api", description="JWT issuer claim for token validation"
-    )
+    jwt_issuer: str = Field(default="skra-api", description="JWT issuer claim for token validation")
 
     jwt_audience: str = Field(
         default="skra-client", description="JWT audience claim for token validation"
@@ -243,9 +241,7 @@ class Settings(BaseSettings):
         default="localhost", description="WebAuthn Relying Party ID (must match origin domain)"
     )
 
-    webauthn_rp_name: str = Field(
-        default="Skra", description="WebAuthn Relying Party display name"
-    )
+    webauthn_rp_name: str = Field(default="Skra", description="WebAuthn Relying Party display name")
 
     webauthn_origin: str = Field(
         default="http://localhost:3000",
