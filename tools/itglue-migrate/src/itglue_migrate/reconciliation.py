@@ -69,6 +69,7 @@ class OrganizationReconciliation:
     errors: list[str] = field(default_factory=list)
     attachment_summary: dict[str, Any] | None = None
     relationship_summary: dict[str, Any] | None = None
+    relationship_audit: list[dict[str, Any]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-safe dict."""
@@ -85,6 +86,7 @@ class OrganizationReconciliation:
             "errors": self.errors,
             "attachment_summary": self.attachment_summary,
             "relationship_summary": self.relationship_summary,
+            "relationship_audit": self.relationship_audit,
         }
 
 
@@ -242,6 +244,9 @@ def apply_result_counts(
     for entity_type, value in result.failed.items():
         counts.setdefault(entity_type, EntityReconciliation()).failed = value
         counts[entity_type].errors += value
+
+    relationship_summary = result.relationship_summary or {}
+    counts["relationships"].duplicate = int(relationship_summary.get("duplicate", 0))
 
     return counts
 

@@ -53,6 +53,7 @@ class RelationshipAuditResult:
     target_id: str | None
     relationship_key: str | None = None
     error: str | None = None
+    reason: str | None = None
 
     @property
     def count_key(self) -> str:
@@ -70,6 +71,7 @@ class RelationshipAuditResult:
             "target_type": self.target_type,
             "target_id": self.target_id,
             "error": self.error,
+            "reason": self.reason,
         }
 
 
@@ -90,6 +92,7 @@ def classify_relationship(
     resolved_ids: Mapping[str, str] | None = None,
     operation: str | RelationshipAuditStatus | None = None,
     error: BaseException | str | None = None,
+    reason: str | None = None,
 ) -> RelationshipAuditResult:
     """Classify a relationship sync outcome.
 
@@ -97,6 +100,8 @@ def classify_relationship(
     ``target_id``) and/or ITGlue IDs (``source_itglue_id`` or
     ``target_itglue_id``) matching ``SyncPlan.relationships.to_create`` entries.
     ``resolved_ids`` can supply run-time ITGlue ID to UUID mappings.
+    ``reason`` overrides the synthesized actionable reason; when omitted, a
+    default reason is derived from the outcome so skips are auditable.
     """
     resolved_ids = resolved_ids or {}
     source_type = str(relationship.get("source_type") or "")
@@ -130,6 +135,16 @@ def classify_relationship(
     else:
         status = RelationshipAuditStatus.CREATED
 
+    if reason is None:
+        reason = _default_reason(
+            status,
+            relationship=relationship,
+            source_type=source_type,
+            target_type=target_type,
+            relationship_key=key,
+            error_text=error_text,
+        )
+
     return RelationshipAuditResult(
         status=status,
         relationship=relationship,
@@ -139,7 +154,57 @@ def classify_relationship(
         target_id=target_id,
         relationship_key=key,
         error=error_text,
+        reason=reason,
     )
+
+
+def _default_reason(
+    status: RelationshipAuditStatus,
+    *,
+    relationship: Mapping[str, Any],
+    source_type: str,
+    target_type: str,
+    relationship_key: str | None,
+    error_text: str | None,
+) -> str | None:
+    """Synthesize an actionable reason for a relationship outcome."""
+    if status is RelationshipAuditStatus.CREATED:
+        return None
+    if status is RelationshipAuditStatus.MISSING_SOURCE:
+        ref = _side_reference(relationship, "source")
+        return (
+            f"source {source_type or 'entity'} ({ref}) has no migrated UUID; "
+            "sync the source entity first, then re-run relationship sync"
+        )
+    if status is RelationshipAuditStatus.MISSING_TARGET:
+        ref = _side_reference(relationship, "target")
+        return (
+            f"target {target_type or 'entity'} ({ref}) has no migrated UUID; "
+            "sync the target entity first, then re-run relationship sync"
+        )
+    if status is RelationshipAuditStatus.DUPLICATE_EXISTING:
+        return (
+            f"link {relationship_key or 'unknown'} already exists; "
+            "no action needed on resume"
+        )
+    if status is RelationshipAuditStatus.TRANSIENT_ERROR:
+        detail = f": {error_text}" if error_text else ""
+        return f"transient error{detail}; safe to retry on resume"
+    if status is RelationshipAuditStatus.FAILED:
+        detail = f": {error_text}" if error_text else ""
+        return f"create request failed{detail}; inspect the error and re-run"
+    return "skipped before create attempt"
+
+
+def _side_reference(relationship: Mapping[str, Any], side: str) -> str:
+    """Return the most identifying reference for an unresolved link side."""
+    direct = relationship.get(f"{side}_id")
+    if direct:
+        return str(direct)
+    itglue_id = relationship.get(f"{side}_itglue_id")
+    if itglue_id:
+        return f"itglue:{itglue_id}"
+    return "unknown"
 
 
 def summarize_relationship_audit(

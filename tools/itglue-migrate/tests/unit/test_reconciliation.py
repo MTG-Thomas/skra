@@ -148,6 +148,64 @@ def test_report_summary_flags_follow_up_for_validation_issues() -> None:
     assert report.summary()["follow_up_required"] is True
 
 
+def test_apply_result_counts_reports_execution_duplicates() -> None:
+    """Execution duplicate links must surface in the relationships row (issue #25)."""
+    counts = build_plan_counts(SyncPlan())
+    result = SyncResult(
+        created={"relationships": 1},
+        skipped={"relationships": 2},
+        failed={"relationships": 0},
+        relationship_summary={
+            "created": 1,
+            "skipped": 0,
+            "duplicate": 2,
+            "failed": 0,
+            "missing_source": 1,
+            "missing_target": 1,
+            "transient_error": 0,
+        },
+    )
+
+    merged = apply_result_counts(counts, result)
+
+    assert merged["relationships"].created == 1
+    assert merged["relationships"].skipped == 2
+    assert merged["relationships"].duplicate == 2
+    assert merged["relationships"].failed == 0
+
+
+def test_organization_serializes_relationship_audit_reasons() -> None:
+    """Per-link audit reasons must survive into the reconciliation JSON (issue #25)."""
+    org = OrganizationReconciliation(
+        name="Acme",
+        itglue_id="1001",
+        bifrost_id="org-uuid",
+        dry_run=False,
+        relationship_summary={"missing_target": 1},
+        relationship_audit=[
+            {
+                "status": "missing_target",
+                "count_key": "missing_target",
+                "relationship_key": None,
+                "source_type": "password",
+                "source_id": "pwd-uuid-2",
+                "target_type": "configuration",
+                "target_id": None,
+                "error": None,
+                "reason": "could not resolve target configuration "
+                "(itglue:cfg-9); sync the target entity first, then "
+                "re-run relationship sync",
+            }
+        ],
+    )
+
+    payload = org.to_dict()
+
+    assert payload["relationship_audit"][0]["reason"].startswith(
+        "could not resolve target configuration (itglue:cfg-9)"
+    )
+
+
 def test_report_writes_stable_json(tmp_path: Path) -> None:
     """Report writer should produce parseable JSON with schema metadata."""
     report = ReconciliationReport.create(

@@ -6,12 +6,130 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from itglue_migrate.api_client import APIError
 from itglue_migrate.sync_differ import EntityPlan, SyncPlan
 from itglue_migrate.sync_executor import (
     SyncExecutor,
     SyncResult,
     _map_org_status_to_is_enabled,
 )
+
+
+def _resolved_link(
+    source_id: str = "pwd-uuid-1",
+    target_id: str = "cfg-uuid-1",
+) -> dict[str, str]:
+    """Build a relationship entry with both UUIDs already resolved."""
+    return {
+        "source_type": "password",
+        "source_id": source_id,
+        "source_itglue_id": "pwd-1",
+        "target_type": "configuration",
+        "target_id": target_id,
+        "target_itglue_id": "cfg-1",
+    }
+
+
+class TestRelationshipResumeAndAudit:
+    """Resume idempotency and audit reasons for relationship sync (issue #25)."""
+
+    @pytest.mark.asyncio
+    async def test_repeated_link_posts_once_and_counts_duplicate(
+        self, mock_client: MagicMock
+    ) -> None:
+        """A duplicate entry in one run must not issue a second POST."""
+        plan = SyncPlan()
+        plan.relationships.to_create = [_resolved_link(), _resolved_link()]
+
+        executor = SyncExecutor(mock_client, org_id="org-uuid", dry_run=False)
+        result = await executor.execute(plan)
+
+        assert mock_client.create_relationship.call_count == 1
+        assert result.created.get("relationships", 0) == 1
+        assert result.relationship_summary["duplicate"] == 1
+        reasons = [audit["reason"] for audit in result.relationship_audit]
+        assert reasons[0] is None
+        assert reasons[1] is not None
+
+    @pytest.mark.asyncio
+    async def test_conflict_marks_link_seen_for_rest_of_run(
+        self, mock_client: MagicMock
+    ) -> None:
+        """A 409 proves the link exists: repeats must short-circuit locally."""
+        mock_client.create_relationship = AsyncMock(
+            side_effect=APIError(409, "already exists")
+        )
+        plan = SyncPlan()
+        plan.relationships.to_create = [_resolved_link(), _resolved_link()]
+
+        executor = SyncExecutor(mock_client, org_id="org-uuid", dry_run=False)
+        result = await executor.execute(plan)
+
+        assert mock_client.create_relationship.call_count == 1
+        assert result.relationship_summary["duplicate"] == 2
+        assert result.created.get("relationships", 0) == 0
+
+    @pytest.mark.asyncio
+    async def test_missing_references_carry_actionable_reasons(
+        self, mock_client: MagicMock
+    ) -> None:
+        """Unresolvable skips must name the missing side and the next step."""
+        plan = SyncPlan()
+        plan.relationships.to_create = [
+            {
+                "source_type": "password",
+                "source_id": "",
+                "source_itglue_id": "pwd-9",
+                "target_type": "configuration",
+                "target_id": "cfg-uuid-1",
+                "target_itglue_id": "cfg-1",
+            },
+            {
+                "source_type": "password",
+                "source_id": "pwd-uuid-2",
+                "source_itglue_id": "pwd-2",
+                "target_type": "configuration",
+                "target_id": "",
+                "target_itglue_id": "cfg-9",
+            },
+        ]
+
+        executor = SyncExecutor(mock_client, org_id="org-uuid", dry_run=False)
+        result = await executor.execute(plan)
+
+        assert mock_client.create_relationship.call_count == 0
+        assert result.relationship_summary["missing_source"] == 1
+        assert result.relationship_summary["missing_target"] == 1
+        by_status = {
+            audit["status"]: audit for audit in result.relationship_audit
+        }
+        assert "pwd-9" in (by_status["missing_source"]["reason"] or "")
+        assert "cfg-9" in (by_status["missing_target"]["reason"] or "")
+        assert "re-run" in (by_status["missing_source"]["reason"] or "")
+
+    @pytest.mark.asyncio
+    async def test_transient_and_hard_errors_counted_distinctly(
+        self, mock_client: MagicMock
+    ) -> None:
+        """A 503 retryable error must not share a bucket with a 400 failure."""
+        mock_client.create_relationship = AsyncMock(
+            side_effect=[
+                APIError(503, "temporarily unavailable"),
+                APIError(400, "bad request"),
+            ]
+        )
+        plan = SyncPlan()
+        plan.relationships.to_create = [
+            _resolved_link("pwd-uuid-1", "cfg-uuid-1"),
+            _resolved_link("pwd-uuid-2", "cfg-uuid-2"),
+        ]
+
+        executor = SyncExecutor(mock_client, org_id="org-uuid", dry_run=False)
+        result = await executor.execute(plan)
+
+        assert result.relationship_summary["transient_error"] == 1
+        assert result.relationship_summary["failed"] == 1
+        assert result.relationship_summary["created"] == 0
 
 
 @pytest.fixture
