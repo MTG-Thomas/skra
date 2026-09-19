@@ -95,25 +95,30 @@ if [ -z "${BUCKET_ID}" ]; then
   exit 1
 fi
 
-# Look up the configured key, asking Garage to disclose its stored secret.
-# When the disclosed secret matches, import is safely skipped. A proven
-# mismatch fails immediately naming only the key ID. Anything else (absent
-# key, undisclosed field, failed fetch) falls through to the strict import
-# below, which fails loudly on any real problem - so no path can print
-# success for unverified credentials. Neither secret is ever printed.
-KEY_INFO=$(wget -qO- --header="${AUTH}" \
-    "${ADMIN}/v1/key?id=${GARAGE_ACCESS_KEY_ID}&showSecretKey=true" 2>/dev/null) || true
+# Decide whether the key must be imported by listing existing keys, then -
+# only when our key ID is listed - fetch its stored secret and compare it in
+# memory. A proven mismatch fails naming only the key ID. An absent key falls
+# through to the strict import below. List or detail fetch failures fail
+# closed: no path prints success for unverified credentials, and neither
+# secret is ever printed.
+KEY_LIST=$(wget -qO- --header="${AUTH}" "${ADMIN}/v1/key?list" 2>/dev/null) \
+    || fail "could not list keys"
 SKIP_IMPORT=0
-if printf '%s' "${KEY_INFO}" | grep -q '"secretAccessKey"'; then
+if printf '%s' "${KEY_LIST}" | grep -q "\"${GARAGE_ACCESS_KEY_ID}\""; then
+    KEY_INFO=$(wget -qO- --header="${AUTH}" \
+        "${ADMIN}/v1/key?id=${GARAGE_ACCESS_KEY_ID}&showSecretKey=true" 2>/dev/null) \
+        || fail "could not fetch stored secret"
     STORED_SECRET=$(printf '%s' "${KEY_INFO}" \
         | grep -o '"secretAccessKey"[ ]*:[ ]*"[^"]*"' | head -1 \
         | sed 's/^"secretAccessKey"[ ]*:[ ]*"//; s/"$//') || true
-    [ -n "${STORED_SECRET}" ] || fail "could not parse stored secret"
+    [ -n "${STORED_SECRET}" ] || fail "Garage did not disclose the stored secret; cannot verify credentials"
     if [ "${STORED_SECRET}" != "${GARAGE_SECRET_ACCESS_KEY}" ]; then
         fail "key ${GARAGE_ACCESS_KEY_ID} exists with a different secret; refusing to overwrite (rotate via Garage admin API)"
     fi
     echo "[garage-init] Stored secret matches configuration; skipping import."
     SKIP_IMPORT=1
+else
+    echo "[garage-init] Key not present; will import."
 fi
 
 bucket_keys_region() {

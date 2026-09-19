@@ -32,7 +32,9 @@ class StubState:
         self.imported: set[str] = set()
         self.key_secrets: dict[str, str] = {}
         self.key_endpoint = True
+        self.list_endpoint = True
         self.omit_secret = False
+        self.detail_status = 200
         self.calls: list[str] = []
         self.import_status = 200
         self.import_body: dict[str, Any] | None = None
@@ -68,6 +70,22 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
             elif self.path.startswith("/v1/key"):
                 from urllib.parse import parse_qs, urlparse
 
+                query = urlparse(self.path).query
+                if query == "list" or query.startswith("list&"):
+                    if not state.list_endpoint:
+                        self._send(
+                            400,
+                            {
+                                "code": "InvalidRequest",
+                                "message": "Bad request: Unknown API endpoint: GET /v1/key?list",
+                            },
+                        )
+                        return
+                    self._send(
+                        200,
+                        [{"id": kid, "name": "bifrost-docs-key"} for kid in state.key_secrets],
+                    )
+                    return
                 if not state.key_endpoint:
                     self._send(
                         400,
@@ -76,6 +94,9 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                             "message": "Bad request: Unknown API endpoint: GET /v1/key",
                         },
                     )
+                    return
+                if state.detail_status != 200:
+                    self._send(state.detail_status, {})
                     return
                 qs = parse_qs(urlparse(self.path).query)
                 kid = qs.get("id", [""])[0]
@@ -299,30 +320,55 @@ def test_wrong_secret_fails_before_import(stub_api: Any) -> None:
     assert_secret_absent(result, "f" * 64)
 
 
-def test_missing_key_endpoint_falls_back_to_import(stub_api: Any) -> None:
-    # Without key lookup there is nothing to compare, so the flow degrades
-    # to strict import/grant/confirm, which cannot succeed falsely.
+def test_first_boot_imports_absent_key(stub_api: Any) -> None:
+    # First boot: the key list is empty, so the flow imports, grants,
+    # and confirms. The absent-key lookup answer is positive (empty
+    # list), never an abort.
     url, state = stub_api
-    state.key_endpoint = False
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
     assert result.returncode == 0, result.stderr
+    assert "Key not present; will import." in result.stdout
     assert "Key verified with read/write/owner" in result.stdout
     assert state.calls == ["import", "allow"]
     assert_secret_absent(result, VALID_SECRET)
 
 
-def test_undisclosed_secret_falls_back_to_import(stub_api: Any) -> None:
-    # A lookup response without the secret field proves nothing either way,
-    # so the flow degrades to strict import/grant/confirm.
+def test_missing_list_endpoint_fails_closed(stub_api: Any) -> None:
+    url, state = stub_api
+    state.list_endpoint = False
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode != 0
+    assert "could not list keys" in result.stderr
+    assert "Key verified" not in result.stdout
+    assert state.calls == []
+    assert_secret_absent(result, VALID_SECRET)
+
+
+def test_detail_fetch_failure_fails_closed(stub_api: Any) -> None:
+    url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = VALID_SECRET
+    state.detail_status = 500
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode != 0
+    assert "could not fetch stored secret" in result.stderr
+    assert state.calls == []
+    assert_secret_absent(result, VALID_SECRET)
+
+
+def test_undisclosed_secret_fails_closed(stub_api: Any) -> None:
+    # The key is listed, so it exists, but without the secret field there
+    # is nothing to compare: fail rather than import blindly.
     url, state = stub_api
     state.key_secrets[VALID_KEY_ID] = VALID_SECRET
     state.omit_secret = True
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
-    assert result.returncode == 0, result.stderr
-    assert "Key verified with read/write/owner" in result.stdout
-    assert state.calls == ["import", "allow"]
+    assert result.returncode != 0
+    assert "did not disclose the stored secret" in result.stderr
+    assert state.calls == []
     assert_secret_absent(result, VALID_SECRET)
 
 
