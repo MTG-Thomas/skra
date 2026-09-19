@@ -278,6 +278,78 @@ def test_check_url_reachable_enforces_effective_port(
     assert calls == ["http://127.0.0.1:8000/x"]
 
 
+def test_check_url_reachable_probes_public_presigned_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public presigned URLs on an allowlisted origin are probed, not trusted."""
+    calls: list[str] = []
+    presigned = "https://files.example.com/att/1?X-Amz-Signature=abc123"
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(200, {})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+
+    assert (
+        _check_url_reachable(
+            presigned,
+            allowed_origins=frozenset({("https", "files.example.com", 443)}),
+        )
+        is True
+    )
+    assert calls == [presigned]
+
+
+def test_check_url_reachable_probes_explicit_private_self_hosted_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicitly allowlisted private storage (self-hosted rehearsal) is probed."""
+    calls: list[str] = []
+    garage_url = "http://192.168.1.10:3900/bucket/key?sig=x"
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(200, {})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+
+    assert (
+        _check_url_reachable(
+            garage_url,
+            allowed_origins=frozenset({("http", "192.168.1.10", 3900)}),
+        )
+        is True
+    )
+    assert calls == [garage_url]
+
+
+def test_check_url_reachable_never_requests_unlisted_private_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Private/link-local hosts from content are refused without a request."""
+    calls: list[str] = []
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(200, {})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+    allowed = frozenset({("https", "api.example.com", 443)})
+
+    assert (
+        _check_url_reachable("http://10.0.0.5/admin", allowed_origins=allowed)
+        is False
+    )
+    assert (
+        _check_url_reachable(
+            "http://169.254.169.254/latest/meta-data", allowed_origins=allowed
+        )
+        is False
+    )
+    assert calls == []
+
+
 def test_check_url_reachable_refuses_cross_port_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
