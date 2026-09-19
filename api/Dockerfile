@@ -4,26 +4,27 @@
 
 FROM python:3.11-slim AS builder
 
+# Pinned uv binary for reproducible, lockfile-driven installs. `pip install .`
+# resolved floating versions from pyproject.toml, so uv.lock bumps (e.g. #80)
+# never controlled the published image (see issue #82).
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /usr/local/bin/uv
+
 # Install build dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install Python dependencies from pyproject.toml
+# Locked dependency install into the runtime venv path. --locked fails the
+# build if uv.lock drifts from pyproject.toml, proving lock freshness.
+ENV UV_PROJECT_ENVIRONMENT="/opt/venv" UV_LINK_MODE=copy
 WORKDIR /app
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 # Copy src directory so setuptools can find the package
 COPY src ./src
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip setuptools wheel && \
-    pip install .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
 
 # Production stage
 FROM python:3.11-slim
