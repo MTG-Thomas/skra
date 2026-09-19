@@ -129,42 +129,35 @@ key_has_full_access() {
         }'
 }
 
-if key_has_full_access; then
-    echo "[garage-init] Key already has read/write/owner on bucket; nothing to do."
-    echo "[garage-init] Initialization complete."
-    exit 0
-fi
-
-# Import access key. A repeated import of an existing key can fail here;
-# the grant and the final confirmation below arbitrate the real outcome.
-IMPORT_OK=1
+# Import access key with the configured secret. This step is strict: it runs
+# on every start (no early exit) so the stored secret always ends up equal to
+# the configured one, and any rejection fails the container immediately.
+# A stale grant from an older secret can never satisfy this step.
 if wget -qO /dev/null \
     --header="${AUTH}" \
     --header="Content-Type: application/json" \
     --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
     "${ADMIN}/v1/key/import" 2>/dev/null; then
-    IMPORT_OK=0
     echo "[garage-init] Key imported."
+else
+    fail "key import request failed"
 fi
 
-# Grant key full access to bucket.
+# Grant key full access to bucket; any failure fails the container.
 if wget -qO /dev/null \
     --header="${AUTH}" \
     --header="Content-Type: application/json" \
     --post-data="{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" \
     "${ADMIN}/v1/bucket/allow" 2>/dev/null; then
     echo "[garage-init] Key permissions set."
+else
+    fail "bucket permission grant request failed"
 fi
 
-# Confirm the key actually holds read/write/owner before declaring success.
-# This is the arbiter: a failed import or grant cannot print success.
+# Confirm the key itself actually holds read/write/owner before success.
 if key_has_full_access; then
     echo "[garage-init] Key verified with read/write/owner on bucket."
 else
-    if [ "${IMPORT_OK}" -ne 0 ]; then
-        fail "key import failed and key ${GARAGE_ACCESS_KEY_ID} has no bucket access"
-    else
-        fail "key ${GARAGE_ACCESS_KEY_ID} lacks read/write/owner on bucket after grant"
-    fi
+    fail "key ${GARAGE_ACCESS_KEY_ID} lacks read/write/owner on bucket after grant"
 fi
 echo "[garage-init] Initialization complete."

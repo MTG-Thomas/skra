@@ -188,16 +188,21 @@ def test_invalid_secret_format_fails(stub_api: Any) -> None:
     assert state.calls == []
 
 
-def test_import_rejection_fails_without_grant(stub_api: Any) -> None:
+def test_import_failure_fails_despite_existing_grant(stub_api: Any) -> None:
+    # Wrong-secret rerun scenario: the key ID already holds permissions from
+    # an older secret, but this run's import is rejected. Success must not
+    # print; the stale grant must not satisfy this run.
     url, state = stub_api
+    state.grants[VALID_KEY_ID] = {"read": True, "write": True, "owner": True}
     state.import_status = 400
     state.import_body = {"code": "InvalidRequest", "message": "Nope: bad key"}
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
     assert result.returncode != 0
-    assert "key import failed" in result.stderr
+    assert "key import request failed" in result.stderr
     assert "Key verified" not in result.stdout
-    assert state.calls == ["import", "allow"]
+    assert "Initialization complete." not in result.stdout
+    assert state.calls == ["import"]
     assert_secret_absent(result, VALID_SECRET)
 
 
@@ -208,7 +213,7 @@ def test_allow_rejection_fails(stub_api: Any) -> None:
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
     assert result.returncode != 0
-    assert "lacks read/write/owner" in result.stderr
+    assert "bucket permission grant request failed" in result.stderr
     assert "Key verified" not in result.stdout
     assert state.calls == ["import", "allow"]
     assert_secret_absent(result, VALID_SECRET)
@@ -224,14 +229,16 @@ def test_missing_grant_confirmation_fails(stub_api: Any) -> None:
     assert_secret_absent(result, VALID_SECRET)
 
 
-def test_idempotent_rerun_skips_import_and_allow(stub_api: Any) -> None:
+def test_rerun_reapplies_import_and_grant(stub_api: Any) -> None:
+    # Reruns re-apply import and grant (no early exit) so the stored secret
+    # always ends up equal to the configured one, then verify.
     url, state = stub_api
     state.grants[VALID_KEY_ID] = dict(FULL_PERMS)
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
     assert result.returncode == 0, result.stderr
-    assert "already has read/write/owner" in result.stdout
-    assert state.calls == []
+    assert "Key verified with read/write/owner" in result.stdout
+    assert state.calls == ["import", "allow"]
     assert_secret_absent(result, VALID_SECRET)
 
 
