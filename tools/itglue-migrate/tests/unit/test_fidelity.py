@@ -190,6 +190,16 @@ def test_check_url_reachable_returns_false_without_network() -> None:
     assert _check_url_reachable("http://127.0.0.1:1/unreachable.png") is False
 
 
+def test_url_probe_policy_blocks_non_public_destinations() -> None:
+    """Crafted content must not turn opt-in probes toward internal targets."""
+    assert _check_url_reachable("http://127.0.0.1:1/unreachable.png") is False
+    assert _check_url_reachable("http://localhost/unreachable.png") is False
+    assert _check_url_reachable("http://169.254.169.254/latest/") is False
+    assert _check_url_reachable("http://[::1]/unreachable.png") is False
+    assert _check_url_reachable("ftp://files.example.invalid/a.png") is False
+    assert _check_url_reachable("not a url") is False
+
+
 def test_verify_migrated_document_images_records_unreachable_url() -> None:
     result = verify_migrated_document_images(
         document_id="200",

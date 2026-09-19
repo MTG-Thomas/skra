@@ -8,13 +8,16 @@ This module provides the command-line interface using Typer with two main comman
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import re
+import socket
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import typer
@@ -3255,10 +3258,48 @@ def sync(
     sys.exit(exit_code)
 
 
+def _is_probe_allowed(url: str) -> bool:
+    """Fail-closed destination policy for opt-in URL probes.
+
+    Only public ``http``/``https`` destinations are probed. Literal and
+    resolved non-public addresses (private, loopback, link-local, reserved)
+    are refused so crafted export or API content cannot turn ``--check-urls``
+    into requests toward internal destinations.
+    """
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = parsed.hostname
+    if not host:
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, parsed.port, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    addresses = {info[4][0] for info in infos}
+    if not addresses:
+        return False
+    for address in addresses:
+        try:
+            if not ipaddress.ip_address(address).is_global:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
 def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
     """Check whether a migrated URL is reachable without downloading it.
 
     Read-only: issues HEAD, falling back to GET for servers that reject HEAD.
+    Each hop (including redirects) must pass the probe destination policy.
 
     Args:
         url: Absolute URL to check.
@@ -3267,16 +3308,28 @@ def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
     Returns:
         True when the URL responds with a success status.
     """
-    try:
-        response = httpx.head(url, follow_redirects=True, timeout=timeout_seconds)
-        if response.status_code in (403, 405, 501):
-            with httpx.stream(
-                "GET", url, follow_redirects=True, timeout=timeout_seconds
-            ) as stream:
-                return stream.status_code < 400
-        return response.status_code < 400
-    except Exception:
-        return False
+    current = url
+    for _ in range(4):
+        if not _is_probe_allowed(current):
+            return False
+        try:
+            response = httpx.head(current, follow_redirects=False, timeout=timeout_seconds)
+            if response.status_code in (403, 405, 501):
+                with httpx.stream(
+                    "GET", current, follow_redirects=False, timeout=timeout_seconds
+                ) as stream:
+                    status = stream.status_code
+                    location = stream.headers.get("location")
+            else:
+                status = response.status_code
+                location = response.headers.get("location")
+        except Exception:
+            return False
+        if status in (301, 302, 303, 307, 308) and location:
+            current = urljoin(current, location)
+            continue
+        return 200 <= status < 300
+    return False
 
 
 def _invert_entity_identities(
@@ -3548,7 +3601,7 @@ def _display_verify_report(report: dict[str, Any]) -> None:
     failures_total = report["summary"]["failure_count"]
     if failures_total:
         console.print()
-        console.print("[bold red]Failures (first 10 per category shown):[/bold red]")
+        console.print("[bold red]Failures (first 10 shown):[/bold red]")
         shown = 0
         for org in report["organizations"]:
             for section in ("attachments", "embedded_images"):
