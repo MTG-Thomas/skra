@@ -9,8 +9,28 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_env_file(path: str) -> dict[str, str]:
+    """Read a KEY=VALUE credentials file (blank lines and # comments ignored).
+
+    Raises:
+        ValueError: If the file cannot be read.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"S3 credentials file unreadable: {path}: {e}") from e
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
 
 
 class Settings(BaseSettings):
@@ -201,6 +221,27 @@ class Settings(BaseSettings):
     s3_secret_key: str | None = Field(
         default=None, description="S3 secret key (required for S3 operations)"
     )
+
+    s3_credentials_file: str | None = Field(
+        default=None,
+        description="Path to a KEY=VALUE file (S3_ACCESS_KEY_ID, "
+        "S3_SECRET_ACCESS_KEY) written by garage-init in managed mode. "
+        "Explicit s3_access_key/s3_secret_key always win.",
+    )
+
+    @model_validator(mode="after")
+    def _load_s3_credentials_file(self) -> "Settings":
+        """Fill unset S3 credentials from the managed credentials file."""
+        if (
+            self.s3_credentials_file
+            and (self.s3_access_key is None or self.s3_secret_key is None)
+        ):
+            creds = _read_env_file(self.s3_credentials_file)
+            if self.s3_access_key is None:
+                self.s3_access_key = creds.get("S3_ACCESS_KEY_ID")
+            if self.s3_secret_key is None:
+                self.s3_secret_key = creds.get("S3_SECRET_ACCESS_KEY")
+        return self
 
     s3_bucket: str = Field(default="bifrost-docs", description="S3 bucket name for file storage")
 

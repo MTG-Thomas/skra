@@ -1,42 +1,95 @@
 #!/bin/sh
-# Garage initialization script.
+# Garage initialization script (issues #107, #109).
 # Runs as a one-shot container (alpine:3) after Garage is healthy.
 # Idempotent: safe to re-run on stack restarts.
+#
+# Key lifecycle modes (GARAGE_KEY_MODE, default: managed):
+#
+#   managed (default) - Garage-native lifecycle, no key import:
+#     * First run creates a key via POST /v1/key (AddKey); Garage mints the
+#       ID and secret. The secret is written once to GARAGE_CREDS_FILE
+#       (default /run/garage-creds/s3.env, mode 600) on a shared volume
+#       consumed by api/worker via BIFROST_DOCS_S3_CREDENTIALS_FILE.
+#     * Reruns look the key up by exact name (GET /v1/key?list) and refresh
+#       the credentials file from the stored secret (showSecretKey=true),
+#       so restarts never mint duplicate keys.
+#     * Rotation is explicit: GARAGE_ROTATE=1 creates a new timestamped key,
+#       repoints the credentials file at it, and prints the superseded key
+#       ID. Restart dependents, then revoke the old key with a follow-up run
+#       setting GARAGE_REVOKE_KEY_ID=<id> (POST /v1/bucket/deny); full key
+#       deletion (DELETE /v1/key) stays manual.
+#     * The active key name is tracked in <creds-dir>/s3.keyname so rotated
+#       names survive restarts. Ambiguity (several keys, missing secret)
+#       fails closed.
+#
+#   import (restore-only) - legacy deterministic import via POST
+#   /v1/key/import for backup-restore and adoption of pre-existing keys.
+#   The Admin API spec reserves import for migrations/restore and warns
+#   against routine use to mint custom key IDs, so this mode requires the
+#   legacy GARAGE_ACCESS_KEY_ID/GARAGE_SECRET_ACCESS_KEY pair explicitly
+#   and is NOT the default.
+#
+# Neither mode ever prints a secret. Only key IDs and key names reach stdout.
 set -e
 
 ADMIN="${GARAGE_ADMIN_URL:-http://garage:3903}"
 AUTH="Authorization: Bearer ${GARAGE_ADMIN_TOKEN}"
+MODE="${GARAGE_KEY_MODE:-managed}"
+KEY_NAME="${GARAGE_KEY_NAME:-bifrost-docs-key}"
+CREDS_FILE="${GARAGE_CREDS_FILE:-/run/garage-creds/s3.env}"
+STATE_FILE="${GARAGE_CREDS_FILE%/*}/s3.keyname"
 
 fail() {
     echo "[garage-init] ERROR: $1" >&2
     exit 1
 }
 
-# Garage v1.3.1 only accepts key IDs as `GK` + 24 hex chars and secrets
-# as 64 hex chars. Validate upfront: without this, rejected imports
-# surface later as a cryptic S3 "No such key".
-case "${GARAGE_ACCESS_KEY_ID}" in
-    GK????????????????????????) ;;
-    *)
-        echo "[garage-init] ERROR: GARAGE_ACCESS_KEY_ID must be 'GK' followed by 24 hex chars" >&2
-        echo '[garage-init] Generate with: echo -n "GK$(openssl rand -hex 12)"' >&2
-        exit 1
-        ;;
-esac
-case "${GARAGE_ACCESS_KEY_ID}" in
-    GK*[!0-9a-f]*) fail "GARAGE_ACCESS_KEY_ID suffix must be hex" ;;
-esac
-case "${GARAGE_SECRET_ACCESS_KEY}" in
-    ????????????????????????????????????????????????????????????????) ;;
-    *)
-        echo "[garage-init] ERROR: GARAGE_SECRET_ACCESS_KEY must be 64 hex chars" >&2
-        echo "[garage-init] Generate with: openssl rand -hex 32" >&2
-        exit 1
-        ;;
-esac
-case "${GARAGE_SECRET_ACCESS_KEY}" in
-    *[!0-9a-f]*) fail "GARAGE_SECRET_ACCESS_KEY must be hex" ;;
-esac
+api_get() {
+    # GET a path; fail closed on transport errors. Prints the body.
+    wget -qO- --header="${AUTH}" "${ADMIN}$1" 2>/dev/null \
+        || fail "admin API request failed: GET $1"
+}
+
+api_post() {
+    # POST a JSON body; fail closed on transport errors. Prints the body.
+    wget -qO- --header="${AUTH}" \
+        --header="Content-Type: application/json" \
+        --post-data="$2" "${ADMIN}$1" 2>/dev/null \
+        || fail "admin API request failed: POST $1"
+}
+
+json_field() {
+    # Extract the first "field":"value" string from JSON on stdin.
+    # $1 = field name. Prints the value or nothing.
+    grep -o "\"$1\"[ ]*:[ ]*\"[^\"]*\"" | head -1 | sed 's/^"[^"]*"[ ]*:[ ]*"//; s/"$//'
+}
+
+key_id_for_name() {
+    # Print access key IDs (one per line) whose list entry name exactly
+    # matches $1. List entries look like {"id":"GK...","name":"..."} with
+    # varying whitespace. grep/sed only (busybox awk lacks 3-arg match).
+    printf '%s' "$2" | tr '{}' '\n\n' \
+        | grep "\"name\" *: *\"$1\"" \
+        | grep -o '"id" *: *"[^"]*"' \
+        | sed 's/^"id" *: *"//; s/"$//'
+}
+
+write_creds_file() {
+    # $1 = key ID, $2 = secret. Writes KEY=VALUE with owner-only perms.
+    dir=$(dirname "${CREDS_FILE}")
+    [ -d "${dir}" ] || fail "credentials directory missing: ${dir} (mount the garage-creds volume)"
+    tmp="${CREDS_FILE}.tmp.$$"
+    umask 077
+    {
+        printf '# Managed by garage-init; do not edit. Regenerated on reruns.\n'
+        printf 'S3_ACCESS_KEY_ID=%s\n' "$1"
+        printf 'S3_SECRET_ACCESS_KEY=%s\n' "$2"
+    } > "${tmp}"
+    chmod 600 "${tmp}"
+    mv "${tmp}" "${CREDS_FILE}"
+    printf '%s\n' "${ACTIVE_NAME}" > "${STATE_FILE}"
+    chmod 600 "${STATE_FILE}"
+}
 
 echo "[garage-init] Waiting for admin API..."
 until wget -qO /dev/null --header="${AUTH}" "${ADMIN}/v1/health" 2>/dev/null; do
@@ -45,7 +98,7 @@ done
 echo "[garage-init] Garage is up."
 
 # Get this node's ID — handle both compact and spaced JSON
-STATUS=$(wget -qO- --header="${AUTH}" "${ADMIN}/v1/status")
+STATUS=$(api_get "/v1/status")
 NODE_ID=$(echo "${STATUS}" | grep -o '"node"[^,}]*' | grep -o '"[a-f0-9][a-f0-9]*"' | tr -d '"' | head -1)
 echo "[garage-init] Node ID: ${NODE_ID}"
 
@@ -81,9 +134,7 @@ BUCKET_RESP=$(wget -qO- \
 
 # If bucket already existed, the creation returns error — fetch it directly
 if [ -z "${BUCKET_RESP}" ] || echo "${BUCKET_RESP}" | grep -qi "error\|already"; then
-  BUCKET_RESP=$(wget -qO- \
-    --header="${AUTH}" \
-    "${ADMIN}/v1/bucket?globalAlias=bifrost-docs" 2>/dev/null || true)
+  BUCKET_RESP=$(api_get "/v1/bucket?globalAlias=bifrost-docs")
 fi
 
 BUCKET_ID=$(echo "${BUCKET_RESP}" | grep -o '"id"[^,}]*' | grep -o '"[a-f0-9-][a-f0-9-]*"' | tr -d '"' | head -1)
@@ -95,44 +146,156 @@ if [ -z "${BUCKET_ID}" ]; then
   exit 1
 fi
 
-# Decide whether the key must be imported by listing existing keys, then -
-# only when our key ID is listed - fetch its stored secret and compare it in
-# memory. A proven mismatch fails naming only the key ID. An absent key falls
-# through to the strict import below. List or detail fetch failures fail
-# closed: no path prints success for unverified credentials, and neither
-# secret is ever printed.
-KEY_LIST=$(wget -qO- --header="${AUTH}" "${ADMIN}/v1/key?list" 2>/dev/null) \
-    || fail "could not list keys"
-SKIP_IMPORT=0
-if printf '%s' "${KEY_LIST}" | grep -q "\"${GARAGE_ACCESS_KEY_ID}\""; then
-    KEY_INFO=$(wget -qO- --header="${AUTH}" \
-        "${ADMIN}/v1/key?id=${GARAGE_ACCESS_KEY_ID}&showSecretKey=true" 2>/dev/null) \
-        || fail "could not fetch stored secret"
-    STORED_SECRET=$(printf '%s' "${KEY_INFO}" \
-        | grep -o '"secretAccessKey"[ ]*:[ ]*"[^"]*"' | head -1 \
-        | sed 's/^"secretAccessKey"[ ]*:[ ]*"//; s/"$//') || true
-    [ -n "${STORED_SECRET}" ] || fail "Garage did not disclose the stored secret; cannot verify credentials"
-    if [ "${STORED_SECRET}" != "${GARAGE_SECRET_ACCESS_KEY}" ]; then
-        fail "key ${GARAGE_ACCESS_KEY_ID} exists with a different secret; refusing to overwrite (rotate via Garage admin API)"
+# Optional revocation of a superseded key from a previous rotation, run
+# AFTER the operator restarts dependents on the new credentials: deactivates
+# its read/write/owner flags on this bucket (POST /v1/bucket/deny — note the
+# inverted semantics: true deactivates). Revokes only the exact ID given,
+# never by name matching. Full key deletion (DELETE /v1/key, unsupported by
+# wget) stays a documented manual admin step.
+if [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
+    if api_post "/v1/bucket/deny" "{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_REVOKE_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null; then
+        echo "[garage-init] Revoked bucket access for superseded key ${GARAGE_REVOKE_KEY_ID}."
+    else
+        fail "could not revoke key ${GARAGE_REVOKE_KEY_ID}"
     fi
-    echo "[garage-init] Stored secret matches configuration; skipping import."
-    SKIP_IMPORT=1
+fi
+
+# --- Restore-only import mode (backup-restore / adoption) -------------------
+if [ "${MODE}" = "import" ]; then
+    [ -n "${GARAGE_ACCESS_KEY_ID:-}" ] \
+        || fail "import mode requires GARAGE_ACCESS_KEY_ID (restore-only; default managed mode mints keys natively)"
+    [ -n "${GARAGE_SECRET_ACCESS_KEY:-}" ] \
+        || fail "import mode requires GARAGE_SECRET_ACCESS_KEY (restore-only; default managed mode mints keys natively)"
+    # Garage v1.3.1 only accepts key IDs as `GK` + 24 hex chars and secrets
+    # as 64 hex chars. Validate upfront: without this, rejected imports
+    # surface later as a cryptic S3 "No such key".
+    case "${GARAGE_ACCESS_KEY_ID}" in
+        GK????????????????????????) ;;
+        *)
+            echo "[garage-init] ERROR: GARAGE_ACCESS_KEY_ID must be 'GK' followed by 24 hex chars" >&2
+            exit 1
+            ;;
+    esac
+    case "${GARAGE_ACCESS_KEY_ID}" in
+        GK*[!0-9a-f]*) fail "GARAGE_ACCESS_KEY_ID suffix must be hex" ;;
+    esac
+    case "${GARAGE_SECRET_ACCESS_KEY}" in
+        ????????????????????????????????????????????????????????????????) ;;
+        *)
+            echo "[garage-init] ERROR: GARAGE_SECRET_ACCESS_KEY must be 64 hex chars" >&2
+            exit 1
+            ;;
+    esac
+    case "${GARAGE_SECRET_ACCESS_KEY}" in
+        *[!0-9a-f]*) fail "GARAGE_SECRET_ACCESS_KEY must be hex" ;;
+    esac
+
+    # Decide whether the key must be imported by listing existing keys, then -
+    # only when our key ID is listed - fetch its stored secret and compare it
+    # in memory. A proven mismatch fails naming only the key ID. An absent key
+    # falls through to the strict import below. List or detail fetch failures
+    # fail closed: no path prints success for unverified credentials, and
+    # neither secret is ever printed.
+    KEY_LIST=$(api_get "/v1/key?list")
+    SKIP_IMPORT=0
+    if printf '%s' "${KEY_LIST}" | grep -q "\"${GARAGE_ACCESS_KEY_ID}\""; then
+        KEY_INFO=$(api_get "/v1/key?id=${GARAGE_ACCESS_KEY_ID}&showSecretKey=true")
+        STORED_SECRET=$(printf '%s' "${KEY_INFO}" \
+            | grep -o '"secretAccessKey"[ ]*:[ ]*"[^"]*"' | head -1 \
+            | sed 's/^"secretAccessKey"[ ]*:[ ]*"//; s/"$//') || true
+        [ -n "${STORED_SECRET}" ] || fail "Garage did not disclose the stored secret; cannot verify credentials"
+        if [ "${STORED_SECRET}" != "${GARAGE_SECRET_ACCESS_KEY}" ]; then
+            fail "key ${GARAGE_ACCESS_KEY_ID} exists with a different secret; refusing to overwrite (rotate via Garage admin API)"
+        fi
+        echo "[garage-init] Stored secret matches configuration; skipping import."
+        SKIP_IMPORT=1
+    else
+        echo "[garage-init] Key not present; will import."
+    fi
+
+    # Import access key with the configured secret, unless the lookup above
+    # already proved the stored secret matches. Any rejection fails loudly;
+    # a stale grant from an older secret can never satisfy this run.
+    if [ "${SKIP_IMPORT}" != "1" ]; then
+        if api_post "/v1/key/import" "{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"${KEY_NAME}\"}" >/dev/null; then
+            echo "[garage-init] Key imported."
+        else
+            fail "key import request failed"
+        fi
+    fi
+    RESOLVED_KEY_ID="${GARAGE_ACCESS_KEY_ID}"
 else
-    echo "[garage-init] Key not present; will import."
+    [ "${MODE}" = "managed" ] \
+        || fail "unknown GARAGE_KEY_MODE '${MODE}' (want managed or import)"
+    case "${KEY_NAME}" in
+        *[!A-Za-z0-9_-]*|'') fail "GARAGE_KEY_NAME must be non-empty [A-Za-z0-9_-]" ;;
+    esac
+
+    # --- Managed mode: Garage-native key lifecycle --------------------------
+    # The active key name persists across restarts so rotated names are
+    # honored; a fresh volume starts from KEY_NAME.
+    ACTIVE_NAME="${KEY_NAME}"
+    if [ -f "${STATE_FILE}" ]; then
+        SAVED=$(tr -d ' \t\r\n' < "${STATE_FILE}" 2>/dev/null || true)
+        [ -n "${SAVED}" ] && ACTIVE_NAME="${SAVED}"
+    fi
+
+    KEY_LIST=$(api_get "/v1/key?list")
+    MATCHES=$(key_id_for_name "${ACTIVE_NAME}" "${KEY_LIST}")
+    N_MATCHES=$(printf '%s' "${MATCHES}" | grep -c . || true)
+
+    if [ -n "${GARAGE_ROTATE:-}" ]; then
+        # Explicit rotation: mint a new timestamped key, repoint the
+        # credentials file, keep the old key until the operator restarts
+        # dependents and prunes it (see GARAGE_PRUNE_KEY_ID above).
+        STAMP=$(date -u +%Y%m%d-%H%M%S)
+        NEW_NAME="${KEY_NAME}-${STAMP}"
+        CREATED=$(api_post "/v1/key" "{\"name\":\"${NEW_NAME}\"}")
+        NEW_ID=$(printf '%s' "${CREATED}" | json_field accessKeyId)
+        NEW_SECRET=$(printf '%s' "${CREATED}" | json_field secretAccessKey)
+        [ -n "${NEW_ID}" ] || fail "key creation did not return an ID"
+        [ -n "${NEW_SECRET}" ] || fail "key creation did not return a secret"
+        ACTIVE_NAME="${NEW_NAME}"
+        write_creds_file "${NEW_ID}" "${NEW_SECRET}"
+        echo "[garage-init] Rotated: new key ${NEW_ID} (${NEW_NAME}) written to credentials file."
+        if [ "${N_MATCHES}" -gt 0 ]; then
+            echo "[garage-init] Superseded key(s) still active: $(printf '%s' "${MATCHES}" | tr '\n' ' ')"
+            echo "[garage-init] Restart api, then revoke the old key ID(s) with a follow-up run setting GARAGE_REVOKE_KEY_ID=<id>."
+        fi
+        RESOLVED_KEY_ID="${NEW_ID}"
+    elif [ "${N_MATCHES}" -eq 1 ]; then
+        # Idempotent rerun: reuse the existing key, refreshing the
+        # credentials file from the stored secret (self-healing when the
+        # volume was lost; the volume is the only secret copy otherwise).
+        RESOLVED_KEY_ID=$(printf '%s' "${MATCHES}" | head -1)
+        KEY_INFO=$(api_get "/v1/key?id=${RESOLVED_KEY_ID}&showSecretKey=true")
+        STORED_SECRET=$(printf '%s' "${KEY_INFO}" | json_field secretAccessKey)
+        [ -n "${STORED_SECRET}" ] || fail "Garage did not disclose the stored secret for ${RESOLVED_KEY_ID}; cannot rewrite credentials file"
+        write_creds_file "${RESOLVED_KEY_ID}" "${STORED_SECRET}"
+        echo "[garage-init] Reusing existing key ${RESOLVED_KEY_ID}; credentials file refreshed."
+    elif [ "${N_MATCHES}" -eq 0 ]; then
+        # Clean install (or post-restore empty cluster): mint via AddKey.
+        CREATED=$(api_post "/v1/key" "{\"name\":\"${ACTIVE_NAME}\"}")
+        RESOLVED_KEY_ID=$(printf '%s' "${CREATED}" | json_field accessKeyId)
+        NEW_SECRET=$(printf '%s' "${CREATED}" | json_field secretAccessKey)
+        [ -n "${RESOLVED_KEY_ID}" ] || fail "key creation did not return an ID"
+        [ -n "${NEW_SECRET}" ] || fail "key creation did not return a secret"
+        write_creds_file "${RESOLVED_KEY_ID}" "${NEW_SECRET}"
+        echo "[garage-init] Created key ${RESOLVED_KEY_ID} (${ACTIVE_NAME})."
+    else
+        fail "several keys named '${ACTIVE_NAME}' exist; refusing to guess (delete extras or set GARAGE_KEY_NAME)"
+    fi
 fi
 
 bucket_keys_region() {
     # Print the bucket's keys array region for permission checks.
-    # wget exit status is checked separately: in a pipeline the shell only
-    # sees sed's status, which would mask fetch failures as "no access".
-    BUCKET_JSON=$(wget -qO- --header="${AUTH}" "${ADMIN}/v1/bucket?globalAlias=bifrost-docs" 2>/dev/null) \
-        || fail "could not fetch bucket state"
+    BUCKET_JSON=$(api_get "/v1/bucket?globalAlias=bifrost-docs")
     [ -n "${BUCKET_JSON}" ] || fail "empty bucket state response"
     printf '%s' "${BUCKET_JSON}" | sed -n '/"keys": *\[/,/"objects":/p'
 }
 
 key_has_full_access() {
-    # True when the entry for the configured key itself holds
+    # True when the entry for the resolved key itself holds
     # read/write/owner. Flags are matched per entry (split on entry
     # boundaries), never across the whole keys array, so another key's
     # permissions cannot satisfy this check. Spacing after colons varies
@@ -140,7 +303,7 @@ key_has_full_access() {
     KEYS_REGION=$(bucket_keys_region) || return 1
     # Newlines/tabs are folded to spaces first so the matcher below needs
     # no escape-heavy whitespace classes (portable across mawk/busybox/gawk).
-    printf '%s' "${KEYS_REGION}" | tr '\n\t' '  ' | awk -v id="${GARAGE_ACCESS_KEY_ID}" '
+    printf '%s' "${KEYS_REGION}" | tr '\n\t' '  ' | awk -v id="${RESOLVED_KEY_ID}" '
         { buf = buf $0 }
         END {
             n = split(buf, recs, /}[, ]*[{]/)
@@ -155,27 +318,8 @@ key_has_full_access() {
         }'
 }
 
-# Import access key with the configured secret, unless the lookup above
-# already proved the stored secret matches. Any rejection fails loudly;
-# a stale grant from an older secret can never satisfy this run.
-if [ "${SKIP_IMPORT}" != "1" ]; then
-    if wget -qO /dev/null \
-        --header="${AUTH}" \
-        --header="Content-Type: application/json" \
-        --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
-        "${ADMIN}/v1/key/import" 2>/dev/null; then
-        echo "[garage-init] Key imported."
-    else
-        fail "key import request failed"
-    fi
-fi
-
 # Grant key full access to bucket; any failure fails the container.
-if wget -qO /dev/null \
-    --header="${AUTH}" \
-    --header="Content-Type: application/json" \
-    --post-data="{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" \
-    "${ADMIN}/v1/bucket/allow" 2>/dev/null; then
+if api_post "/v1/bucket/allow" "{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${RESOLVED_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null; then
     echo "[garage-init] Key permissions set."
 else
     fail "bucket permission grant request failed"
@@ -183,8 +327,8 @@ fi
 
 # Confirm the key itself actually holds read/write/owner before success.
 if key_has_full_access; then
-    echo "[garage-init] Key verified with read/write/owner on bucket."
+    echo "[garage-init] Key ${RESOLVED_KEY_ID} verified with read/write/owner on bucket."
 else
-    fail "key ${GARAGE_ACCESS_KEY_ID} lacks read/write/owner on bucket after grant"
+    fail "key ${RESOLVED_KEY_ID} lacks read/write/owner on bucket after grant"
 fi
 echo "[garage-init] Initialization complete."

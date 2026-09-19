@@ -65,10 +65,19 @@ services:
         condition: service_healthy
     volumes:
       - ./scripts/garage-init.sh:/garage-init.sh:ro
+      - bifrost_docsgarage_creds:/run/garage-creds
     environment:
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required}
-      GARAGE_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY_ID:?GARAGE_ACCESS_KEY_ID is required}
-      GARAGE_SECRET_ACCESS_KEY: ${GARAGE_SECRET_ACCESS_KEY:?GARAGE_SECRET_ACCESS_KEY is required}
+      # Key lifecycle (issues #107, #109). Managed mode (default) mints keys
+      # via POST /v1/key and writes /run/garage-creds/s3.env; import mode is
+      # restore-only and needs the legacy pair below.
+      GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-managed}
+      GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-bifrost-docs-key}
+      GARAGE_CREDS_FILE: /run/garage-creds/s3.env
+      GARAGE_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY_ID:-}
+      GARAGE_SECRET_ACCESS_KEY: ${GARAGE_SECRET_ACCESS_KEY:-}
+      GARAGE_ROTATE: ${GARAGE_ROTATE:-}
+      GARAGE_REVOKE_KEY_ID: ${GARAGE_REVOKE_KEY_ID:-}
     entrypoint: ["sh", "/garage-init.sh"]
 
   # Valkey (Redis-compatible cache and pub/sub — BSD-3-Clause, replaces SSPL Redis)
@@ -139,6 +148,8 @@ services:
   api:
     image: jackmusick/bifrost-docs-api:latest
     container_name: bifrost-docs-api
+    volumes:
+      - bifrost_docsgarage_creds:/run/garage-creds:ro
     environment:
       # Core
       BIFROST_DOCS_ENVIRONMENT: ${BIFROST_DOCS_ENVIRONMENT:-production}
@@ -161,10 +172,11 @@ services:
       BIFROST_DOCS_WEBAUTHN_RP_ID: ${BIFROST_DOCS_WEBAUTHN_RP_ID:-localhost}
       BIFROST_DOCS_WEBAUTHN_RP_NAME: ${BIFROST_DOCS_WEBAUTHN_RP_NAME:-Bifrost Docs}
       BIFROST_DOCS_WEBAUTHN_ORIGIN: ${BIFROST_DOCS_WEBAUTHN_ORIGIN:-http://localhost:3000}
-      # S3/Garage Storage
+      # S3/Garage Storage (credentials come from the garage-creds volume
+      # written by garage-init in managed mode; explicit BIFROST_DOCS_S3_*
+      # env below still wins when set)
       BIFROST_DOCS_S3_ENDPOINT: http://garage:3900
-      BIFROST_DOCS_S3_ACCESS_KEY: ${GARAGE_ACCESS_KEY_ID:?GARAGE_ACCESS_KEY_ID is required}
-      BIFROST_DOCS_S3_SECRET_KEY: ${GARAGE_SECRET_ACCESS_KEY:?GARAGE_SECRET_ACCESS_KEY is required}
+      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
       BIFROST_DOCS_S3_BUCKET: ${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}
       BIFROST_DOCS_S3_REGION: us-east-1
       # OpenAI (for vector search)
@@ -230,3 +242,4 @@ volumes:
   bifrost_docsvalkey_data:
   bifrost_docsgarage_meta:
   bifrost_docsgarage_data:
+  bifrost_docsgarage_creds:
