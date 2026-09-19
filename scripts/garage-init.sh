@@ -97,18 +97,36 @@ fi
 
 bucket_keys_region() {
     # Print the bucket's keys array region for permission checks.
-    wget -qO- --header="${AUTH}" "${ADMIN}/v1/bucket?globalAlias=bifrost-docs" 2>/dev/null \
-        | sed -n '/"keys": *\[/,/"objects":/p' || fail "could not fetch bucket state"
+    # wget exit status is checked separately: in a pipeline the shell only
+    # sees sed's status, which would mask fetch failures as "no access".
+    BUCKET_JSON=$(wget -qO- --header="${AUTH}" "${ADMIN}/v1/bucket?globalAlias=bifrost-docs" 2>/dev/null) \
+        || fail "could not fetch bucket state"
+    [ -n "${BUCKET_JSON}" ] || fail "empty bucket state response"
+    printf '%s' "${BUCKET_JSON}" | sed -n '/"keys": *\[/,/"objects":/p'
 }
 
 key_has_full_access() {
-    # True when the configured key holds read/write/owner on the bucket.
-    # Spacing after colons varies (compact vs pretty JSON), so allow it.
+    # True when the entry for the configured key itself holds
+    # read/write/owner. Flags are matched per entry (split on entry
+    # boundaries), never across the whole keys array, so another key's
+    # permissions cannot satisfy this check. Spacing after colons varies
+    # (compact vs pretty JSON), so it is allowed in every pattern.
     KEYS_REGION=$(bucket_keys_region) || return 1
-    printf '%s' "${KEYS_REGION}" | grep -q "\"accessKeyId\": *\"${GARAGE_ACCESS_KEY_ID}\"" &&
-        printf '%s' "${KEYS_REGION}" | grep -q '"read": *true' &&
-        printf '%s' "${KEYS_REGION}" | grep -q '"write": *true' &&
-        printf '%s' "${KEYS_REGION}" | grep -q '"owner": *true'
+    # Newlines/tabs are folded to spaces first so the matcher below needs
+    # no escape-heavy whitespace classes (portable across mawk/busybox/gawk).
+    printf '%s' "${KEYS_REGION}" | tr '\n\t' '  ' | awk -v id="${GARAGE_ACCESS_KEY_ID}" '
+        { buf = buf $0 }
+        END {
+            n = split(buf, recs, /}, *{/)
+            for (i = 1; i <= n; i++) {
+                pat = "\"accessKeyId\" *: *\"" id "\""
+                if (recs[i] ~ pat &&
+                    recs[i] ~ /"read" *: *true/ &&
+                    recs[i] ~ /"write" *: *true/ &&
+                    recs[i] ~ /"owner" *: *true/) exit 0
+            }
+            exit 1
+        }'
 }
 
 if key_has_full_access; then

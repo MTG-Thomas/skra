@@ -233,3 +233,32 @@ def test_idempotent_rerun_skips_import_and_allow(stub_api: Any) -> None:
     assert "already has read/write/owner" in result.stdout
     assert state.calls == []
     assert_secret_absent(result, VALID_SECRET)
+
+
+OTHER_KEY_ID = "GK000000000000000000000001"
+
+
+def test_other_key_permissions_do_not_satisfy_target(stub_api: Any) -> None:
+    # The review's exact scenario: the target entry exists but is
+    # permissionless while another key holds full access. Region-wide
+    # flag greps falsely accepted this; per-entry matching must not.
+    url, state = stub_api
+    state.grants[OTHER_KEY_ID] = {"read": True, "write": True, "owner": True}
+    state.grants[VALID_KEY_ID] = {"read": True, "write": False, "owner": False}
+    state.record_allow = False
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode != 0
+    assert "lacks read/write/owner" in result.stderr
+    assert "Key verified" not in result.stdout
+    assert_secret_absent(result, VALID_SECRET)
+
+
+def test_target_key_accepted_beside_weaker_key(stub_api: Any) -> None:
+    url, state = stub_api
+    state.grants[OTHER_KEY_ID] = {"read": True, "write": False, "owner": False}
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode == 0, result.stderr
+    assert "Key verified with read/write/owner" in result.stdout
+    assert_secret_absent(result, VALID_SECRET)
