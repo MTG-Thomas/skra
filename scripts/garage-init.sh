@@ -4,8 +4,39 @@
 # Idempotent: safe to re-run on stack restarts.
 set -e
 
-ADMIN="http://garage:3903"
+ADMIN="${GARAGE_ADMIN_URL:-http://garage:3903}"
 AUTH="Authorization: Bearer ${GARAGE_ADMIN_TOKEN}"
+
+fail() {
+    echo "[garage-init] ERROR: $1" >&2
+    exit 1
+}
+
+# Garage v1.3.1 only accepts key IDs as `GK` + 24 hex chars and secrets
+# as 64 hex chars. Validate upfront: without this, rejected imports
+# surface later as a cryptic S3 "No such key".
+case "${GARAGE_ACCESS_KEY_ID}" in
+    GK????????????????????????) ;;
+    *)
+        echo "[garage-init] ERROR: GARAGE_ACCESS_KEY_ID must be 'GK' followed by 24 hex chars" >&2
+        echo '[garage-init] Generate with: echo -n "GK$(openssl rand -hex 12)"' >&2
+        exit 1
+        ;;
+esac
+case "${GARAGE_ACCESS_KEY_ID}" in
+    GK*[!0-9a-f]*) fail "GARAGE_ACCESS_KEY_ID suffix must be hex" ;;
+esac
+case "${GARAGE_SECRET_ACCESS_KEY}" in
+    ????????????????????????????????????????????????????????????????) ;;
+    *)
+        echo "[garage-init] ERROR: GARAGE_SECRET_ACCESS_KEY must be 64 hex chars" >&2
+        echo "[garage-init] Generate with: openssl rand -hex 32" >&2
+        exit 1
+        ;;
+esac
+case "${GARAGE_SECRET_ACCESS_KEY}" in
+    *[!0-9a-f]*) fail "GARAGE_SECRET_ACCESS_KEY must be hex" ;;
+esac
 
 echo "[garage-init] Waiting for admin API..."
 until wget -qO /dev/null --header="${AUTH}" "${ADMIN}/v1/health" 2>/dev/null; do
@@ -64,20 +95,58 @@ if [ -z "${BUCKET_ID}" ]; then
   exit 1
 fi
 
-# Import access key with deterministic credentials (idempotent)
-wget -qO /dev/null \
-  --header="${AUTH}" \
-  --header="Content-Type: application/json" \
-  --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
-  "${ADMIN}/v1/key/import" 2>/dev/null || true
+bucket_keys_region() {
+    # Print the bucket's keys array region for permission checks.
+    wget -qO- --header="${AUTH}" "${ADMIN}/v1/bucket?globalAlias=bifrost-docs" 2>/dev/null \
+        | sed -n '/"keys": *\[/,/"objects":/p' || fail "could not fetch bucket state"
+}
 
-echo "[garage-init] Key imported."
+key_has_full_access() {
+    # True when the configured key holds read/write/owner on the bucket.
+    # Spacing after colons varies (compact vs pretty JSON), so allow it.
+    KEYS_REGION=$(bucket_keys_region) || return 1
+    printf '%s' "${KEYS_REGION}" | grep -q "\"accessKeyId\": *\"${GARAGE_ACCESS_KEY_ID}\"" &&
+        printf '%s' "${KEYS_REGION}" | grep -q '"read": *true' &&
+        printf '%s' "${KEYS_REGION}" | grep -q '"write": *true' &&
+        printf '%s' "${KEYS_REGION}" | grep -q '"owner": *true'
+}
 
-# Grant key full access to bucket (idempotent)
-wget -qO /dev/null \
-  --header="${AUTH}" \
-  --header="Content-Type: application/json" \
-  --post-data="{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" \
-  "${ADMIN}/v1/bucket/allow" 2>/dev/null || true
+if key_has_full_access; then
+    echo "[garage-init] Key already has read/write/owner on bucket; nothing to do."
+    echo "[garage-init] Initialization complete."
+    exit 0
+fi
 
-echo "[garage-init] Key permissions set. Initialization complete."
+# Import access key. A repeated import of an existing key can fail here;
+# the grant and the final confirmation below arbitrate the real outcome.
+IMPORT_OK=1
+if wget -qO /dev/null \
+    --header="${AUTH}" \
+    --header="Content-Type: application/json" \
+    --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
+    "${ADMIN}/v1/key/import" 2>/dev/null; then
+    IMPORT_OK=0
+    echo "[garage-init] Key imported."
+fi
+
+# Grant key full access to bucket.
+if wget -qO /dev/null \
+    --header="${AUTH}" \
+    --header="Content-Type: application/json" \
+    --post-data="{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" \
+    "${ADMIN}/v1/bucket/allow" 2>/dev/null; then
+    echo "[garage-init] Key permissions set."
+fi
+
+# Confirm the key actually holds read/write/owner before declaring success.
+# This is the arbiter: a failed import or grant cannot print success.
+if key_has_full_access; then
+    echo "[garage-init] Key verified with read/write/owner on bucket."
+else
+    if [ "${IMPORT_OK}" -ne 0 ]; then
+        fail "key import failed and key ${GARAGE_ACCESS_KEY_ID} has no bucket access"
+    else
+        fail "key ${GARAGE_ACCESS_KEY_ID} lacks read/write/owner on bucket after grant"
+    fi
+fi
+echo "[garage-init] Initialization complete."
