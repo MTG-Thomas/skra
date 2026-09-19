@@ -2,7 +2,10 @@
 
 import importlib
 
-from src.config import Settings
+import pytest
+from pydantic import ValidationError
+
+from src.config import Settings, _read_env_file
 
 
 def test_storage_configured_uses_s3_backend_by_default():
@@ -48,6 +51,56 @@ def test_rate_limiting_can_be_disabled(monkeypatch):
 
     assert reloaded.RATE_LIMITING_ENABLED is False
     assert reloaded.limiter.middleware_class is None
+
+
+def test_s3_credentials_file_fills_unset_keys(tmp_path):
+    """Managed credentials file supplies keys the env did not set."""
+    creds = tmp_path / "s3.env"
+    creds.write_text(
+        "# written by garage-init\nS3_ACCESS_KEY_ID=GKfilekey\nS3_SECRET_ACCESS_KEY=filesecret\n"
+    )
+    settings = Settings(secret_key="x" * 32, s3_credentials_file=str(creds))
+
+    assert settings.s3_access_key == "GKfilekey"
+    assert settings.s3_secret_key == "filesecret"
+    assert settings.s3_configured is True
+
+
+def test_explicit_s3_keys_win_over_credentials_file(tmp_path):
+    """Explicit env/kwarg credentials are never overwritten by the file."""
+    creds = tmp_path / "s3.env"
+    creds.write_text("S3_ACCESS_KEY_ID=GKfilekey\nS3_SECRET_ACCESS_KEY=filesecret\n")
+    settings = Settings(
+        secret_key="x" * 32,
+        s3_access_key="explicit",
+        s3_secret_key="explicit-secret",
+        s3_credentials_file=str(creds),
+    )
+
+    assert settings.s3_access_key == "explicit"
+    assert settings.s3_secret_key == "explicit-secret"
+
+
+def test_missing_s3_credentials_file_fails_closed(tmp_path):
+    """A configured-but-absent file is a startup error, not silent S3-off."""
+    with pytest.raises(ValidationError):
+        Settings(
+            secret_key="x" * 32,
+            s3_credentials_file=str(tmp_path / "absent.env"),
+        )
+
+
+def test_read_env_file_ignores_comments_and_blank_lines(tmp_path):
+    """Parser tolerates comments, blanks, and quoted values."""
+    creds = tmp_path / "s3.env"
+    creds.write_text(
+        "\n# comment\nS3_ACCESS_KEY_ID = GKabc\nS3_SECRET_ACCESS_KEY='quoted'\nNOEQUALS\n"
+    )
+
+    assert _read_env_file(str(creds)) == {
+        "S3_ACCESS_KEY_ID": "GKabc",
+        "S3_SECRET_ACCESS_KEY": "quoted",
+    }
 
 
 def test_noop_limiter_decorator_returns_original_function():
