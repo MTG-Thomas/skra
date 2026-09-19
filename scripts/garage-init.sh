@@ -7,40 +7,6 @@ set -e
 ADMIN="http://garage:3903"
 AUTH="Authorization: Bearer ${GARAGE_ADMIN_TOKEN}"
 
-# Garage v1.3.1 only accepts key IDs as `GK` + 24 hex chars and secrets as
-# 64 hex chars. Validate upfront: the API calls below mask failures, so an
-# invalid format would otherwise surface later as a cryptic S3 "No such key".
-case "${GARAGE_ACCESS_KEY_ID}" in
-  GK????????????????????????)
-    ;;
-  *)
-    echo "[garage-init] ERROR: GARAGE_ACCESS_KEY_ID must be 'GK' followed by 24 hex chars" >&2
-    echo "[garage-init] Generate with: echo -n \"GK\$(openssl rand -hex 12)\"" >&2
-    exit 1
-    ;;
-esac
-case "${GARAGE_ACCESS_KEY_ID}" in
-  GK*[!0-9a-f]*)
-    echo "[garage-init] ERROR: GARAGE_ACCESS_KEY_ID suffix must be hex" >&2
-    exit 1
-    ;;
-esac
-case "${GARAGE_SECRET_ACCESS_KEY}" in
-  ????????????????????????????????????????????????????????????????)
-    ;;
-  *)
-    echo "[garage-init] ERROR: GARAGE_SECRET_ACCESS_KEY must be 64 hex chars" >&2
-    echo "[garage-init] Generate with: openssl rand -hex 32" >&2
-    exit 1
-    ;;
-esac
-case "${GARAGE_SECRET_ACCESS_KEY}" in
-  *[!0-9a-f]*)
-    echo "[garage-init] ERROR: GARAGE_SECRET_ACCESS_KEY must be hex" >&2
-    exit 1
-    ;;
-esac
-
 echo "[garage-init] Waiting for admin API..."
 until wget -qO /dev/null --header="${AUTH}" "${ADMIN}/v1/health" 2>/dev/null; do
   sleep 2
