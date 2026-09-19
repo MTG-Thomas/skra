@@ -78,6 +78,13 @@ class StateFetcher:
 
         return state
 
+    async def list_all_attachments(self, org_id: str) -> list[dict[str, Any]]:
+        """List every migrated attachment record for an organization (GET only)."""
+        return await self._paginate_all(
+            self.client.list_attachments,
+            org_id,
+        )
+
     async def fetch_for_org(self, org_id: str) -> ExistingState:
         """Fetch all entities for a specific organization."""
         state = await self.fetch_all_orgs()

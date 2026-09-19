@@ -197,6 +197,59 @@ def _parse_all_csv_files(
     return parsed
 
 
+def _parse_export_with_progress(
+    parser: CSVParser,
+    export_path: Path,
+    validation: dict[str, Any],
+) -> ParsedData:
+    """Parse all CSV files while showing a progress spinner."""
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Parsing...", total=None)
+        return _parse_all_csv_files(parser, export_path, validation, progress, task)
+
+
+def _filter_org_records(
+    parsed: ParsedData,
+    org_itglue_id: str,
+    org_name: str,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Filter parsed CSV data to one organization (configurations, locations, documents, passwords, custom assets).
+
+    CSV files reference organizations by IT Glue ID or by name.
+    """
+    # Note: organization_id field contains org NAME from IT Glue CSV
+    def matches_org(item: dict[str, Any]) -> bool:
+        csv_org = str(item.get("organization_id") or item.get("organization") or "")
+        return csv_org == org_itglue_id or csv_org == org_name
+
+    org_configs = [c for c in parsed.configurations if matches_org(c)]
+    org_locations = [loc for loc in parsed.locations if matches_org(loc)]
+    org_documents = [d for d in parsed.documents if matches_org(d)]
+    org_passwords = [p for p in parsed.passwords if matches_org(p)]
+
+    # Flatten custom assets for this org
+    org_custom_assets = []
+    for type_slug, assets in parsed.custom_assets.items():
+        for asset in assets:
+            if matches_org(asset):
+                asset["_type_slug"] = type_slug
+                org_custom_assets.append(asset)
+
+    return org_configs, org_locations, org_documents, org_passwords, org_custom_assets
+
+
 def _match_organizations(
     parsed_orgs: list[dict[str, Any]],
     existing_orgs: list[dict[str, Any]],
@@ -597,16 +650,7 @@ def preview(
     # Step 3: Parse CSV files
     console.print("[bold]Step 3:[/bold] Parsing CSV files...")
     parser = CSVParser()
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Parsing...", total=None)
-        parsed = _parse_all_csv_files(parser, export_path, validation, progress, task)
+    parsed = _parse_export_with_progress(parser, export_path, validation)
 
     console.print(f"  [green]Parsed {len(parsed.organizations)} organizations[/green]")
     console.print()
@@ -2660,16 +2704,7 @@ async def _run_sync(
     # Parse all CSV files
     parser = CSVParser()
     console.print("[bold]Parsing CSV files...[/bold]")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Parsing...", total=None)
-        parsed = _parse_all_csv_files(parser, export_path, validation, progress, task)
+    parsed = _parse_export_with_progress(parser, export_path, validation)
 
     console.print(f"  [green]Parsed {len(parsed.organizations)} organizations[/green]")
     console.print()
@@ -2813,19 +2848,13 @@ async def _run_sync(
                 console.print(f"    [dim]Sample API document itglue_ids: {sample_api_doc_ids}[/dim]")
 
             # Filter CSV data to this org
-            # CSV files use either 'organization_id' or 'organization' column
-            def matches_org(
-                item: dict,
-                expected_itglue_id: str = org_itglue_id,
-                expected_name: str = org_name,
-            ) -> bool:
-                csv_org = str(item.get("organization_id") or item.get("organization") or "")
-                return csv_org == expected_itglue_id or csv_org == expected_name
-
-            org_configs = [c for c in parsed.configurations if matches_org(c)]
-            org_locations = [loc for loc in parsed.locations if matches_org(loc)]
-            org_documents = [d for d in parsed.documents if matches_org(d)]
-            org_passwords = [p for p in parsed.passwords if matches_org(p)]
+            (
+                org_configs,
+                org_locations,
+                org_documents,
+                org_passwords,
+                org_custom_assets,
+            ) = _filter_org_records(parsed, org_itglue_id, org_name)
 
             # Debug: show filter results
             console.print(f"  [dim]CSV items for org (matching '{org_itglue_id}' or '{org_name}'):[/dim]")
@@ -2843,14 +2872,6 @@ async def _run_sync(
             if org_documents:
                 sample_csv_doc_ids = [str(d.get("id", "")) for d in org_documents[:5]]
                 console.print(f"    [dim]Sample CSV document ids: {sample_csv_doc_ids}[/dim]")
-
-            # Flatten custom assets for this org
-            org_custom_assets = []
-            for type_slug, assets in parsed.custom_assets.items():
-                for asset in assets:
-                    if matches_org(asset):
-                        asset["_type_slug"] = type_slug
-                        org_custom_assets.append(asset)
 
             attachment_summary = (
                 _build_attachment_validation_summary(
@@ -3237,25 +3258,6 @@ def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
         return False
 
 
-async def _paginate_org_records(
-    fetch_fn: Any,
-    org_id: str,
-    **kwargs: Any,
-) -> list[dict[str, Any]]:
-    """Collect every page from a paginated org-scoped list endpoint (GET only)."""
-    records: list[dict[str, Any]] = []
-    offset = 0
-    limit = 100
-    while True:
-        result = await fetch_fn(org_id, limit=limit, offset=offset, **kwargs)
-        items = result.get("items", [])
-        records.extend(items)
-        if len(items) < limit:
-            break
-        offset += limit
-    return records
-
-
 def _invert_entity_identities(
     state: ExistingState,
 ) -> dict[str, tuple[str, str]]:
@@ -3278,7 +3280,7 @@ def _invert_entity_identities(
 
 
 async def _verify_org_fidelity(
-    client: BifrostDocsClient,
+    fetcher: StateFetcher,
     export_path: Path,
     org_name: str,
     org_itglue_id: str,
@@ -3324,7 +3326,7 @@ async def _verify_org_fidelity(
     unresolved: list[MigratedAttachment] = []
     skipped_records = 0
     try:
-        records = await _paginate_org_records(client.list_attachments, org_uuid)
+        records = await fetcher.list_all_attachments(org_uuid)
     except APIError as e:
         warnings.append(f"Could not list migrated attachments: {e}")
         records = []
@@ -3375,7 +3377,7 @@ async def _verify_org_fidelity(
             )
             continue
         try:
-            migrated_doc = await client.get_document(org_uuid, migrated_uuid)
+            migrated_doc = await fetcher.client.get_document(org_uuid, migrated_uuid)
         except APIError as e:
             warnings.append(
                 f"Could not fetch migrated document '{doc_name}': {e}"
@@ -3488,15 +3490,7 @@ async def _run_verify(
     validation = _validate_export_path(export_path)
     parser = CSVParser()
     console.print("[bold]Parsing CSV files...[/bold]")
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Parsing...", total=None)
-        parsed = _parse_all_csv_files(parser, export_path, validation, progress, task)
+    parsed = _parse_export_with_progress(parser, export_path, validation)
 
     if target_org:
         orgs_to_verify = [
@@ -3562,29 +3556,16 @@ async def _run_verify(
 
             state = await fetcher.fetch_for_org(org_uuid)
 
-            def matches_org(
-                item: dict,
-                expected_itglue_id: str = org_itglue_id,
-                expected_name: str = org_name,
-            ) -> bool:
-                csv_org = str(
-                    item.get("organization_id") or item.get("organization") or ""
-                )
-                return csv_org == expected_itglue_id or csv_org == expected_name
-
-            org_configs = [c for c in parsed.configurations if matches_org(c)]
-            org_locations = [loc for loc in parsed.locations if matches_org(loc)]
-            org_documents = [d for d in parsed.documents if matches_org(d)]
-            org_passwords = [p for p in parsed.passwords if matches_org(p)]
-            org_custom_assets = []
-            for type_slug, assets in parsed.custom_assets.items():
-                for asset in assets:
-                    if matches_org(asset):
-                        asset["_type_slug"] = type_slug
-                        org_custom_assets.append(asset)
+            (
+                org_configs,
+                org_locations,
+                org_documents,
+                org_passwords,
+                org_custom_assets,
+            ) = _filter_org_records(parsed, org_itglue_id, org_name)
 
             org_report = await _verify_org_fidelity(
-                client=client,
+                fetcher=fetcher,
                 export_path=export_path,
                 org_name=org_name,
                 org_itglue_id=org_itglue_id,
