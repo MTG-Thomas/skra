@@ -123,19 +123,27 @@ async def publish_export_failed(
 
 async def get_all_organization_ids(
     db: AsyncSession,
+    is_enabled: bool | None = True,
 ) -> list[UUID]:
     """
-    Get all organization IDs.
+    Get organization IDs for default (all-org) exports.
 
-    In the new model, all users can see all organizations.
+    In the new model, all users can see all organizations, but archived
+    (disabled) organizations hide from default exports (issue #93). An
+    explicit organization selection in the export request is opt-in and
+    bypasses this filter (see process_export).
 
     Args:
         db: Database session
+        is_enabled: Filter by is_enabled status (None = no filter)
 
     Returns:
         List of organization UUIDs
     """
-    result = await db.execute(select(Organization.id))
+    query = select(Organization.id)
+    if is_enabled is not None:
+        query = query.where(Organization.is_enabled.is_(is_enabled))
+    result = await db.execute(query)
     return [row[0] for row in result.fetchall()]
 
 
@@ -490,11 +498,15 @@ async def process_export(export_id: UUID) -> None:
             await repo.update_status(export, ExportStatus.PROCESSING)
             await db.commit()
 
-            # Determine which organization IDs to export
+            # Determine which organization IDs to export. An explicit
+            # selection is opt-in (like a direct org-scoped read): archived
+            # orgs export when explicitly selected. The default all-org
+            # export hides archived orgs (issue #93). No per-org permission
+            # is inferred either way; export creation stays admin-only.
             if export.organization_ids:
                 org_ids = [UUID(org_id) for org_id in export.organization_ids]
             else:
-                # Export all organizations (all users can see all orgs in new model)
+                # Export enabled organizations (all users can see all orgs in new model)
                 org_ids = await get_all_organization_ids(db)
 
             if not org_ids:

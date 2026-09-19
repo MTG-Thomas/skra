@@ -118,10 +118,11 @@ async def search(
             )
         org_ids = [org_id]
     else:
-        # Get all organizations (all users can see all orgs in new model)
-        # For global search, always filter out disabled organizations
-        orgs = await org_repo.get_all()
-        org_ids = [org.id for org in orgs if org.is_enabled]
+        # Get all organizations (all users can see all orgs in new model).
+        # Archived organizations hide by default; show_disabled=true includes
+        # them for any role allowed to read the records (issue #93).
+        orgs = await org_repo.get_all(is_enabled=None if show_disabled else True)
+        org_ids = [org.id for org in orgs]
 
     if not org_ids:
         return SearchResponse(query=q, results=[])
