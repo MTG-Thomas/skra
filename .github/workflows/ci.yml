@@ -378,9 +378,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Guards the --profile client stack wiring (Vite dev stage on 3000 +
-    # node health probe + /health API proxy). Browser auth flow stays a
-    # VM-side proof until the E2E fixtures stabilize, mirroring e2e-tests.
-    continue-on-error: true
+    # node health probe + /health API proxy). Blocking: this profile was
+    # silently broken (issue #104), so failure must surface. Browser auth
+    # flow stays a VM-side proof until the E2E fixtures stabilize.
+    # (Deliberately not continue-on-error; also not yet a required branch
+    # status.)
 
     steps:
       - name: Checkout code
