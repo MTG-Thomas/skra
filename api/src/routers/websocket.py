@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from src.config import get_settings
 from src.core.auth import UserPrincipal
 from src.core.database import get_db_context
 from src.core.pubsub import (
@@ -29,13 +30,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websocket"])
 
 
+def is_websocket_origin_allowed(origin: str | None) -> bool:
+    """
+    Check a WebSocket Origin header against the configured frontend/CORS origins.
+
+    Browsers always send Origin on the WebSocket handshake, so cookie
+    authentication (ambient credentials) must only be accepted from an
+    allowlisted origin. A missing or unlisted origin is rejected to prevent
+    cross-site WebSocket hijacking.
+
+    Args:
+        origin: The Origin header value, or None when absent
+
+    Returns:
+        True if the origin is explicitly allowlisted, False otherwise
+    """
+    if not origin:
+        return False
+    allowed = {o.rstrip("/") for o in get_settings().cors_origins_list}
+    return origin.rstrip("/") in allowed
+
+
 async def authenticate_websocket(websocket: WebSocket) -> UserPrincipal | None:
     """
     Authenticate a WebSocket connection.
 
     Checks for authentication token in:
-    1. access_token cookie (browser clients)
-    2. token query parameter (fallback)
+    1. access_token cookie (browser clients) — requires an allowlisted
+       Origin header (see is_websocket_origin_allowed)
+    2. token query parameter (explicit non-browser clients) — no Origin
+       check, so scripts and native apps keep working
 
     Args:
         websocket: The WebSocket connection
@@ -49,15 +73,24 @@ async def authenticate_websocket(websocket: WebSocket) -> UserPrincipal | None:
     from src.models.orm.user import User
 
     token = None
+    from_cookie = False
 
     # Try cookie first (browser clients)
     if "access_token" in websocket.cookies:
         token = websocket.cookies["access_token"]
+        from_cookie = True
     # Fallback to query parameter
     elif "token" in websocket.query_params:
         token = websocket.query_params["token"]
 
     if not token:
+        return None
+
+    # Cookie credentials are ambient: only accept them from an allowlisted
+    # frontend origin. Explicit query-param tokens are presented deliberately
+    # per connection, so they stay exempt for non-browser clients.
+    if from_cookie and not is_websocket_origin_allowed(websocket.headers.get("origin")):
+        logger.warning("Rejected cookie-authenticated WebSocket with disallowed origin.")
         return None
 
     # Check if it's an API key (starts with bifrost_docs)
