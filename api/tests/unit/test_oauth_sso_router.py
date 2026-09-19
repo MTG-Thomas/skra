@@ -90,6 +90,32 @@ async def test_oauth_callback_malformed_cached_state_returns_400_without_consumi
 
 
 @pytest.mark.asyncio
+async def test_oauth_callback_provider_mismatch_returns_400_without_consuming_state(
+    monkeypatch,
+):
+    redis = FakeRedis(
+        json.dumps(
+            {
+                "code_verifier": "verifier",
+                "redirect_uri": "https://azure-docs.midtowntg.com/auth/callback",
+                "provider": "microsoft",
+            }
+        )
+    )
+    monkeypatch.setattr("src.routers.oauth_sso.get_redis", _redis_factory(redis))
+
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.post(
+            "/auth/oauth/callback",
+            json={"provider": "google", "code": "code", "state": "state"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "OAuth provider does not match initiated flow"}
+    assert redis.deleted == []
+
+
+@pytest.mark.asyncio
 async def test_oauth_callback_provider_exchange_failure_returns_generic_400(monkeypatch):
     redis = FakeRedis(
         json.dumps(
