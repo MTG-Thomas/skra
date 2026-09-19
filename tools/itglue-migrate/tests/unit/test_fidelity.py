@@ -19,6 +19,7 @@ from itglue_migrate.verification import (
     UNRESOLVED_ENTITY,
     MigratedAttachment,
     extract_markdown_image_urls,
+    extract_migrated_attachment_ids,
     reconcile_migrated_attachments,
     verify_migrated_document_images,
 )
@@ -41,6 +42,84 @@ def test_extract_markdown_image_urls_in_document_order() -> None:
 def test_extract_markdown_image_urls_empty_content() -> None:
     assert extract_markdown_image_urls("") == []
     assert extract_markdown_image_urls("Just text, no images.") == []
+
+
+def test_extract_migrated_attachment_ids_from_api_links() -> None:
+    content = (
+        "![a](/api/organizations/org-1/attachments/11111111-1111-4111-8111-111111111111/view)\n"
+        "![b](https://api.example.com/api/organizations/org-1/attachments/22222222-2222-4222-8222-222222222222/view)\n"
+        "![c](./images/local.png)\n"
+    )
+
+    assert extract_migrated_attachment_ids(content) == [
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    ]
+
+
+def test_verify_migrated_document_images_counts_api_relative_link_present() -> None:
+    """Server-generated /api/ links are the migrated form: present, unprobed."""
+    calls: list[str] = []
+
+    def checker(url: str) -> bool:
+        calls.append(url)
+        return True
+
+    result = verify_migrated_document_images(
+        document_id="200",
+        document_name="Guide",
+        expected_count=1,
+        image_urls=["/api/organizations/org-1/attachments/att-1/view"],
+        url_checker=checker,
+    )
+
+    assert result.ok is True
+    assert result.present_count == 1
+    assert calls == []
+
+
+def test_verify_migrated_document_images_counts_absolute_api_link_present() -> None:
+    """Absolute links back onto the API origin are migrated content too."""
+    calls: list[str] = []
+
+    def checker(url: str) -> bool:
+        calls.append(url)
+        return True
+
+    result = verify_migrated_document_images(
+        document_id="200",
+        document_name="Guide",
+        expected_count=1,
+        image_urls=["https://api.example.com/api/organizations/o/attachments/a/view"],
+        url_checker=checker,
+        api_origin=("https", "api.example.com", 443),
+    )
+
+    assert result.ok is True
+    assert result.present_count == 1
+    assert calls == []
+
+
+def test_verify_migrated_document_images_probes_absolute_non_api_link() -> None:
+    """Absolute links off the API origin are still reachability-checked."""
+    calls: list[str] = []
+
+    def checker(url: str) -> bool:
+        calls.append(url)
+        return True
+
+    result = verify_migrated_document_images(
+        document_id="200",
+        document_name="Guide",
+        expected_count=1,
+        image_urls=["https://cdn.example.invalid/a.png"],
+        url_checker=checker,
+        api_origin=("https", "api.example.com", 443),
+    )
+
+    assert result.ok is True
+    assert result.present_count == 1
+    assert calls == ["https://cdn.example.invalid/a.png"]
 
 
 def test_reconcile_migrated_attachments_clean_match() -> None:

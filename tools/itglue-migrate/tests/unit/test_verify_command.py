@@ -544,6 +544,108 @@ async def test_run_verify_rejects_invalid_allowed_hosts(tmp_path: Path) -> None:
     assert exit_code == 1
 
 
+@pytest.mark.asyncio
+async def test_run_verify_document_image_record_attributed_via_content_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document_image record linked from migrated content is accounted for."""
+    export = _copy_fixture(tmp_path)
+    doc_dir = export / "documents" / "DOC-1001-3001 Test Onboarding Guide"
+    doc_dir.mkdir(parents=True)
+    (doc_dir / "present.png").write_bytes(b"PNG")
+    (doc_dir / "index.html").write_text(
+        '<p>guide</p><img src="present.png">', encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            attachments=[
+                {
+                    "id": "aaaaaaaa-1111-4111-8111-111111111111",
+                    "entity_type": "document_image",
+                    "entity_id": "uuid-img-1",
+                    "filename": "present.png",
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            document_content=(
+                "# Guide\n\n"
+                "![diagram](/api/organizations/org-uuid-acme"
+                "/attachments/aaaaaaaa-1111-4111-8111-111111111111/view)\n"
+            ),
+        ),
+    )
+
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=None,
+    )
+
+    assert exit_code == 0
+
+
+@pytest.mark.asyncio
+async def test_run_verify_unreferenced_document_image_is_unexpected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document_image record linked from nothing is orphaned upload residue."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            attachments=[
+                {
+                    "id": "bbbbbbbb-2222-4222-8222-222222222222",
+                    "entity_type": "document_image",
+                    "entity_id": "uuid-img-1",
+                    "filename": "present.png",
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            document_content="# Guide with no images.\n",
+        ),
+    )
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    failures = report["organizations"][0]["attachments"]["failures"]
+    assert len(failures) == 1
+    assert failures[0]["category"] == "unexpected_upload"
+    assert failures[0]["filename"] == "present.png"
+
+
 def test_verify_command_requires_org_or_all(tmp_path: Path) -> None:
     """The wrapper rejects missing and conflicting org selection."""
     runner = CliRunner()

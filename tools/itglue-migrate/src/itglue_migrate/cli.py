@@ -50,12 +50,14 @@ from itglue_migrate.verification import (
     INACCESSIBLE_URL,
     MISSING_ORGANIZATION,
     MISSING_UPLOAD,
+    UNEXPECTED_UPLOAD,
     UNRESOLVED_ENTITY,
     MigratedAttachment,
     MigratedAttachmentReconciliation,
     VerificationFailure,
     collect_embedded_image_references,
     extract_markdown_image_urls,
+    extract_migrated_attachment_ids,
     reconcile_migrated_attachments,
     verify_embedded_images,
     verify_migrated_document_images,
@@ -3420,6 +3422,7 @@ async def _verify_org_fidelity(
     org_passwords: list[dict[str, Any]],
     org_custom_assets: list[dict[str, Any]],
     url_checker: Any | None,
+    api_origin: tuple[str, str, int] | None = None,
 ) -> dict[str, Any]:
     """Run read-only fidelity checks for one organization (GET/HEAD only)."""
     warnings: list[str] = []
@@ -3454,6 +3457,7 @@ async def _verify_org_fidelity(
     migrated_pairs: list[tuple[tuple[str, str, str], str]] = []
     unresolved: list[MigratedAttachment] = []
     sparse_failures: list[VerificationFailure] = []
+    doc_image_records: list[MigratedAttachment] = []
     attachment_result = None
     try:
         records = await fetcher.list_all_attachments(org_uuid)
@@ -3491,12 +3495,24 @@ async def _verify_org_fidelity(
                 )
             )
             continue
+        record_type = str(record.get("entity_type", ""))
+        if record_type == "document_image":
+            # Attributed later via migrated document content links.
+            doc_image_records.append(
+                MigratedAttachment(
+                    attachment_id=str(record.get("id", "")),
+                    entity_type=record_type,
+                    entity_id=str(entity_uuid),
+                    filename=str(filename),
+                )
+            )
+            continue
         identity = identities.get(str(entity_uuid))
         if identity is None:
             unresolved.append(
                 MigratedAttachment(
                     attachment_id=str(record.get("id", "")),
-                    entity_type=str(record.get("entity_type", "")),
+                    entity_type=record_type,
                     entity_id=str(entity_uuid),
                     filename=str(filename),
                 )
@@ -3512,37 +3528,10 @@ async def _verify_org_fidelity(
             unresolved,
         )
     attachment_result.failures.extend(sparse_failures)
-
-    # --- Attachment accessibility (opt-in URL checks only) ---
-    if url_checker is not None:
-        for (export_type, itglue_id, filename), attachment_id in sorted(
-            migrated_pairs
-        ):
-            detail = f"{export_type}/{itglue_id}/{filename}"
-            message = f"Migrated attachment {detail} was not accessible."
-            try:
-                download = await fetcher.client.get_attachment_download_url(
-                    org_uuid, attachment_id
-                )
-                reachable = url_checker(str(download.get("download_url", "")))
-            except APIError as e:
-                reachable = False
-                message = (
-                    f"Migrated attachment {detail} has no accessible "
-                    f"download URL: {e}"
-                )
-            except Exception:
-                reachable = False
-            if not reachable:
-                attachment_result.failures.append(
-                    VerificationFailure(
-                        category=INACCESSIBLE_URL,
-                        message=message,
-                        entity_type=export_type,
-                        entity_id=itglue_id,
-                        filename=filename,
-                    )
-                )
+    probe_targets: list[tuple[str, str, str, str]] = [
+        (export_type, itglue_id, filename, attachment_id)
+        for (export_type, itglue_id, filename), attachment_id in migrated_pairs
+    ]
 
     # --- Embedded images: export files, then migrated document content ---
     image_references = collect_embedded_image_references(export_path, org_documents)
@@ -3554,6 +3543,7 @@ async def _verify_org_fidelity(
     image_failures = list(export_image_result.failures)
     documents_checked = 0
     present_total = 0
+    referenced_ids: set[str] = set()
     for doc in org_documents:
         doc_id = str(doc.get("id", ""))
         doc_name = str(doc.get("name", doc_id))
@@ -3588,15 +3578,73 @@ async def _verify_org_fidelity(
             continue
         documents_checked += 1
         content = str(migrated_doc.get("content", "") or "")
+        referenced_ids.update(extract_migrated_attachment_ids(content))
         result = verify_migrated_document_images(
             document_id=doc_id,
             document_name=doc_name,
             expected_count=refs_by_doc.get(doc_id, 0),
             image_urls=extract_markdown_image_urls(content),
             url_checker=url_checker,
+            api_origin=api_origin,
         )
         present_total += result.present_count
         image_failures.extend(result.failures)
+
+    # --- Document images: attribute via content links, flag orphans ---
+    for record in doc_image_records:
+        if record.attachment_id in referenced_ids:
+            probe_targets.append(
+                (
+                    record.entity_type,
+                    record.entity_id,
+                    record.filename,
+                    record.attachment_id,
+                )
+            )
+            continue
+        attachment_result.failures.append(
+            VerificationFailure(
+                category=UNEXPECTED_UPLOAD,
+                message=(
+                    f"Migrated document image '{record.filename}' is not "
+                    "referenced by any migrated document content."
+                ),
+                entity_type=record.entity_type,
+                entity_id=record.entity_id,
+                filename=record.filename,
+            )
+        )
+
+    # --- Attachment accessibility (opt-in URL checks only) ---
+    if url_checker is not None:
+        for export_type, itglue_id, filename, attachment_id in sorted(
+            probe_targets
+        ):
+            detail = f"{export_type}/{itglue_id}/{filename}"
+            message = f"Migrated attachment {detail} was not accessible."
+            try:
+                download = await fetcher.client.get_attachment_download_url(
+                    org_uuid, attachment_id
+                )
+                reachable = url_checker(str(download.get("download_url", "")))
+            except APIError as e:
+                reachable = False
+                message = (
+                    f"Migrated attachment {detail} has no accessible "
+                    f"download URL: {e}"
+                )
+            except Exception:
+                reachable = False
+            if not reachable:
+                attachment_result.failures.append(
+                    VerificationFailure(
+                        category=INACCESSIBLE_URL,
+                        message=message,
+                        entity_type=export_type,
+                        entity_id=itglue_id,
+                        filename=filename,
+                    )
+                )
 
     embedded_section = {
         "expected_count": export_image_result.expected_count,
@@ -3710,6 +3758,7 @@ async def _run_verify(
 
     try:
         allowed = _probe_allowed_origins(api_url, allowed_hosts)
+        api_origin = _parse_origin(api_url, what="API URL")
     except ValueError as e:
         error_console.print(f"[red]Error:[/red] {e}")
         return 1
@@ -3786,6 +3835,7 @@ async def _run_verify(
 
             org_report = await _verify_org_fidelity(
                 fetcher=fetcher,
+                api_origin=api_origin,
                 export_path=export_path,
                 org_name=org_name,
                 org_itglue_id=org_itglue_id,

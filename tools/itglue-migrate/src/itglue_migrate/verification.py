@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from itglue_migrate.attachments import AttachmentScanner
 from itglue_migrate.document_processor import DocumentProcessor
@@ -25,6 +26,7 @@ MISSING_ORGANIZATION = "missing_organization"
 API_ERROR = "api_error"
 
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)")
+_MIGRATED_ATTACHMENT_ID_RE = re.compile(r"/attachments/([0-9a-fA-F-]{36})/view")
 
 UrlChecker = Callable[[str], bool]
 
@@ -282,6 +284,49 @@ def verify_embedded_images(
     )
 
 
+def extract_migrated_attachment_ids(content: str) -> list[str]:
+    """Extract migrated attachment record IDs linked from markdown content.
+
+    Matches the server-generated ``/attachments/<id>/view`` image links so
+    document-image records can be attributed to the documents referencing
+    them. Returns IDs in document order.
+    """
+    if not content:
+        return []
+    return _MIGRATED_ATTACHMENT_ID_RE.findall(content)
+
+
+def _is_api_migrated_link(url: str, api_origin: tuple[str, str, int] | None) -> bool:
+    """Whether an image URL is the server-generated migrated form.
+
+    Relative ``/api/`` links are always server-generated. Absolute links
+    count when they sit on the API origin under ``/api/``; anything else
+    needs reachability checking (or is broken when relative).
+    """
+    if url.startswith("/api/"):
+        return True
+    if api_origin is None:
+        return False
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").casefold()
+    if not host:
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme,
+        host,
+        port or (443 if parsed.scheme == "https" else 80),
+    ) == api_origin and parsed.path.startswith("/api/")
+
+
 def extract_markdown_image_urls(content: str) -> list[str]:
     """Extract image URLs from migrated markdown document content.
 
@@ -412,14 +457,17 @@ def verify_migrated_document_images(
     image_urls: Iterable[str],
     *,
     url_checker: UrlChecker | None = None,
+    api_origin: tuple[str, str, int] | None = None,
 ) -> EmbeddedImageVerificationResult:
     """Verify image links inside one migrated document's markdown content.
 
-    Relative links were never rewritten to migrated URLs, so they are reported
-    as :data:`BROKEN_LINK`. When fewer absolute links exist than exported
-    images, the deficit is reported as :data:`MISSING_UPLOAD` with both counts
-    in the message. An optional ``url_checker`` marks unreachable absolute
-    links :data:`INACCESSIBLE_URL`.
+    Server-generated ``/api/`` links (relative, or absolute back onto the
+    API origin) are the migrated form and count as present without probing.
+    Other relative links were never rewritten to migrated URLs, so they are
+    reported as :data:`BROKEN_LINK`. When fewer migrated links exist than
+    exported images, the deficit is reported as :data:`MISSING_UPLOAD` with
+    both counts in the message. An optional ``url_checker`` marks unreachable
+    absolute links :data:`INACCESSIBLE_URL`.
 
     Args:
         document_id: IT Glue document ID for triage detail.
@@ -427,6 +475,8 @@ def verify_migrated_document_images(
         expected_count: Embedded images found in the export HTML.
         image_urls: Image URLs extracted from the migrated markdown content.
         url_checker: Optional callback for checking migrated URLs.
+        api_origin: Optional (scheme, host, port) of the API for migrated-link
+            recognition.
 
     Returns:
         Structured image fidelity result.
@@ -434,9 +484,13 @@ def verify_migrated_document_images(
     urls = list(image_urls)
     failures: list[VerificationFailure] = []
     present_count = 0
-    absolute_count = 0
+    linked_count = 0
 
     for url in urls:
+        if _is_api_migrated_link(url, api_origin):
+            linked_count += 1
+            present_count += 1
+            continue
         if not url.lower().startswith(("http://", "https://")):
             failures.append(
                 VerificationFailure(
@@ -452,7 +506,7 @@ def verify_migrated_document_images(
             )
             continue
 
-        absolute_count += 1
+        linked_count += 1
         reachable = True
         if url_checker is not None:
             try:
@@ -475,13 +529,13 @@ def verify_migrated_document_images(
         if reachable:
             present_count += 1
 
-    if absolute_count < expected_count:
+    if linked_count < expected_count:
         failures.append(
             VerificationFailure(
                 category=MISSING_UPLOAD,
                 message=(
                     f"Document '{document_name}' references {expected_count} "
-                    f"exported images but only {absolute_count} migrated "
+                    f"exported images but only {linked_count} migrated "
                     "image links were found in its content."
                 ),
                 document_id=document_id,

@@ -173,7 +173,9 @@ Failure categories (shared with the reconciliation vocabulary):
   counterpart, or an exported document absent from the API (its images are
   then unverifiable). Same-name files are counted per occurrence, so a
   duplicated filename missing one copy still fails.
-- `unexpected_upload` — migrated attachment with no matching export file
+- `unexpected_upload` — migrated attachment with no matching export file,
+  or a migrated document image not referenced by any migrated document
+  content (orphaned upload residue)
 - `unresolved_entity` — migrated attachment whose entity could not be matched
   to the export via `metadata.itglue_id` (investigate before deleting), or
   whose record lacks a filename/entity reference and therefore cannot be
@@ -190,6 +192,12 @@ Failure categories (shared with the reconciliation vocabulary):
 
 Each failure carries the organization, entity type, entity/attachment IDs,
 filename or document/source reference needed to investigate.
+
+Server-generated `/api/.../view` image links in migrated document content
+count as present without probing; other relative links are reported as
+`broken_link`. Migrated `document_image` records are attributed to documents
+through those content links, so only truly orphaned image uploads surface as
+`unexpected_upload`.
 
 `--output` writes a JSON report (`schema_version`, per-organization
 `attachments`/`embedded_images` sections, aggregate `summary` with
