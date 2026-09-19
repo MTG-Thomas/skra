@@ -39,6 +39,8 @@ spec:
           containers:
             - name: backup
               image: postgres:15-alpine
+              securityContext:
+                readOnlyRootFilesystem: true
               command:
                 - /bin/sh
                 - -c
@@ -184,6 +186,8 @@ spec:
           containers:
             - name: backup
               image: postgres:15-alpine
+              securityContext:
+                readOnlyRootFilesystem: true
               command:
                 - /bin/sh
                 - -c
