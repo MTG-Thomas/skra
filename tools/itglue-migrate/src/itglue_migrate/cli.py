@@ -43,9 +43,14 @@ from itglue_migrate.state_fetcher import ExistingState, StateFetcher
 from itglue_migrate.sync_differ import EntityPlan, SyncDiffer, SyncPlan
 from itglue_migrate.sync_executor import SyncExecutor, SyncResult
 from itglue_migrate.verification import (
+    API_ERROR,
     BROKEN_EMBEDDED_IMAGE,
+    INACCESSIBLE_URL,
+    MISSING_ORGANIZATION,
     MISSING_UPLOAD,
     MigratedAttachment,
+    MigratedAttachmentReconciliation,
+    VerificationFailure,
     collect_embedded_image_references,
     extract_markdown_image_urls,
     reconcile_migrated_attachments,
@@ -3338,12 +3343,26 @@ async def _verify_org_fidelity(
 
     identities = _invert_entity_identities(state)
     migrated: set[tuple[str, str, str]] = set()
+    record_ids: dict[tuple[str, str, str], str] = {}
     unresolved: list[MigratedAttachment] = []
     skipped_records = 0
+    attachment_result = None
     try:
         records = await fetcher.list_all_attachments(org_uuid)
     except APIError as e:
-        warnings.append(f"Could not list migrated attachments: {e}")
+        attachment_result = MigratedAttachmentReconciliation(
+            expected_count=len(expected),
+            migrated_count=0,
+            failures=[
+                VerificationFailure(
+                    category=API_ERROR,
+                    message=(
+                        f"Could not list migrated attachments for "
+                        f"organization '{org_name}': {e}"
+                    ),
+                )
+            ],
+        )
         records = []
     for record in records:
         filename = record.get("filename")
@@ -3363,13 +3382,46 @@ async def _verify_org_fidelity(
             )
         else:
             export_type, itglue_id = identity
-            migrated.add((export_type, itglue_id, str(filename)))
+            key = (export_type, itglue_id, str(filename))
+            migrated.add(key)
+            record_ids[key] = str(record.get("id", ""))
     if skipped_records:
         warnings.append(
             f"Skipped {skipped_records} migrated attachment records "
             "with missing filename or entity reference."
         )
-    attachment_result = reconcile_migrated_attachments(expected, migrated, unresolved)
+    if attachment_result is None:
+        attachment_result = reconcile_migrated_attachments(expected, migrated, unresolved)
+
+    # --- Attachment accessibility (opt-in URL checks only) ---
+    if url_checker is not None:
+        for key in sorted(migrated):
+            export_type, itglue_id, filename = key
+            detail = f"{export_type}/{itglue_id}/{filename}"
+            message = f"Migrated attachment {detail} was not accessible."
+            try:
+                download = await fetcher.client.get_attachment_download_url(
+                    org_uuid, record_ids[key]
+                )
+                reachable = url_checker(str(download.get("download_url", "")))
+            except APIError as e:
+                reachable = False
+                message = (
+                    f"Migrated attachment {detail} has no accessible "
+                    f"download URL: {e}"
+                )
+            except Exception:
+                reachable = False
+            if not reachable:
+                attachment_result.failures.append(
+                    VerificationFailure(
+                        category=INACCESSIBLE_URL,
+                        message=message,
+                        entity_type=export_type,
+                        entity_id=itglue_id,
+                        filename=filename,
+                    )
+                )
 
     # --- Embedded images: export files, then migrated document content ---
     image_references = collect_embedded_image_references(export_path, org_documents)
@@ -3394,8 +3446,15 @@ async def _verify_org_fidelity(
         try:
             migrated_doc = await fetcher.client.get_document(org_uuid, migrated_uuid)
         except APIError as e:
-            warnings.append(
-                f"Could not fetch migrated document '{doc_name}': {e}"
+            image_failures.append(
+                VerificationFailure(
+                    category=API_ERROR,
+                    message=(
+                        f"Could not fetch migrated document "
+                        f"'{doc_name}' for image verification: {e}"
+                    ),
+                    document_id=doc_id,
+                )
             )
             continue
         documents_checked += 1
@@ -3540,7 +3599,10 @@ async def _run_verify(
 
             org_uuid = _resolve_org_uuid(all_orgs_state, org_itglue_id, org_name)
             if not org_uuid:
-                message = "Organization not found in API; verification skipped."
+                message = (
+                    f"Organization '{org_name}' (IT Glue ID {org_itglue_id}) "
+                    "not found in API; verification failed."
+                )
                 console.print(f"  [red]{message}[/red]")
                 report["organizations"].append(
                     {
@@ -3551,8 +3613,15 @@ async def _run_verify(
                             "ok": False,
                             "expected_count": 0,
                             "migrated_count": 0,
-                            "failure_count": 0,
-                            "failures": [],
+                            "failure_count": 1,
+                            "failures": [
+                                VerificationFailure(
+                                    category=MISSING_ORGANIZATION,
+                                    message=message,
+                                    entity_type="organization",
+                                    entity_id=org_itglue_id,
+                                ).to_dict()
+                            ],
                         },
                         "embedded_images": {
                             "expected_count": 0,
@@ -3561,8 +3630,8 @@ async def _run_verify(
                             "failure_count": 0,
                             "failures": [],
                         },
-                        "failure_categories": {},
-                        "warnings": [message],
+                        "failure_categories": {MISSING_ORGANIZATION: 1},
+                        "warnings": [],
                     }
                 )
                 continue

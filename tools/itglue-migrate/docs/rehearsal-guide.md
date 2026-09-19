@@ -169,6 +169,10 @@ Failure categories (shared with the reconciliation vocabulary):
   link that was never rewritten to a migrated URL
 - `inaccessible_url` — migrated download/image URL was not reachable
   (`--check-urls` only)
+- `missing_organization` — exported organization absent from the API, so
+  nothing under it could be verified
+- `api_error` — a read needed for verification failed (attachment listing or
+  document fetch); the error text is in the failure message
 
 Each failure carries the organization, entity type, entity/attachment IDs,
 filename or document/source reference needed to investigate.

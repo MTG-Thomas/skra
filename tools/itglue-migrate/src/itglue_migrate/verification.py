@@ -20,6 +20,8 @@ MISSING_UPLOAD = "missing_upload"
 UNEXPECTED_UPLOAD = "unexpected_upload"
 UNRESOLVED_ENTITY = "unresolved_entity"
 BROKEN_LINK = "broken_link"
+MISSING_ORGANIZATION = "missing_organization"
+API_ERROR = "api_error"
 
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\s*\)")
 

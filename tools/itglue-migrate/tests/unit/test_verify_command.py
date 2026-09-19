@@ -34,10 +34,19 @@ def make_fake_client(
     documents: list[dict[str, Any]] | None = None,
     attachments: list[dict[str, Any]] | None = None,
     document_content: str = "",
+    orgs: list[dict[str, Any]] | None = None,
+    fail_list_attachments: bool = False,
+    fail_get_document: bool = False,
+    download_urls: dict[str, str] | None = None,
+    forbid_download_url: bool = True,
 ) -> type:
     """Build a fake read-only BifrostDocsClient class with canned data."""
+    from itglue_migrate.api_client import APIError
+
     doc_list = documents if documents is not None else []
     attachment_list = attachments if attachments is not None else []
+    org_list = orgs if orgs is not None else ORGS
+    url_map = download_urls if download_urls is not None else {}
 
     class FakeClient:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -50,7 +59,7 @@ def make_fake_client(
             return None
 
         async def list_organizations(self) -> list[dict[str, Any]]:
-            return ORGS
+            return org_list
 
         async def list_configuration_types(self, **kwargs: Any) -> list[Any]:
             return []
@@ -86,10 +95,21 @@ def make_fake_client(
             return []
 
         async def list_attachments(self, org_id: str, **kwargs: Any) -> dict[str, Any]:
+            if fail_list_attachments:
+                raise APIError(status_code=500, message="attachment list boom")
             recs = [r for r in attachment_list if r.get("_org") in (None, org_id)]
             return await self._page(recs, kwargs.get("limit", 100), kwargs.get("offset", 0))
 
+        async def get_attachment_download_url(
+            self, org_id: str, attachment_id: str
+        ) -> dict[str, Any]:
+            if forbid_download_url:
+                raise AssertionError("download URL must not be fetched without --check-urls")
+            return {"download_url": url_map[str(attachment_id)], "filename": "f"}
+
         async def get_document(self, org_id: str, doc_id: str) -> dict[str, Any]:
+            if fail_get_document:
+                raise APIError(status_code=500, message="document fetch boom")
             return {"id": doc_id, "content": document_content}
 
     return FakeClient
@@ -188,6 +208,202 @@ async def test_run_verify_unknown_org_exits_one(tmp_path: Path) -> None:
     )
 
     assert exit_code == 1
+
+
+@pytest.mark.asyncio
+async def test_run_verify_missing_org_is_structured_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One exported org absent from the API must fail loudly, not exit 0."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(cli_module, "BifrostDocsClient", make_fake_client(orgs=[]))
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert len(report["organizations"]) == 1
+    org = report["organizations"][0]
+    assert org["bifrost_id"] is None
+    assert org["attachments"]["failure_count"] == 1
+    failure = org["attachments"]["failures"][0]
+    assert failure["category"] == "missing_organization"
+    assert "Acme Corp Test" in failure["message"]
+    assert report["summary"]["follow_up_required"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_verify_attachment_list_error_is_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An API list error must not be a warning that produces a clean result."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(
+        cli_module, "BifrostDocsClient", make_fake_client(fail_list_attachments=True)
+    )
+
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=None,
+    )
+
+    assert exit_code == 1
+
+
+@pytest.mark.asyncio
+async def test_run_verify_document_fetch_error_is_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document fetch error must fail with document detail, not a warning."""
+    export = _copy_fixture(tmp_path)
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            fail_get_document=True,
+        ),
+    )
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=False,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    org = report["organizations"][0]
+    failures = org["embedded_images"]["failures"]
+    assert len(failures) == 1
+    assert failures[0]["category"] == "api_error"
+    assert failures[0]["document_id"] == "3001"
+
+
+@pytest.mark.asyncio
+async def test_run_verify_inaccessible_attachment_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With --check-urls, an unreachable download URL fails the attachment."""
+    export = _copy_fixture(tmp_path)
+    attach_dir = export / "attachments" / "documents" / "3001"
+    attach_dir.mkdir(parents=True)
+    (attach_dir / "stray.pdf").write_bytes(b"PDF")
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            attachments=[
+                {
+                    "id": "att-1",
+                    "entity_type": "document",
+                    "entity_id": "uuid-doc-1",
+                    "filename": "stray.pdf",
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            download_urls={"att-1": "https://files.example.invalid/stray.pdf"},
+            forbid_download_url=False,
+        ),
+    )
+    monkeypatch.setattr(cli_module, "_check_url_reachable", lambda *a, **k: False)
+
+    output = tmp_path / "fidelity.json"
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=True,
+        output=output,
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    org = report["organizations"][0]
+    failures = org["attachments"]["failures"]
+    assert len(failures) == 1
+    assert failures[0]["category"] == "inaccessible_url"
+    assert failures[0]["filename"] == "stray.pdf"
+
+
+@pytest.mark.asyncio
+async def test_run_verify_accessible_attachment_url_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reachable download URL keeps a matched attachment clean."""
+    export = _copy_fixture(tmp_path)
+    attach_dir = export / "attachments" / "documents" / "3001"
+    attach_dir.mkdir(parents=True)
+    (attach_dir / "stray.pdf").write_bytes(b"PDF")
+    monkeypatch.setattr(
+        cli_module,
+        "BifrostDocsClient",
+        make_fake_client(
+            documents=[
+                {
+                    "id": "uuid-doc-1",
+                    "name": "Test Onboarding Guide",
+                    "metadata": {"itglue_id": "3001"},
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            attachments=[
+                {
+                    "id": "att-1",
+                    "entity_type": "document",
+                    "entity_id": "uuid-doc-1",
+                    "filename": "stray.pdf",
+                    "_org": "org-uuid-acme",
+                }
+            ],
+            download_urls={"att-1": "https://files.example.invalid/stray.pdf"},
+            forbid_download_url=False,
+        ),
+    )
+    monkeypatch.setattr(cli_module, "_check_url_reachable", lambda *a, **k: True)
+
+    exit_code = await _run_verify(
+        export_path=export,
+        api_url="http://api.example.invalid",
+        token="token",
+        target_org="Acme Corp Test",
+        check_urls=True,
+        output=None,
+    )
+
+    assert exit_code == 0
 
 
 def test_verify_command_requires_org_or_all(tmp_path: Path) -> None:
