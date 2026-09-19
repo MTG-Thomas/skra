@@ -289,9 +289,7 @@ class TestFileStorageService:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_presigned_urls_use_sigv4_against_public_host(
-        self, mock_settings
-    ):
+    async def test_presigned_urls_use_sigv4_against_public_host(self, mock_settings):
         """Presigned URLs are SigV4 signed against the public endpoint host.
 
         Regression test for issue #94: the default client config produced

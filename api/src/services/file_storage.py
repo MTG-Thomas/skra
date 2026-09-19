@@ -41,9 +41,7 @@ class FileStorageService:
         self.backend = getattr(self.settings, "storage_backend", "s3")
 
     @asynccontextmanager
-    async def get_client(
-        self, endpoint_url: str | None = None
-    ) -> "AsyncGenerator[Any, None]":
+    async def get_client(self, endpoint_url: str | None = None) -> "AsyncGenerator[Any, None]":
         """
         Get S3 client context manager.
 
