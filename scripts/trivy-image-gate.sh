@@ -3,7 +3,7 @@
 # Runs the same HIGH/CRITICAL gate as .github/workflows/ci.yml so local,
 # VM, and CI runs share one definition. Requires the trivy binary.
 # Usage: ./scripts/trivy-image-gate.sh <image-ref> [trivy-bin]
-#   image-ref: e.g. ghcr.io/mtg-thomas/bifrost-docs-api:<sha>
+#   image-ref: e.g. ghcr.io/mtg-thomas/skra-api:<sha>
 #   trivy-bin: path to trivy (default: trivy on PATH)
 
 set -e
