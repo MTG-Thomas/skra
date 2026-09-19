@@ -24,6 +24,10 @@ from pydantic_settings import (
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
 
+#: Password embedded in the published development database URL defaults.
+#: Production must never run with it (enforced by model validator below).
+_DEV_DATABASE_PASSWORD_MARKER = ":skradev@"
+
 _warned_legacy_keys: set[str] = set()
 
 
@@ -440,6 +444,26 @@ class Settings(BaseSettings):
         """
         temp = Path(self.temp_location)
         temp.mkdir(parents=True, exist_ok=True)
+
+    @model_validator(mode="after")
+    def _reject_dev_database_password_in_production(self) -> "Settings":
+        """Refuse to boot production on the published dev database password.
+
+        The database URL defaults exist for local development and testing.
+        A production process that inherits them would silently run against
+        the wrong database with a public credential, so fail fast instead.
+        The temp-dir default is intentionally unguarded: it is harmless and
+        standard across environments.
+        """
+        if self.environment == "production":
+            for field_name in ("database_url", "database_url_sync"):
+                url = getattr(self, field_name, "") or ""
+                if _DEV_DATABASE_PASSWORD_MARKER in url:
+                    raise ValueError(
+                        f"{field_name} still uses the published development "
+                        f"password; set SKRA_{field_name.upper()} in production"
+                    )
+        return self
 
 
 @lru_cache
