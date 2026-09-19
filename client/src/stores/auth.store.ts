@@ -4,11 +4,9 @@ import type { User, UserRole } from "@/lib/api-client";
 
 interface AuthState {
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   needsSetup: boolean | null; // null = not checked yet
-  login: (user: User, accessToken: string, refreshToken: string) => void;
+  login: (user: User) => void;
   logout: () => void;
   setUser: (user: User) => void;
   setNeedsSetup: (needsSetup: boolean) => void;
@@ -18,35 +16,41 @@ interface AuthState {
   hasRole: (role: UserRole) => boolean;
 }
 
+/** Legacy token keys from the pre-cookie session (issue #90). Purged once. */
+const LEGACY_TOKEN_KEYS = [
+  "access_token",
+  "refresh_token",
+  "bifrost-docs-auth",
+] as const;
+
+function purgeLegacyTokenStorage(): void {
+  for (const key of LEGACY_TOKEN_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       needsSetup: null,
 
-      login: (user, accessToken, refreshToken) => {
-        // Also store in localStorage for axios interceptor
-        localStorage.setItem("access_token", accessToken);
-        localStorage.setItem("refresh_token", refreshToken);
+      login: (user) => {
+        // Session lives in HttpOnly cookies set by the API on login.
+        // Never persist Bearer [REDACTED] in readable browser storage.
+        purgeLegacyTokenStorage();
         set({
           user,
-          accessToken,
-          refreshToken,
           isAuthenticated: true,
           needsSetup: false, // Once logged in, setup is complete
         });
       },
 
       logout: () => {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        purgeLegacyTokenStorage();
         set({
           user: null,
-          accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
         });
       },
@@ -78,11 +82,22 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "bifrost-docs-auth",
       storage: createJSONStorage(() => localStorage),
+      // Version 1 drops persisted Bearer tokens (issue #90). The migrate
+      // step purges any pre-cookie state so stale tokens cannot linger.
+      version: 1,
+      migrate: (persistedState) => {
+        purgeLegacyTokenStorage();
+        const state = (persistedState ?? {}) as Record<string, unknown>;
+        return {
+          user: (state.user ?? null) as AuthState["user"],
+          isAuthenticated: (state.isAuthenticated ?? false) as boolean,
+          needsSetup: (state.needsSetup ?? null) as AuthState["needsSetup"],
+        };
+      },
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
+        needsSetup: state.needsSetup,
       }),
     }
   )

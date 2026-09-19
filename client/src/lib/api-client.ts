@@ -15,7 +15,50 @@ import createQueryClient from "openapi-react-query";
 import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import type { paths, components } from "./v1";
 import { parseApiError, ApiError, RateLimitError } from "./api-error";
-import { isTokenExpired } from "./jwt";
+
+// =============================================================================
+// Cookie session helpers (issue #90)
+// =============================================================================
+//
+// Browser auth no longer persists Bearer tokens in localStorage. The API
+// sets HttpOnly access/refresh cookies (plus a readable CSRF cookie) on
+// login/refresh, and the browser attaches them automatically when
+// credentials are included. Mutations additionally echo the CSRF cookie
+// value in the X-CSRF-Token header (double-submit), which the API
+// verifies for cookie-authenticated unsafe methods.
+
+/** HTTP methods that must carry the CSRF double-submit header. */
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Read a non-HttpOnly cookie by name (used for the CSRF token only). */
+export function getCookie(name: string): string | null {
+  const match = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
+}
+
+/** Attach the CSRF header when the request can mutate server state. */
+function attachCsrfHeader(
+  headers: { set: (name: string, value: string) => void } | Record<string, unknown>,
+  method: string | undefined,
+): void {
+  if (!method || !UNSAFE_METHODS.has(method.toUpperCase())) {
+    return;
+  }
+  const csrfToken = getCookie("csrf_token");
+  if (!csrfToken) {
+    return;
+  }
+  if (typeof (headers as { set?: unknown }).set === "function") {
+    (headers as { set: (name: string, value: string) => void }).set(
+      "X-CSRF-Token",
+      csrfToken
+    );
+  } else {
+    (headers as Record<string, unknown>)["X-CSRF-Token"] = csrfToken;
+  }
+}
 
 // =============================================================================
 // Token Refresh State Management
@@ -36,11 +79,13 @@ const refreshState: RefreshState = {
 };
 
 // Lock for openapi-fetch requests
-let openapiRefreshPromise: Promise<string | null> | null = null;
+let openapiRefreshPromise: Promise<void> | null = null;
 
-function processPendingRequests(newAccessToken: string) {
+function processPendingRequests() {
+  // Retried requests re-authenticate via the HttpOnly session cookie that
+  // the refresh rotated, so no Authorization header is needed.
   refreshState.pendingRequests.forEach(({ resolve, config }) => {
-    config.headers.Authorization = `Bearer ${newAccessToken}`;
+    delete config.headers.Authorization;
     resolve(api(config));
   });
   refreshState.pendingRequests = [];
@@ -55,36 +100,24 @@ function rejectPendingRequests(error: unknown) {
 // Token Refresh Function
 // =============================================================================
 
-async function refreshAccessToken(): Promise<string> {
-  const refreshToken = localStorage.getItem("refresh_token");
-  if (!refreshToken) {
-    throw new Error("No refresh token available");
-  }
-
-  // Use raw axios to avoid interceptor loops
-  const response = await axios.post(
+async function refreshAccessToken(): Promise<void> {
+  // Cookie-based refresh: the browser attaches the HttpOnly refresh_token
+  // cookie automatically (credentials included). The server rotates both
+  // cookies in the response. No token is readable or persisted here.
+  // Use raw axios to avoid interceptor loops.
+  await axios.post(
     `${import.meta.env.VITE_API_URL || ""}/auth/refresh`,
-    { refresh_token: refreshToken }
+    {},
+    { withCredentials: true }
   );
-
-  const { access_token, refresh_token: newRefreshToken } = response.data;
-
-  // Update localStorage with new tokens
-  localStorage.setItem("access_token", access_token);
-  if (newRefreshToken) {
-    localStorage.setItem("refresh_token", newRefreshToken);
-  }
-
-  return access_token;
 }
 
 // Export for use by WebSocket service
 export { refreshAccessToken };
 
 function clearAuthAndRedirect() {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-
+  // Session lives in HttpOnly cookies cleared server-side on logout; here
+  // we only drop client state. Never persist tokens in localStorage.
   // Update Zustand store if available
   import("@/stores/auth.store").then(({ useAuthStore }) => {
     useAuthStore.getState().logout();
@@ -104,48 +137,17 @@ function clearAuthAndRedirect() {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "",
+  // Browser auth rides the HttpOnly session cookies set on login/refresh.
+  withCredentials: true,
 });
 
-// Request Interceptor - Add auth token and proactive refresh
+// Request Interceptor - Attach CSRF header for mutations.
+// Authentication travels in cookies (see withCredentials above), so no
+// Bearer token is read or injected here. Expiry is handled reactively:
+// a 401 triggers one cookie refresh + retry in the response interceptor.
 api.interceptors.request.use(
   async (config) => {
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      return config;
-    }
-
-    config.headers.Authorization = `Bearer ${token}`;
-
-    // Skip proactive refresh for the refresh endpoint itself
-    if (config.url?.includes("/auth/refresh")) {
-      return config;
-    }
-
-    // Check if token is expiring soon (5 minute buffer)
-    if (isTokenExpired(token, 300)) {
-      // If a refresh is already in progress, queue this request
-      if (refreshState.isRefreshing) {
-        return new Promise((resolve, reject) => {
-          refreshState.pendingRequests.push({ resolve, reject, config });
-        });
-      }
-
-      // Start refresh process
-      refreshState.isRefreshing = true;
-      try {
-        const newToken = await refreshAccessToken();
-        config.headers.Authorization = `Bearer ${newToken}`;
-        processPendingRequests(newToken);
-        return config;
-      } catch {
-        rejectPendingRequests(new Error("Refresh failed"));
-        // Don't log out here - let response interceptor handle it
-        return config;
-      } finally {
-        refreshState.isRefreshing = false;
-      }
-    }
-
+    attachCsrfHeader(config.headers, config.method);
     return config;
   },
   (error) => Promise.reject(error)
@@ -210,14 +212,12 @@ api.interceptors.response.use(
       refreshState.isRefreshing = true;
 
       try {
-        // Attempt to refresh the token
-        const newToken = await refreshAccessToken();
+        // Attempt to refresh the session cookies, then retry. The retry
+        // re-authenticates via cookie, so no Authorization header is set.
+        await refreshAccessToken();
 
-        // Update original request with new token
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-
-        // Process any queued requests with new token
-        processPendingRequests(newToken);
+        // Process any queued requests
+        processPendingRequests();
 
         // Retry original request
         return api(originalRequest);
@@ -252,62 +252,41 @@ const AUTH_ENDPOINTS = [
 ];
 
 /**
- * Ensure we have a valid (non-expiring) access token before making a request
- * Proactively refreshes token before it expires
- * Returns the token or null if no auth
+ * Serialize cookie-refresh attempts so concurrent 401s share one rotation.
+ * Resolves when fresh session cookies are set, rejects when refresh fails.
  */
-async function ensureValidToken(): Promise<string | null> {
-  const token = localStorage.getItem("access_token");
-
-  // No token at all - return null (let request proceed without auth)
-  if (!token) return null;
-
-  // Token is still valid - return it
-  if (!isTokenExpired(token, 300)) return token;
-
-  // Token is expiring soon - refresh it
-  // Use lock to prevent concurrent refresh attempts
+async function sharedCookieRefresh(): Promise<void> {
   if (openapiRefreshPromise) {
-    return openapiRefreshPromise;
+    await openapiRefreshPromise;
+    return;
   }
 
   openapiRefreshPromise = (async () => {
-    try {
-      return await refreshAccessToken();
-    } catch {
-      return null;
-    } finally {
-      openapiRefreshPromise = null;
-    }
+    await refreshAccessToken();
   })();
 
-  return openapiRefreshPromise;
+  try {
+    await openapiRefreshPromise;
+  } finally {
+    openapiRefreshPromise = null;
+  }
 }
 
-// Create base openapi-fetch client
+// Create base openapi-fetch client. Credentials are included so the
+// HttpOnly session cookies attach (same-origin, and same-site localhost
+// dev per the issue #90 SameSite note); no Bearer [REDACTED] are handled here.
 const baseClient = createClient<paths>({
   baseUrl: import.meta.env.VITE_API_URL || "",
+  fetch: (input: Request) =>
+    globalThis.fetch(input, { credentials: "include" }),
 });
 
 // Add middleware for auth and error handling
 baseClient.use({
   async onRequest({ request }) {
-    const url = new URL(request.url, window.location.origin);
-    const isAuthEndpoint = AUTH_ENDPOINTS.some((ep) => url.pathname.startsWith(ep));
-
-    // Skip token refresh for auth endpoints to avoid infinite loops
-    if (!isAuthEndpoint) {
-      const token = await ensureValidToken();
-      if (token) {
-        request.headers.set("Authorization", `Bearer ${token}`);
-      }
-    } else {
-      // For auth endpoints, just use current token if available
-      const token = localStorage.getItem("access_token");
-      if (token) {
-        request.headers.set("Authorization", `Bearer ${token}`);
-      }
-    }
+    // Attach the CSRF double-submit header for mutations. Authentication
+    // itself travels in cookies (see the credentialed fetch above).
+    attachCsrfHeader(request.headers, request.method);
 
     return request;
   },
@@ -322,13 +301,11 @@ baseClient.use({
     if (response.status === 401) {
       const url = request.url;
       if (!AUTH_ENDPOINTS.some((ep) => url.includes(ep))) {
-        // Try to refresh and retry
+        // Try to refresh the session cookies and retry. The retry
+        // re-authenticates via cookie; never inject a Bearer [REDACTED]
         try {
-          const newToken = await refreshAccessToken();
-          // Clone request and retry with new token
-          const retryRequest = request.clone();
-          retryRequest.headers.set("Authorization", `Bearer ${newToken}`);
-          return fetch(retryRequest);
+          await sharedCookieRefresh();
+          return fetch(request.clone(), { credentials: "include" });
         } catch {
           // Refresh failed - redirect to login
           clearAuthAndRedirect();

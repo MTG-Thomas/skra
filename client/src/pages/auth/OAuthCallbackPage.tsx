@@ -85,12 +85,11 @@ export function OAuthCallbackPage() {
           throw new Error("No tokens received from server");
         }
 
-        // Store tokens and get user info
-        localStorage.setItem("access_token", loginData.access_token);
+        // Session cookies were set by the callback exchange; fetch identity
         const userResponse = await authApi.me();
 
         // Complete login
-        login(userResponse.data, loginData.access_token, loginData.refresh_token);
+        login(userResponse.data);
 
         // Clean up session storage
         sessionStorage.removeItem("oauth_state");

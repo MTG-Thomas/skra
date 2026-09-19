@@ -15,7 +15,12 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.core.database import DbSession
-from src.core.security import decode_token, hash_api_key
+from src.core.security import decode_token, hash_api_key, validate_csrf_token
+
+#: HTTP methods that can change server state. Cookie-authenticated requests
+#: using these methods must present a valid CSRF double-submit pair, because
+#: browsers attach cookies automatically (see issue #90).
+UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 from src.models.enums import UserRole
 
 if TYPE_CHECKING:
@@ -166,6 +171,7 @@ async def get_current_user_optional(
         UserPrincipal if authenticated, None otherwise
     """
     token = None
+    from_cookie = False
 
     # Try Authorization header first (API clients)
     if credentials:
@@ -173,6 +179,7 @@ async def get_current_user_optional(
     # Fall back to cookie (browser clients)
     elif "access_token" in request.cookies:
         token = request.cookies["access_token"]
+        from_cookie = True
 
     if not token:
         return None
@@ -208,6 +215,24 @@ async def get_current_user_optional(
         role = UserRole(role_str)
     except ValueError:
         role = UserRole.CONTRIBUTOR
+
+    # Browsers attach cookies automatically, so a cookie-authenticated
+    # state-changing request must prove it came from our own frontend via
+    # the CSRF double-submit pair (readable csrf_token cookie echoed in the
+    # X-CSRF-Token header). The check runs after token validation so an
+    # invalid token still yields unauthenticated (401 downstream) while a
+    # valid session without the pair fails closed with 403. Requests
+    # carrying an explicit Authorization header are exempt — a cross-site
+    # attacker cannot set custom headers without a CORS preflight that the
+    # API would have to explicitly allow.
+    if from_cookie and request.method in UNSAFE_METHODS:
+        csrf_cookie = request.cookies.get("csrf_token")
+        csrf_header = request.headers.get("x-csrf-token")
+        if not validate_csrf_token(csrf_cookie or "", csrf_header or ""):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF validation failed",
+            )
 
     return UserPrincipal(
         user_id=user_id,
