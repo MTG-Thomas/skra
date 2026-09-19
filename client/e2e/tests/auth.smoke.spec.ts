@@ -11,8 +11,9 @@ test.describe('Authentication', () => {
   test('should display login page', async ({ page }) => {
     await page.goto('/login');
 
-    // Current UI renders a "Welcome back" card title with a submit button.
-    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    // Current UI renders a "Welcome back" card title (a div, not a heading
+    // role) with a submit button.
+    await expect(page.getByText('Welcome back')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
@@ -37,8 +38,8 @@ test.describe('Authentication', () => {
     // Submit form
     await page.getByRole('button', { name: 'Sign in' }).click();
 
-    // Login failure surfaces as a toast error.
-    await expect(page.getByText('Invalid email or password')).toBeVisible();
+    // Login failure surfaces as a toast with the server's 401 detail.
+    await expect(page.getByText('Incorrect email or password')).toBeVisible();
 
     // Should still be on login page
     expect(page.url()).toContain('/login');
@@ -50,8 +51,8 @@ test.describe('Authentication', () => {
     // Current UI links "Sign up" to the register page.
     await page.getByRole('link', { name: 'Sign up' }).click();
 
-    // Should be on register page
+    // Should be on register page (card title is a div, not a heading role).
     await expect(page).toHaveURL('/register');
-    await expect(page.getByRole('heading', { name: 'Create an account' })).toBeVisible();
+    await expect(page.getByText('Create an account')).toBeVisible();
   });
 });
