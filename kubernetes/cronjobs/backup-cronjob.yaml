@@ -31,6 +31,11 @@ spec:
             app.kubernetes.io/component: backup
         spec:
           restartPolicy: OnFailure
+          # Run as non-root (mirrors api/worker deployments)
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
           containers:
             - name: backup
               image: postgres:15-alpine
@@ -171,6 +176,11 @@ spec:
             app.kubernetes.io/component: backup
         spec:
           restartPolicy: OnFailure
+          # Run as non-root (mirrors api/worker deployments)
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
           containers:
             - name: backup
               image: postgres:15-alpine

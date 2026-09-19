@@ -4,10 +4,18 @@
 
 FROM node:20-slim
 
-WORKDIR /app
+# Allow the non-root node user to bind port 80 (vite dev server)
+RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
+    && setcap cap_net_bind_service=+ep /usr/local/bin/node \
+    && apt-get purge -y libcap2-bin \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install dependencies
+WORKDIR /app
+RUN chown node:node /app
+
+# Copy package files and install dependencies as non-root user
 COPY package*.json ./
+USER node
 RUN npm ci
 
 # Don't copy source code - it comes from volume mounts in docker-compose.dev.yml
