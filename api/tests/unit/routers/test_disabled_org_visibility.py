@@ -573,6 +573,157 @@ class TestDisabledOrgVisibilityMatrix:
         sql = " ".join(str(s.compile(compile_kwargs={"literal_binds": True})) for s in statements)
         assert "organization_id" not in sql.lower()
 
+    def _live_db(self, org_a_id, org_b_id):
+        """SQLite-backed session executing production statements for real.
+
+        stdlib sqlite only (no new dependencies): JSONB columns compile as
+        JSON via a test-only compiler hook. The async wrapper delegates
+        execute() to a sync Session, so endpoint + repository + helper code
+        run unmocked against real rows and real SQL filtering.
+        """
+        from sqlalchemy import create_engine
+        from sqlalchemy.dialects.postgresql import JSONB
+        from sqlalchemy.ext.compiler import compiles
+        from sqlalchemy.orm import Session
+
+        from src.models.orm.configuration import Configuration
+        from src.models.orm.custom_asset import CustomAsset
+        from src.models.orm.document import Document
+        from src.models.orm.location import Location
+        from src.models.orm.organization import Organization
+        from src.models.orm.password import Password
+
+        @compiles(JSONB, "sqlite")
+        def _jsonb_as_json(element, compiler, **kw):  # noqa: ARG001
+            return "JSON"
+
+        engine = create_engine("sqlite://")
+        Organization.__table__.create(engine)
+        Password.__table__.create(engine)
+        Location.__table__.create(engine)
+        Document.__table__.create(engine)
+        Configuration.__table__.create(engine)
+        CustomAsset.__table__.create(engine)
+        session = Session(engine)
+        now = datetime.now(UTC)
+        session.add(
+            Organization(
+                id=org_a_id,
+                is_enabled=True,
+                name="A",
+                created_at=now,
+                updated_at=now,
+                metadata_={},
+            )
+        )
+        session.add(
+            Organization(
+                id=org_b_id,
+                is_enabled=False,
+                name="B",
+                created_at=now,
+                updated_at=now,
+                metadata_={},
+            )
+        )
+        # Enabled org: 2 enabled + 1 disabled password.
+        for i in range(2):
+            session.add(
+                Password(
+                    organization_id=org_a_id,
+                    is_enabled=True,
+                    name=f"a-{i}",
+                    password_encrypted="enc",
+                    created_at=now,
+                    updated_at=now,
+                    metadata_={},
+                )
+            )
+        session.add(
+            Password(
+                organization_id=org_a_id,
+                is_enabled=False,
+                name="a-off",
+                password_encrypted="enc",
+                created_at=now,
+                updated_at=now,
+                metadata_={},
+            )
+        )
+        # Archived org: 3 enabled passwords (must hide by default).
+        for i in range(3):
+            session.add(
+                Password(
+                    organization_id=org_b_id,
+                    is_enabled=True,
+                    name=f"b-{i}",
+                    password_encrypted="enc",
+                    created_at=now,
+                    updated_at=now,
+                    metadata_={},
+                )
+            )
+        session.commit()
+
+        class _LiveSession:
+            """Minimal async session facade over a sync Session."""
+
+            async def execute(self, stmt, *args, **kwargs):
+                return session.execute(stmt, *args, **kwargs)
+
+        return _LiveSession()
+
+    async def test_sidebar_counts_real_sql_two_org(self, client: AsyncClient, org_a_id, org_b_id):
+        """Real-SQL regression: sidebar counts exclude the archived org."""
+        from src.core.database import get_db
+
+        live_db = self._live_db(org_a_id, org_b_id)
+        app.dependency_overrides[get_db] = lambda: live_db
+        try:
+            with auth_as(make_principal(UserRole.READER)):
+                with (
+                    patch(
+                        "src.routers.global_view.ConfigurationTypeRepository",
+                    ) as mock_ct_repo,
+                    patch(
+                        "src.routers.global_view.CustomAssetTypeRepository",
+                    ) as mock_at_repo,
+                ):
+                    mock_ct_repo.return_value.get_all_ordered = AsyncMock(return_value=[])
+                    mock_at_repo.return_value.get_all_ordered = AsyncMock(return_value=[])
+                    default = await client.get("/api/global/sidebar")
+                    opted = await client.get("/api/global/sidebar?show_disabled=true")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert default.status_code == 200
+        # Only the 2 enabled passwords in the enabled org.
+        assert default.json()["passwords_count"] == 2
+        assert opted.status_code == 200
+        # Opt-in counts all 5 enabled passwords across both orgs.
+        assert opted.json()["passwords_count"] == 5
+
+    async def test_global_passwords_real_sql_default_hide(
+        self, client: AsyncClient, org_a_id, org_b_id
+    ):
+        """Real-SQL regression: default list returns enabled-org rows only."""
+        from src.core.database import get_db
+
+        live_db = self._live_db(org_a_id, org_b_id)
+        app.dependency_overrides[get_db] = lambda: live_db
+        try:
+            with auth_as(make_principal(UserRole.READER)):
+                response = await client.get("/api/global/passwords")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert response.status_code == 200
+        body = response.json()
+        # Org-level rule: all 3 records of the enabled org return
+        # (including its disabled record); the archived org's 3 hide.
+        assert body["total"] == 3
+        assert {item["organization_id"] for item in body["items"]} == {str(org_a_id)}
+
     @pytest.mark.parametrize(
         "route,repo_path",
         [
