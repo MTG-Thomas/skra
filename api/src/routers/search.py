@@ -66,7 +66,10 @@ async def search(
         "'text' (ILIKE only), 'semantic' (embeddings only, requires OpenAI), "
         "'hybrid' (combines both when available)",
     ),
-    show_disabled: bool = Query(False, description="Include disabled items in search results"),
+    show_disabled: bool = Query(
+        False,
+        description="Include disabled records and archived organizations in search results",
+    ),
 ) -> SearchResponse:
     """
     Search across all entities.
@@ -86,7 +89,8 @@ async def search(
                 organizations the user belongs to.
         limit: Maximum number of results (default 20, max 100)
         mode: Search mode to use
-        show_disabled: Include disabled items in search results (default: False)
+        show_disabled: Include disabled records and archived organizations
+            in search results (default: False)
 
     Returns:
         SearchResponse with query and ranked results
@@ -118,10 +122,11 @@ async def search(
             )
         org_ids = [org_id]
     else:
-        # Get all organizations (all users can see all orgs in new model)
-        # For global search, always filter out disabled organizations
-        orgs = await org_repo.get_all()
-        org_ids = [org.id for org in orgs if org.is_enabled]
+        # Get all organizations (all users can see all orgs in new model).
+        # Archived organizations hide by default; show_disabled=true includes
+        # them for any role allowed to read the records (issue #93).
+        orgs = await org_repo.get_all(is_enabled=None if show_disabled else True)
+        org_ids = [org.id for org in orgs]
 
     if not org_ids:
         return SearchResponse(query=q, results=[])

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
@@ -20,6 +21,7 @@ from src.models.orm.configuration import Configuration
 from src.models.orm.custom_asset import CustomAsset
 from src.models.orm.document import Document
 from src.models.orm.location import Location
+from src.models.orm.organization import Organization
 from src.models.orm.password import Password
 from src.repositories.configuration import ConfigurationRepository
 from src.repositories.configuration_type import ConfigurationTypeRepository
@@ -186,6 +188,25 @@ class GlobalSidebarData(BaseModel):
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+
+async def _visible_org_ids(db: DbSession, show_disabled: bool) -> list[UUID] | None:
+    """Organization IDs visible to a global list (issue #93).
+
+    Disabled organizations are an archive/visibility state, not an
+    authorization boundary: they hide from default listings and are included
+    when show_disabled=true for any role allowed to read the records.
+    Returns None when unfiltered (caller applies no org restriction).
+    """
+    if show_disabled:
+        return None
+    result = await db.execute(select(Organization.id).where(Organization.is_enabled.is_(True)))
+    return [row[0] for row in result.fetchall()]
+
+
+# =============================================================================
 # Endpoints
 # =============================================================================
 
@@ -195,6 +216,7 @@ async def list_global_passwords(
     _current_user: CurrentActiveUser,
     db: DbSession,
     search: str | None = Query(None, description="Search by name, username, url, or notes"),
+    show_disabled: bool = Query(False, description="Include archived organizations"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per page"),
@@ -207,6 +229,7 @@ async def list_global_passwords(
         current_user: Current authenticated user
         db: Database session
         search: Optional search term
+        show_disabled: Include records in archived (disabled) organizations
         sort_by: Column to sort by
         sort_dir: Sort direction ("asc" or "desc")
         limit: Maximum number of results
@@ -217,9 +240,13 @@ async def list_global_passwords(
     """
     password_repo = PasswordRepository(db)
 
-    # Get paginated results without org filter
+    # Hide archived organizations by default (issue #93)
+    org_ids = await _visible_org_ids(db, show_disabled)
+    filters: list[ColumnElement[bool]] = (
+        [] if org_ids is None else [Password.organization_id.in_(org_ids)]
+    )
     passwords, total = await password_repo.get_paginated(
-        filters=[],  # No org filter for global view
+        filters=filters,
         search_columns=password_repo.SEARCH_COLUMNS,
         search_term=search,
         sort_by=sort_by or "name",
@@ -260,6 +287,7 @@ async def list_global_configurations(
     type_id: UUID | None = Query(None, alias="configuration_type_id"),
     status_id: UUID | None = Query(None, alias="configuration_status_id"),
     search: str | None = Query(None, description="Search configurations"),
+    show_disabled: bool = Query(False, description="Include archived organizations"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per page"),
@@ -284,8 +312,11 @@ async def list_global_configurations(
     """
     config_repo = ConfigurationRepository(db)
 
-    # Build filters (no org filter for global view)
+    # Build filters (hide archived organizations by default, issue #93)
     filters = []
+    org_ids = await _visible_org_ids(db, show_disabled)
+    if org_ids is not None:
+        filters.append(Configuration.organization_id.in_(org_ids))
     if type_id is not None:
         filters.append(Configuration.configuration_type_id == type_id)
     if status_id is not None:
@@ -346,6 +377,7 @@ async def list_global_locations(
     _current_user: CurrentActiveUser,
     db: DbSession,
     search: str | None = Query(None, description="Search by name or notes"),
+    show_disabled: bool = Query(False, description="Include archived organizations"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per page"),
@@ -368,8 +400,13 @@ async def list_global_locations(
     """
     location_repo = LocationRepository(db)
 
+    # Hide archived organizations by default (issue #93)
+    org_ids = await _visible_org_ids(db, show_disabled)
+    filters: list[ColumnElement[bool]] = (
+        [] if org_ids is None else [Location.organization_id.in_(org_ids)]
+    )
     locations, total = await location_repo.get_paginated(
-        filters=[],  # No org filter for global view
+        filters=filters,
         search_columns=location_repo.SEARCH_COLUMNS,
         search_term=search,
         sort_by=sort_by or "name",
@@ -406,6 +443,7 @@ async def list_global_documents(
     db: DbSession,
     path: str | None = Query(None, description="Filter by folder path"),
     search: str | None = Query(None, description="Search by name, path, or content"),
+    show_disabled: bool = Query(False, description="Include archived organizations"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per page"),
@@ -429,8 +467,11 @@ async def list_global_documents(
     """
     doc_repo = DocumentRepository(db)
 
-    # Build filters (no org filter for global view)
+    # Build filters (hide archived organizations by default, issue #93)
     filters = []
+    org_ids = await _visible_org_ids(db, show_disabled)
+    if org_ids is not None:
+        filters.append(Document.organization_id.in_(org_ids))
     if path is not None:
         filters.append(Document.path == path)
 
@@ -473,6 +514,7 @@ async def list_global_custom_assets(
     db: DbSession,
     type_id: UUID = Query(..., alias="type_id", description="Custom asset type ID"),
     search: str | None = Query(None, description="Search by name"),
+    show_disabled: bool = Query(False, description="Include archived organizations"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per page"),
@@ -525,6 +567,13 @@ async def list_global_custom_assets(
     count_query = select(func.count(CustomAsset.id)).where(
         CustomAsset.custom_asset_type_id == type_id
     )
+
+    # Hide archived organizations by default (issue #93)
+    org_ids = await _visible_org_ids(db, show_disabled)
+    if org_ids is not None:
+        org_filter = CustomAsset.organization_id.in_(org_ids)
+        query = query.where(org_filter)
+        count_query = count_query.where(org_filter)
 
     # Search within JSONB values field
     if search and display_field_key:
@@ -587,40 +636,53 @@ async def list_global_custom_assets(
 async def get_global_sidebar_data(
     _current_user: CurrentActiveUser,
     db: DbSession,
+    show_disabled: bool = Query(False, description="Include archived organizations"),
 ) -> GlobalSidebarData:
     """
-    Get sidebar navigation data aggregated across ALL organizations.
+    Get sidebar navigation data aggregated across visible organizations.
 
-    Returns counts for all entity types across all orgs:
+    Returns counts for all entity types across visible orgs:
     - Core entities (passwords, locations, documents)
     - Configuration types with total configuration counts
     - Custom asset types with total asset counts
 
+    Archived (disabled) organizations are excluded by default and included
+    with show_disabled=true, matching the global list endpoints (issue #93).
+
     Args:
         current_user: Current authenticated user
         db: Database session
+        show_disabled: Include counts from archived (disabled) organizations
 
     Returns:
         Sidebar data with aggregated counts
     """
+    org_ids = await _visible_org_ids(db, show_disabled)
+
+    def org_filter(model):
+        """Org restriction for the default listing (none when opted in)."""
+        return [] if org_ids is None else [model.organization_id.in_(org_ids)]
+
     # Get aggregated core entity counts (only enabled items)
     password_count_result = await db.execute(
-        select(func.count(Password.id)).where(Password.is_enabled.is_(True))
+        select(func.count(Password.id)).where(Password.is_enabled.is_(True), *org_filter(Password))
     )
     passwords_count = password_count_result.scalar_one()
 
     location_count_result = await db.execute(
-        select(func.count(Location.id)).where(Location.is_enabled.is_(True))
+        select(func.count(Location.id)).where(Location.is_enabled.is_(True), *org_filter(Location))
     )
     locations_count = location_count_result.scalar_one()
 
     document_count_result = await db.execute(
-        select(func.count(Document.id)).where(Document.is_enabled.is_(True))
+        select(func.count(Document.id)).where(Document.is_enabled.is_(True), *org_filter(Document))
     )
     documents_count = document_count_result.scalar_one()
 
     configuration_count_result = await db.execute(
-        select(func.count(Configuration.id)).where(Configuration.is_enabled.is_(True))
+        select(func.count(Configuration.id)).where(
+            Configuration.is_enabled.is_(True), *org_filter(Configuration)
+        )
     )
     configurations_count = configuration_count_result.scalar_one()
 
@@ -634,6 +696,7 @@ async def get_global_sidebar_data(
             select(func.count(Configuration.id)).where(
                 Configuration.configuration_type_id == ct.id,
                 Configuration.is_enabled.is_(True),
+                *org_filter(Configuration),
             )
         )
         count = count_result.scalar_one()
@@ -649,6 +712,7 @@ async def get_global_sidebar_data(
             select(func.count(CustomAsset.id)).where(
                 CustomAsset.custom_asset_type_id == at.id,
                 CustomAsset.is_enabled.is_(True),
+                *org_filter(CustomAsset),
             )
         )
         count = count_result.scalar_one()

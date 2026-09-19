@@ -305,7 +305,13 @@ class TestGlobalVisibility:
         )
 
         with auth_as(make_principal(role)):
-            with patch("src.routers.global_view.PasswordRepository", return_value=mock_repo):
+            with (
+                patch("src.routers.global_view.PasswordRepository", return_value=mock_repo),
+                patch(
+                    "src.routers.global_view._visible_org_ids",
+                    new=AsyncMock(return_value=[org_a_id, org_b_id]),
+                ),
+            ):
                 response = await client.get("/api/global/passwords")
 
         assert response.status_code == 200
@@ -525,11 +531,18 @@ class TestDisabledOrganizations:
         }
 
     async def test_search_excludes_disabled_orgs(self, client: AsyncClient):
-        """Global search only queries enabled organization IDs."""
+        """Global search requests enabled-only org IDs by default."""
         enabled = make_org(is_enabled=True)
         disabled = make_org(is_enabled=False)
+
+        async def fake_get_all(limit=100, offset=0, is_enabled=None):
+            orgs = [enabled, disabled]
+            if is_enabled is not None:
+                orgs = [o for o in orgs if o.is_enabled == is_enabled]
+            return orgs
+
         mock_org_repo = AsyncMock()
-        mock_org_repo.get_all = AsyncMock(return_value=[enabled, disabled])
+        mock_org_repo.get_all = AsyncMock(side_effect=fake_get_all)
         mock_embeddings = MagicMock()
         mock_embeddings.check_openai_available = AsyncMock(return_value=False)
         mock_embeddings.text_search = AsyncMock(return_value=[])
@@ -548,6 +561,7 @@ class TestDisabledOrganizations:
                 response = await client.get("/api/search?q=admin&mode=text")
 
         assert response.status_code == 200
+        mock_org_repo.get_all.assert_awaited_once_with(is_enabled=True)
         (searched_org_ids,) = mock_embeddings.text_search.await_args[0][2:3]
         assert searched_org_ids == [enabled.id]
 
