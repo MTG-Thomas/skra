@@ -95,6 +95,27 @@ if [ -z "${BUCKET_ID}" ]; then
   exit 1
 fi
 
+# Look up the configured key, asking Garage to disclose its stored secret.
+# When the disclosed secret matches, import is safely skipped. A proven
+# mismatch fails immediately naming only the key ID. Anything else (absent
+# key, undisclosed field, failed fetch) falls through to the strict import
+# below, which fails loudly on any real problem - so no path can print
+# success for unverified credentials. Neither secret is ever printed.
+KEY_INFO=$(wget -qO- --header="${AUTH}" \
+    "${ADMIN}/v1/key?id=${GARAGE_ACCESS_KEY_ID}&showSecretKey=true" 2>/dev/null) || true
+SKIP_IMPORT=0
+if printf '%s' "${KEY_INFO}" | grep -q '"secretAccessKey"'; then
+    STORED_SECRET=$(printf '%s' "${KEY_INFO}" \
+        | grep -o '"secretAccessKey"[ ]*:[ ]*"[^"]*"' | head -1 \
+        | sed 's/^"secretAccessKey"[ ]*:[ ]*"//; s/"$//') || true
+    [ -n "${STORED_SECRET}" ] || fail "could not parse stored secret"
+    if [ "${STORED_SECRET}" != "${GARAGE_SECRET_ACCESS_KEY}" ]; then
+        fail "key ${GARAGE_ACCESS_KEY_ID} exists with a different secret; refusing to overwrite (rotate via Garage admin API)"
+    fi
+    echo "[garage-init] Stored secret matches configuration; skipping import."
+    SKIP_IMPORT=1
+fi
+
 bucket_keys_region() {
     # Print the bucket's keys array region for permission checks.
     # wget exit status is checked separately: in a pipeline the shell only
@@ -129,18 +150,19 @@ key_has_full_access() {
         }'
 }
 
-# Import access key with the configured secret. This step is strict: it runs
-# on every start (no early exit) so the stored secret always ends up equal to
-# the configured one, and any rejection fails the container immediately.
-# A stale grant from an older secret can never satisfy this step.
-if wget -qO /dev/null \
-    --header="${AUTH}" \
-    --header="Content-Type: application/json" \
-    --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
-    "${ADMIN}/v1/key/import" 2>/dev/null; then
-    echo "[garage-init] Key imported."
-else
-    fail "key import request failed"
+# Import access key with the configured secret, unless the lookup above
+# already proved the stored secret matches. Any rejection fails loudly;
+# a stale grant from an older secret can never satisfy this run.
+if [ "${SKIP_IMPORT}" != "1" ]; then
+    if wget -qO /dev/null \
+        --header="${AUTH}" \
+        --header="Content-Type: application/json" \
+        --post-data="{\"accessKeyId\":\"${GARAGE_ACCESS_KEY_ID}\",\"secretAccessKey\":\"${GARAGE_SECRET_ACCESS_KEY}\",\"name\":\"bifrost-docs-key\"}" \
+        "${ADMIN}/v1/key/import" 2>/dev/null; then
+        echo "[garage-init] Key imported."
+    else
+        fail "key import request failed"
+    fi
 fi
 
 # Grant key full access to bucket; any failure fails the container.

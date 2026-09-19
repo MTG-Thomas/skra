@@ -30,6 +30,9 @@ class StubState:
     def __init__(self) -> None:
         self.grants: dict[str, dict[str, bool]] = {}
         self.imported: set[str] = set()
+        self.key_secrets: dict[str, str] = {}
+        self.key_endpoint = True
+        self.omit_secret = False
         self.calls: list[str] = []
         self.import_status = 200
         self.import_body: dict[str, Any] | None = None
@@ -62,6 +65,34 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                 self._send(200, {})
             elif self.path == "/v1/status":
                 self._send(200, {"node": NODE_ID})
+            elif self.path.startswith("/v1/key"):
+                from urllib.parse import parse_qs, urlparse
+
+                if not state.key_endpoint:
+                    self._send(
+                        400,
+                        {
+                            "code": "InvalidRequest",
+                            "message": "Bad request: Unknown API endpoint: GET /v1/key",
+                        },
+                    )
+                    return
+                qs = parse_qs(urlparse(self.path).query)
+                kid = qs.get("id", [""])[0]
+                show = qs.get("showSecretKey", ["false"])[0]
+                if kid not in state.key_secrets:
+                    self._send(400, {"code": "InvalidRequest", "message": "No such key"})
+                elif show != "true" or state.omit_secret:
+                    self._send(200, {"accessKeyId": kid, "name": "bifrost-docs-key"})
+                else:
+                    self._send(
+                        200,
+                        {
+                            "accessKeyId": kid,
+                            "name": "bifrost-docs-key",
+                            "secretAccessKey": state.key_secrets[kid],
+                        },
+                    )
             elif self.path.startswith("/v1/bucket"):
                 keys = [
                     {
@@ -101,11 +132,17 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                     self._send(state.import_status, body)
                 else:
                     state.imported.add(payload.get("accessKeyId", ""))
+                    state.key_secrets[payload.get("accessKeyId", "")] = payload.get(
+                        "secretAccessKey", ""
+                    )
                     self._send(200, state.import_body or {})
             elif self.path == "/v1/bucket/allow":
                 payload = self._read_json()
                 state.calls.append("allow")
-                if payload.get("accessKeyId") not in state.imported:
+                if (
+                    payload.get("accessKeyId") not in state.imported
+                    and payload.get("accessKeyId") not in state.key_secrets
+                ):
                     self._send(
                         400,
                         {"code": "InvalidRequest", "message": "unknown key"},
@@ -193,7 +230,6 @@ def test_import_failure_fails_despite_existing_grant(stub_api: Any) -> None:
     # an older secret, but this run's import is rejected. Success must not
     # print; the stale grant must not satisfy this run.
     url, state = stub_api
-    state.grants[VALID_KEY_ID] = {"read": True, "write": True, "owner": True}
     state.import_status = 400
     state.import_body = {"code": "InvalidRequest", "message": "Nope: bad key"}
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
@@ -229,11 +265,59 @@ def test_missing_grant_confirmation_fails(stub_api: Any) -> None:
     assert_secret_absent(result, VALID_SECRET)
 
 
-def test_rerun_reapplies_import_and_grant(stub_api: Any) -> None:
-    # Reruns re-apply import and grant (no early exit) so the stored secret
-    # always ends up equal to the configured one, then verify.
+def test_matching_secret_skips_import(stub_api: Any) -> None:
+    # The lookup proves the stored secret equals the configured one, so
+    # import is skipped; grant and confirmation still run.
     url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = VALID_SECRET
     state.grants[VALID_KEY_ID] = dict(FULL_PERMS)
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode == 0, result.stderr
+    assert "Stored secret matches configuration" in result.stdout
+    assert "Key verified with read/write/owner" in result.stdout
+    assert state.calls == ["allow"]
+    assert_secret_absent(result, VALID_SECRET)
+
+
+def test_wrong_secret_fails_before_import(stub_api: Any) -> None:
+    # The review scenario: key ID holds permissions from an older secret.
+    # The lookup detects the mismatch and fails naming only the key ID;
+    # neither secret may appear in output and no import is attempted.
+    url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = "f" * 64
+    state.grants[VALID_KEY_ID] = dict(FULL_PERMS)
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode != 0
+    assert "different secret" in result.stderr
+    assert VALID_KEY_ID in result.stderr
+    assert "Key verified" not in result.stdout
+    assert "Initialization complete." not in result.stdout
+    assert state.calls == []
+    assert_secret_absent(result, VALID_SECRET)
+    assert_secret_absent(result, "f" * 64)
+
+
+def test_missing_key_endpoint_falls_back_to_import(stub_api: Any) -> None:
+    # Without key lookup there is nothing to compare, so the flow degrades
+    # to strict import/grant/confirm, which cannot succeed falsely.
+    url, state = stub_api
+    state.key_endpoint = False
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode == 0, result.stderr
+    assert "Key verified with read/write/owner" in result.stdout
+    assert state.calls == ["import", "allow"]
+    assert_secret_absent(result, VALID_SECRET)
+
+
+def test_undisclosed_secret_falls_back_to_import(stub_api: Any) -> None:
+    # A lookup response without the secret field proves nothing either way,
+    # so the flow degrades to strict import/grant/confirm.
+    url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = VALID_SECRET
+    state.omit_secret = True
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
     assert result.returncode == 0, result.stderr
@@ -250,6 +334,7 @@ def test_other_key_permissions_do_not_satisfy_target(stub_api: Any) -> None:
     # permissionless while another key holds full access. Region-wide
     # flag greps falsely accepted this; per-entry matching must not.
     url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = VALID_SECRET
     state.grants[OTHER_KEY_ID] = {"read": True, "write": True, "owner": True}
     state.grants[VALID_KEY_ID] = {"read": True, "write": False, "owner": False}
     state.record_allow = False
@@ -263,6 +348,7 @@ def test_other_key_permissions_do_not_satisfy_target(stub_api: Any) -> None:
 
 def test_target_key_accepted_beside_weaker_key(stub_api: Any) -> None:
     url, state = stub_api
+    state.key_secrets[VALID_KEY_ID] = VALID_SECRET
     state.grants[OTHER_KEY_ID] = {"read": True, "write": False, "owner": False}
     result = run_script(url, VALID_KEY_ID, VALID_SECRET)
 
