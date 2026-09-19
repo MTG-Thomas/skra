@@ -126,7 +126,10 @@ export function ExportsSettings() {
   const [orgSelectorOpen, setOrgSelectorOpen] = useState(false);
 
   const { data: exports, isLoading, error, refetch } = useExports();
-  const { data: organizations } = useOrganizations();
+  // Load disabled orgs too: an explicit selection is the archived-org
+  // opt-in for exports (issue #93). "All Organizations" stays enabled-only
+  // on the backend default.
+  const { data: organizations } = useOrganizations({ showDisabled: true });
   const createExportMutation = useCreateExport();
   const revokeExportMutation = useRevokeExport();
 
@@ -561,6 +564,11 @@ export function ExportsSettings() {
                                 />
                                 <Building2 className="mr-2 h-4 w-4 shrink-0" />
                                 <span className="truncate">{org.name}</span>
+                                {!org.is_enabled && (
+                                  <Badge variant="secondary" className="ml-2 text-xs shrink-0">
+                                    Disabled
+                                  </Badge>
+                                )}
                               </CommandItem>
                             );
                           })}
@@ -570,7 +578,9 @@ export function ExportsSettings() {
                   </PopoverContent>
                 </Popover>
                 <FormDescription>
-                  Choose to export all organizations or select specific ones.
+                  All organizations exports enabled ones only; selecting
+                  specific organizations (including disabled ones) exports
+                  exactly those.
                 </FormDescription>
               </div>
 
