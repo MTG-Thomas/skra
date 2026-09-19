@@ -88,6 +88,7 @@ export function PasswordReveal({ orgId, passwordId }: PasswordRevealProps) {
         size="icon"
         onClick={handleToggleReveal}
         disabled={isLoading}
+        aria-label={revealed ? "Hide password" : "Reveal password"}
       >
         {revealed ? (
           <EyeOff className="h-4 w-4" />
@@ -100,6 +101,7 @@ export function PasswordReveal({ orgId, passwordId }: PasswordRevealProps) {
         size="icon"
         onClick={handleCopy}
         disabled={isLoading}
+        aria-label="Copy password"
       >
         {copied ? (
           <Check className="h-4 w-4 text-green-500" />
