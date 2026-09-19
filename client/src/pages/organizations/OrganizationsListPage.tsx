@@ -215,6 +215,7 @@ export function OrganizationsListPage() {
           filteredOrganizations.map((org) => (
             <Card
               key={org.id}
+              data-testid={`org-card-${org.id}`}
               className={`hover:border-primary/50 transition-colors cursor-pointer ${
                 !org.is_enabled ? "opacity-60" : ""
               }`}
