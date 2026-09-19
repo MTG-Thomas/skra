@@ -19,6 +19,7 @@ from src.models.contracts.organization import (
     SidebarData,
     SidebarItemCount,
 )
+from src.models.contracts.sync import sync_metadata_to_storage
 from src.models.enums import AuditAction
 from src.models.orm.organization import Organization
 from src.repositories.access_tracking import AccessTrackingRepository
@@ -43,6 +44,9 @@ def _to_public(org: Organization) -> OrganizationPublic:
         "id": org.id,
         "name": org.name,
         "metadata": org.metadata_ if isinstance(org.metadata_, dict) else {},
+        "sync_metadata": org.sync_metadata
+        if isinstance(org.sync_metadata, dict) and org.sync_metadata
+        else None,
         "is_enabled": org.is_enabled,
         "created_at": org.created_at,
         "updated_at": org.updated_at,
@@ -114,6 +118,7 @@ async def create_organization(
     org = Organization(
         name=org_data.name,
         metadata_=org_data.metadata,
+        sync_metadata=sync_metadata_to_storage(org_data.sync_metadata),
         is_enabled=org_data.is_enabled if org_data.is_enabled is not None else True,
     )
     org = await org_repo.create(org)
@@ -192,6 +197,9 @@ async def get_organization(
         id=org.id,
         name=org.name,
         metadata=org.metadata_ if isinstance(org.metadata_, dict) else {},
+        sync_metadata=org.sync_metadata
+        if isinstance(org.sync_metadata, dict) and org.sync_metadata
+        else None,
         is_enabled=org.is_enabled,
         created_at=org.created_at,
         updated_at=org.updated_at,
@@ -239,6 +247,8 @@ async def update_organization(
         org.name = org_data.name
     if org_data.metadata is not None:
         org.metadata_ = org_data.metadata
+    if org_data.sync_metadata is not None:
+        org.sync_metadata = sync_metadata_to_storage(org_data.sync_metadata)
     if org_data.is_enabled is not None:
         org.is_enabled = org_data.is_enabled
 

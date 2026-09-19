@@ -21,6 +21,7 @@ from src.models.contracts.password import (
     PasswordReveal,
     PasswordUpdate,
 )
+from src.models.contracts.sync import sync_metadata_to_storage
 from src.models.enums import AuditAction
 from src.models.orm.password import Password
 from src.repositories.password import PasswordRepository
@@ -53,6 +54,9 @@ def _to_public(password: Password) -> PasswordPublic:
         "notes": password.notes,
         "_totp_secret_encrypted": password.totp_secret_encrypted,  # For computed has_totp
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
+        "sync_metadata": password.sync_metadata
+        if isinstance(password.sync_metadata, dict) and password.sync_metadata
+        else None,
         "is_enabled": password.is_enabled,
         "created_at": password.created_at,
         "updated_at": password.updated_at,
@@ -161,6 +165,7 @@ async def create_password(
         url=password_data.url,
         notes=password_data.notes,
         metadata_=password_data.metadata,
+        sync_metadata=sync_metadata_to_storage(password_data.sync_metadata),
         is_enabled=password_data.is_enabled if password_data.is_enabled is not None else True,
     )
     password = await password_repo.create(password)
@@ -354,6 +359,9 @@ async def reveal_password(
         "notes": password.notes,
         "_totp_secret_encrypted": password.totp_secret_encrypted,
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
+        "sync_metadata": password.sync_metadata
+        if isinstance(password.sync_metadata, dict) and password.sync_metadata
+        else None,
         "is_enabled": password.is_enabled,
         "created_at": password.created_at,
         "updated_at": password.updated_at,
@@ -419,6 +427,8 @@ async def update_password(
         password.notes = password_data.notes
     if password_data.metadata is not None:
         password.metadata_ = password_data.metadata
+    if password_data.sync_metadata is not None:
+        password.sync_metadata = sync_metadata_to_storage(password_data.sync_metadata)
     if password_data.is_enabled is not None:
         password.is_enabled = password_data.is_enabled
 

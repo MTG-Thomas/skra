@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from src.models.contracts.access_tracking import FrequentItem
 from src.models.contracts.base import PublicOrganizationBase
+from src.models.contracts.sync import SyncMetadata
 
 
 class OrganizationCreate(BaseModel):
@@ -11,6 +12,7 @@ class OrganizationCreate(BaseModel):
 
     name: str
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Defaults to True if not provided
 
 
@@ -19,12 +21,14 @@ class OrganizationUpdate(BaseModel):
 
     name: str | None = None
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Don't change if not provided
 
 
 class OrganizationPublic(PublicOrganizationBase):
     """Organization public response model."""
 
+    sync_metadata: SyncMetadata | None = None
     updated_by_user_id: str | None = None
     updated_by_user_name: str | None = None
 

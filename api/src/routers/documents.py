@@ -22,6 +22,7 @@ from src.models.contracts.document import (
     FolderCount,
     FolderList,
 )
+from src.models.contracts.sync import sync_metadata_to_storage
 from src.models.enums import AuditAction
 from src.models.orm.document import Document
 from src.repositories.document import DocumentRepository
@@ -77,6 +78,9 @@ def _to_public(doc: Document) -> DocumentPublic:
         "name": doc.name,
         "content": doc.content,
         "metadata": doc.metadata_ if isinstance(doc.metadata_, dict) else {},
+        "sync_metadata": doc.sync_metadata
+        if isinstance(doc.sync_metadata, dict) and doc.sync_metadata
+        else None,
         "is_enabled": doc.is_enabled,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,
@@ -198,6 +202,7 @@ async def create_document(
         name=doc_data.name,
         content=doc_data.content,
         metadata_=doc_data.metadata,
+        sync_metadata=sync_metadata_to_storage(doc_data.sync_metadata),
         is_enabled=doc_data.is_enabled if doc_data.is_enabled is not None else True,
     )
     doc = await doc_repo.create(doc)
@@ -422,6 +427,8 @@ async def update_document(
         doc.content = doc_data.content
     if doc_data.metadata is not None:
         doc.metadata_ = doc_data.metadata
+    if doc_data.sync_metadata is not None:
+        doc.sync_metadata = sync_metadata_to_storage(doc_data.sync_metadata)
     if doc_data.is_enabled is not None:
         doc.is_enabled = doc_data.is_enabled
 
