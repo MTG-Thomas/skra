@@ -338,6 +338,13 @@ def hash_api_key(api_key: str) -> str:
     Uses SHA-256 since API keys are already high-entropy random strings
     and don't need bcrypt's intentional slowness.
 
+    NOTE (security review): this is a lookup hash over CSPRNG tokens
+    (secrets.token_urlsafe(32), ~256 bits), not password storage — human
+    passwords go through bcrypt hash_password() below. Changing this
+    algorithm would invalidate every stored API key hash, so it is
+    intentionally stable. CodeQL py/weak-sensitive-data-hashing here is
+    a false positive (misclassified password hashing).
+
     Args:
         api_key: The raw API key
 
