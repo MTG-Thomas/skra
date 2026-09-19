@@ -70,8 +70,13 @@ test.describe('Cookie session auth', () => {
   });
 
   test('OAuth callback rejects unverifiable state', async ({ page }) => {
-    // No oauth_state in session storage (fresh context): the callback must
-    // fail closed instead of exchanging the code without CSRF verification.
+    // Provider matches the initiated flow but no oauth_state is stored
+    // (fresh context): the callback must fail closed at the state gate
+    // instead of exchanging the code without CSRF verification.
+    await page.goto('/login');
+    await page.evaluate(() => {
+      sessionStorage.setItem('oauth_provider', 'github');
+    });
     await page.goto('/auth/callback/github?code=fake-code&state=no-stored-state');
 
     // NOTE: the CardTitle renders a generic, not a heading role.
