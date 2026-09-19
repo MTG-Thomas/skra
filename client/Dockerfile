@@ -28,7 +28,23 @@ COPY . .
 RUN npm run build
 
 # =============================================================================
-# Stage 3: Production with nginx
+# Stage 3: Development with Vite dev server (explicit target only)
+# =============================================================================
+# Used by docker-compose.test.yml (target: development) for E2E runs:
+# source comes from bind mounts, API proxy from API_URL/WS_URL env.
+# Never the default: the final production stage below stays last.
+FROM base AS development
+
+WORKDIR /app
+
+EXPOSE 3000
+
+# Vite on 3000 to match the test-stack healthcheck (overrides the
+# 5173 default in vite.config.ts).
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+
+# =============================================================================
+# Stage 4: Production with nginx
 # =============================================================================
 FROM nginx:alpine AS production
 

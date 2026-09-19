@@ -372,6 +372,47 @@ jobs:
           retention-days: 30
 
   # =============================================================================
+  # Test Client Profile Smoke (issue #104, non-blocking while fixtures stabilize)
+  # =============================================================================
+  test-client-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Guards the --profile client stack wiring (Vite dev stage on 3000 +
+    # node health probe + /health API proxy). Blocking: this profile was
+    # silently broken (issue #104), so failure must surface. Browser auth
+    # flow stays a VM-side proof until the E2E fixtures stabilize.
+    # (Deliberately not continue-on-error; also not yet a required branch
+    # status.)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Start isolated client E2E stack
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e up -d --build
+
+      - name: Wait for client healthy
+        run: |
+          for i in $(seq 1 60); do
+            status=$(docker inspect bifrost-docs-test-client --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            echo "attempt $i: $status"
+            [ "$status" = healthy ] && exit 0
+            sleep 10
+          done
+          echo "client never became healthy"
+          docker logs bifrost-docs-test-client 2>&1 | tail -n 20
+          exit 1
+
+      - name: Probe app and API proxy through Vite
+        run: |
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T client node -e "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
+      - name: Tear down test stack
+        if: always()
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e down -v
+
+  # =============================================================================
   # Security Scanning
   # =============================================================================
   trivy-repo-scan:

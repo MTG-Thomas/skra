@@ -168,15 +168,22 @@ services:
       - test  # Only start when running tests
 
   # =============================================================================
-  # Client E2E Testing Services (started with --profile client)
+  # Client E2E Testing Services (started with --profile client --profile e2e)
   # =============================================================================
+  # NOTE: the client depends_on api, which lives in the `e2e` profile.
+  # Compose v5 strictly filters inactive profiles, so the client profile
+  # alone is an invalid project — always enable both profiles together.
 
   # Client frontend (Vite dev server)
-  # Serves the React app for Playwright browser tests
+  # Serves the React app for Playwright browser tests. Builds the explicit
+  # `development` stage (Vite on 3000); the Dockerfile default stays the
+  # production nginx stage. Source comes from bind mounts, the /api proxy
+  # from API_URL/WS_URL below (see client/vite.config.ts).
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
+      target: development
     container_name: bifrost-docs-test-client
     environment:
       # API_URL and WS_URL are used by Vite's proxy config (server-side)
@@ -189,12 +196,16 @@ services:
       - ./client/vite.config.ts:/app/vite.config.ts:ro
       - ./client/tailwind.config.ts:/app/tailwind.config.ts:ro
       - ./client/tsconfig.json:/app/tsconfig.json:ro
+      - ./client/tsconfig.app.json:/app/tsconfig.app.json:ro
+      - ./client/tsconfig.node.json:/app/tsconfig.node.json:ro
       - ./client/components.json:/app/components.json:ro
       - ./client/postcss.config.js:/app/postcss.config.js:ro
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
+      # node:20-slim carries node (no curl). The dev stage serves Vite on
+      # 3000, so this probe matches reality.
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 5s
       timeout: 5s
