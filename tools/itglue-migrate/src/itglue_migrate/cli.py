@@ -8,13 +8,12 @@ This module provides the command-line interface using Typer with two main comman
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import logging
 import re
-import socket
 import sys
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urljoin, urlsplit
@@ -3258,51 +3257,60 @@ def sync(
     sys.exit(exit_code)
 
 
-def _is_probe_allowed(url: str) -> bool:
-    """Fail-closed destination policy for opt-in URL probes.
+def _probe_allowed_hosts(api_url: str, extra_hosts: str | None) -> frozenset[str]:
+    """Build the explicit probe destination allowlist for opt-in URL checks.
 
-    Only public ``http``/``https`` destinations are probed. Literal and
-    resolved non-public addresses (private, loopback, link-local, reserved)
-    are refused so crafted export or API content cannot turn ``--check-urls``
-    into requests toward internal destinations.
+    The API host is always included; operators name storage/image hosts
+    explicitly via ``--allowed-hosts``. Hostnames match exactly
+    (case-insensitive); ports are not part of the identity. Listing an
+    internal host is an explicit trust decision by the operator.
+
+    Args:
+        api_url: BifrostDocs API URL whose host is always allowed.
+        extra_hosts: Optional comma-separated ``host`` or ``URL`` entries.
+
+    Returns:
+        Frozen set of allowed hostnames.
     """
+    allowed: set[str] = set()
     try:
-        parsed = urlsplit(url)
+        api_host = urlsplit(api_url).hostname
     except ValueError:
-        return False
-    if parsed.scheme not in ("http", "https"):
-        return False
-    host = parsed.hostname
-    if not host:
-        return False
-    try:
-        return ipaddress.ip_address(host).is_global
-    except ValueError:
-        pass
-    try:
-        infos = socket.getaddrinfo(host, parsed.port, type=socket.SOCK_STREAM)
-    except OSError:
-        return False
-    addresses = {info[4][0] for info in infos}
-    if not addresses:
-        return False
-    for address in addresses:
+        api_host = None
+    if api_host:
+        allowed.add(api_host.casefold())
+    for entry in (extra_hosts or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if "://" not in entry:
+            entry = f"http://{entry}"
         try:
-            if not ipaddress.ip_address(address).is_global:
-                return False
+            host = urlsplit(entry).hostname
         except ValueError:
-            return False
-    return True
+            continue
+        if host:
+            allowed.add(host.casefold())
+    return frozenset(allowed)
 
 
-def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
+def _check_url_reachable(
+    url: str,
+    *,
+    allowed_hosts: frozenset[str] = frozenset(),
+    timeout_seconds: float = 10.0,
+) -> bool:
     """Check whether a migrated URL is reachable without downloading it.
 
     Read-only: issues HEAD, falling back to GET for servers that reject HEAD.
-    Each hop (including redirects) must pass the probe destination policy.
+    Only allowlisted ``http``/``https`` destinations are requested, and every
+    redirect hop is re-validated, so crafted export or API content cannot turn
+    ``--check-urls`` into requests toward unlisted (including
+    private/link-local) destinations.
 
     Args:
         url: Absolute URL to check.
+        allowed_hosts: Hostnames permitted as probe destinations.
         timeout_seconds: Per-request timeout.
 
     Returns:
@@ -3310,7 +3318,14 @@ def _check_url_reachable(url: str, timeout_seconds: float = 10.0) -> bool:
     """
     current = url
     for _ in range(4):
-        if not _is_probe_allowed(current):
+        try:
+            parsed = urlsplit(current)
+        except ValueError:
+            return False
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = (parsed.hostname or "").casefold()
+        if not host or host not in allowed_hosts:
             return False
         try:
             response = httpx.head(current, follow_redirects=False, timeout=timeout_seconds)
@@ -3630,6 +3645,7 @@ async def _run_verify(
     target_org: str | None,
     check_urls: bool = False,
     output: Path | None = None,
+    allowed_hosts: str | None = None,
 ) -> int:
     """Run read-only fidelity verification (GET/HEAD requests only).
 
@@ -3653,13 +3669,17 @@ async def _run_verify(
     else:
         orgs_to_verify = parsed.organizations
 
-    url_checker = _check_url_reachable if check_urls else None
+    allowed = _probe_allowed_hosts(api_url, allowed_hosts)
+    url_checker = (
+        partial(_check_url_reachable, allowed_hosts=allowed) if check_urls else None
+    )
     report: dict[str, Any] = {
         "schema_version": 1,
         "generated_at": datetime.now(UTC).isoformat(),
         "export_path": str(export_path),
         "target": target_org or "all",
         "check_urls": check_urls,
+        "allowed_hosts": sorted(allowed),
         "organizations": [],
     }
 
@@ -3789,6 +3809,16 @@ def verify(
             help="Also check that migrated download/image URLs are reachable",
         ),
     ] = False,
+    allowed_hosts: Annotated[
+        str | None,
+        typer.Option(
+            "--allowed-hosts",
+            help=(
+                "Comma-separated extra hosts permitted for --check-urls "
+                "probes (the API host is always allowed)"
+            ),
+        ),
+    ] = None,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -3841,6 +3871,7 @@ def verify(
             target_org=org,
             check_urls=check_urls,
             output=output,
+            allowed_hosts=allowed_hosts,
         )
     )
 

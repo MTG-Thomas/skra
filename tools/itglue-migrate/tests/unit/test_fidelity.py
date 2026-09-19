@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from itglue_migrate.cli import _check_url_reachable, _invert_entity_identities
+import pytest
+
+import itglue_migrate.cli as cli_module
+from itglue_migrate.cli import (
+    _check_url_reachable,
+    _invert_entity_identities,
+    _probe_allowed_hosts,
+)
 from itglue_migrate.state_fetcher import ExistingState
 from itglue_migrate.verification import (
     BROKEN_LINK,
@@ -198,6 +205,92 @@ def test_url_probe_policy_blocks_non_public_destinations() -> None:
     assert _check_url_reachable("http://[::1]/unreachable.png") is False
     assert _check_url_reachable("ftp://files.example.invalid/a.png") is False
     assert _check_url_reachable("not a url") is False
+
+
+def test_probe_allowed_hosts_includes_api_and_listed_hosts() -> None:
+    """The probe allowlist combines the API host with operator-listed hosts."""
+    allowed = _probe_allowed_hosts(
+        "https://api.example.com:8443/v1",
+        "cdn.example.com, https://s3.example.com",
+    )
+
+    assert allowed == frozenset(
+        {"api.example.com", "cdn.example.com", "s3.example.com"}
+    )
+    assert _probe_allowed_hosts("not a url", None) == frozenset()
+
+
+def test_check_url_reachable_only_probes_allowlisted_hosts() -> None:
+    """Unlisted hosts are refused; listed ones still fail closed offline."""
+    assert (
+        _check_url_reachable(
+            "http://127.0.0.1:1/unreachable.png",
+            allowed_hosts=frozenset({"127.0.0.1"}),
+        )
+        is False
+    )
+    assert (
+        _check_url_reachable(
+            "http://127.0.0.1:1/unreachable.png",
+            allowed_hosts=frozenset({"other.example.invalid"}),
+        )
+        is False
+    )
+
+
+class _FakeHeadResponse:
+    def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
+        self.status_code = status_code
+        self.headers = headers or {}
+
+
+def test_check_url_reachable_refuses_redirect_to_unlisted_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redirect targets are re-validated; the evil hop is never requested."""
+    calls: list[str] = []
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        return _FakeHeadResponse(302, {"location": "http://169.254.169.254/x"})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+
+    assert (
+        _check_url_reachable(
+            "https://cdn.example.invalid/a.png",
+            allowed_hosts=frozenset({"cdn.example.invalid"}),
+        )
+        is False
+    )
+    assert calls == ["https://cdn.example.invalid/a.png"]
+
+
+def test_check_url_reachable_follows_redirect_to_allowlisted_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Allowlisted redirect chains resolve normally."""
+    calls: list[str] = []
+
+    def fake_head(url: str, **kwargs: object) -> _FakeHeadResponse:
+        calls.append(url)
+        if url == "https://cdn.example.invalid/a.png":
+            return _FakeHeadResponse(302, {"location": "/b.png"})
+        return _FakeHeadResponse(200, {})
+
+    monkeypatch.setattr(cli_module.httpx, "head", fake_head)
+
+    assert (
+        _check_url_reachable(
+            "https://cdn.example.invalid/a.png",
+            allowed_hosts=frozenset({"cdn.example.invalid"}),
+        )
+        is True
+    )
+    assert calls == [
+        "https://cdn.example.invalid/a.png",
+        "https://cdn.example.invalid/b.png",
+    ]
 
 
 def test_verify_migrated_document_images_records_unreachable_url() -> None:
