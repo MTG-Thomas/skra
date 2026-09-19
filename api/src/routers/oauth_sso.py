@@ -313,10 +313,9 @@ async def oauth_callback(
     # closed on a missing or mismatched stored provider, before consuming the
     # single-use state.
     if state_data.get("provider") != callback_data.provider:
-        logger.warning(
-            "OAuth callback provider mismatch",
-            extra={"provider": callback_data.provider},
-        )
+        # Log a static message only: the request provider is untrusted input
+        # and must not reach log output (log injection).
+        logger.warning("OAuth callback provider mismatch")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth provider does not match initiated flow",
