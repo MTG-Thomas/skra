@@ -22,7 +22,16 @@ import {
  * - A user matching E2E_TEST_EMAIL / E2E_TEST_PASSWORD exists.
  * - That user can access the org in E2E_TEST_ORG_ID.
  * See client/e2e/README.md for the local/CI run path.
+ *
+ * Data lifecycle: created records are namespaced per run (timestamp +
+ * random suffix) and treated as disposable. The suite assumes a dedicated
+ * E2E backend whose database is reset between runs (`./test.sh` runs
+ * `down -v`); on long-lived environments, purge `Critical E2E` records
+ * or re-seed instead of relying on per-test cleanup.
  */
+function uniqueSuffix(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 pwTest.describe('Critical technician workflows', () => {
   pwTest('technician can log in', async ({ page }) => {
     await performLogin(page, TEST_USER.email, TEST_USER.password);
@@ -39,16 +48,17 @@ test.describe('Critical technician workflows (authenticated)', () => {
       page.getByRole('heading', { name: 'Organizations' })
     ).toBeVisible();
 
-    // Org cards carry stable test ids (see OrganizationsListPage).
-    await page.locator('[data-testid^="org-card-"]').first().click();
-    await expect(page).toHaveURL(/\/org\/[^/]+/);
+    // Target the seeded org exactly (see OrganizationsListPage test ids).
+    await page.getByTestId(`org-card-${TEST_ORG_ID}`).click();
+    await expect(page).toHaveURL(`/org/${TEST_ORG_ID}`);
   });
 
   test('technician can create and reveal a credential', async ({ page }) => {
     await navigateToEntity(page, TEST_ORG_ID, 'passwords');
 
-    const name = `Critical E2E Credential ${Date.now()}`;
-    const secret = `E2e-Secret-${Date.now()}!`;
+    const tag = uniqueSuffix();
+    const name = `Critical E2E Credential ${tag}`;
+    const secret = `E2e-Secret-${tag}!`;
 
     await page.getByRole('button', { name: 'Add Password' }).click();
     await page.getByLabel('Name').fill(name);
@@ -77,7 +87,7 @@ test.describe('Critical technician workflows (authenticated)', () => {
     await page.getByRole('button', { name: 'New Document' }).click();
     await expect(page).toHaveURL(/\/org\/[^/]+\/documents\/new/);
 
-    const title = `Critical E2E Document ${Date.now()}`;
+    const title = `Critical E2E Document ${uniqueSuffix()}`;
     await page.getByPlaceholder('Document name').fill(title);
     await page.getByRole('button', { name: 'Save' }).click();
 

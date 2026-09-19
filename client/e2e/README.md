@@ -236,13 +236,20 @@ jobs:
 `e2e/tests/critical-workflows.spec.ts` covers the technician paths that
 block rollout: login, organization navigation, one credential
 create/reveal cycle, and one document create/read cycle. Created entities
-use timestamped names, so parallel runs never collide and no cleanup step
-is required.
+use timestamp + random suffixes, so parallel runs (all Playwright
+projects) never collide.
 
 Seed prerequisites: the E2E environment must provide a user matching
 `E2E_TEST_EMAIL` / `E2E_TEST_PASSWORD` with access to `E2E_TEST_ORG_ID`
 (see `client/.env.e2e.example`). No VM is needed for authoring; full
 stack validation runs on VM 101 once released, or in CI.
+
+Data lifecycle: no per-test cleanup by design. The suite assumes a
+dedicated E2E backend whose database is reset between runs (`./test.sh`
+tears test volumes down with `down -v`). On long-lived environments such
+as VM 101, either re-seed/reset the database between runs or purge
+`Critical E2E*` records afterwards — do not point the suite at a
+production or shared-dev database.
 
 ```bash
 # Local: frontend dev server + API must be up, env vars exported
