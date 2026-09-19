@@ -110,11 +110,26 @@ reconciliation artifact somewhere explicit for a rehearsal or CI run, such as
 The report includes:
 
 - `schema_version` and generation metadata
-- aggregate `summary` counts for operator review
+- aggregate `summary` counts for operator review (`organization_count`,
+  `warning_count`, `error_count`, `failed_count`, `skipped_count`,
+  `follow_up_required`, plus per-entity totals)
 - one `organizations[]` entry per synced organization
 - per-entity counts for planned creates, planned updates, existing, created,
   updated, skipped, duplicate, failed, and errors
 - warnings and errors suitable for follow-up triage
+- per-org `attachment_summary` with embedded-image mismatch counts in
+  `attachment_summary.embedded_images` (`expected_count`, `present_count`,
+  `failure_count`, `failures`) and
+  `attachment_summary.failure_categories.broken_embedded_image`
+- per-org `relationship_summary` with `failed`, `missing_source`,
+  `missing_target`, and `transient_error` counts
+
+`summary.follow_up_required` is true when any entity failed, any error was
+recorded, any `failure_categories` count is nonzero (including broken
+embedded images), or any actionable `relationship_summary` count is nonzero.
+Per-org attachment orphaned folders are intentionally not attributed per org
+(`attachment_summary.orphaned_scope` is `"not_reported_per_org"`); use the
+`preview` plan's `attachment_validation` for global orphaned-folder triage.
 
 Password values are never included in reconciliation output.
 
