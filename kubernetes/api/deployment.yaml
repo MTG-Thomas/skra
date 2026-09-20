@@ -19,7 +19,9 @@ spec:
         app.kubernetes.io/component: api
         app.kubernetes.io/part-of: skra
     spec:
-      # Init container runs migrations before API starts
+      # Init container runs migrations before API starts. Alembic performs no
+      # local writes (database only); the /tmp scratch below covers CPython
+      # tempfile use under a read-only root.
       initContainers:
         - name: init
           image: ghcr.io/mtg-thomas/skra-api:latest
@@ -29,6 +31,13 @@ spec:
                 name: skra-config
             - secretRef:
                 name: skra-secrets
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: api
           image: ghcr.io/mtg-thomas/skra-api:latest
@@ -42,6 +51,17 @@ spec:
                 name: skra-config
             - secretRef:
                 name: skra-secrets
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            # Sole writable path: CPython tempfile + Starlette multipart
+            # spool. Attachments move via S3 presigned URLs and exports are
+            # built in memory, so no other scratch mount is needed. Secrets
+            # stay as envFrom (no secret volumes to mount read-only).
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: "100m"
@@ -65,8 +85,15 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-      # Run as non-root user (matches Dockerfile)
+      # Fixed UID/GID 15000 matches the non-root `app` user baked into
+      # api/Dockerfile (garage-init chowns shared creds to 15000:15000);
+      # kubelet chowns the emptyDir scratch to the same identity.
       securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 15000
+        runAsGroup: 15000
+        fsGroup: 15000
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
