@@ -53,3 +53,38 @@ export function useUpcomingExpirations(orgId: string, withinDays = 30) {
     enabled: !!orgId,
   });
 }
+
+/**
+ * One flagged expiration with organization context (issue #39).
+ *
+ * Mirrors GlobalUpcomingExpirationPublic: the org-scoped shape plus the
+ * organization name for the personal dashboard widget.
+ */
+export interface GlobalUpcomingExpiration extends UpcomingExpiration {
+  organization_name: string;
+}
+
+export interface GlobalUpcomingExpirationsResponse {
+  items: GlobalUpcomingExpiration[];
+  total: number;
+  within_days: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Cross-organization expirations for the personal dashboard (issue #39).
+ *
+ * Single aggregation endpoint — no per-org fan-out from the client.
+ */
+export function useGlobalUpcomingExpirations(withinDays = 30, limit = 10) {
+  return useQuery({
+    queryKey: ["global-upcoming-expirations", withinDays, limit],
+    queryFn: async () => {
+      const response = await api.get<GlobalUpcomingExpirationsResponse>(
+        `/api/global/expirations/upcoming?within_days=${withinDays}&limit=${limit}`
+      );
+      return response.data;
+    },
+  });
+}

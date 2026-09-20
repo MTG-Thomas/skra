@@ -86,7 +86,9 @@ async def _service(db, types, assets_by_type, today=None):
     type_repo.get_all_active = AsyncMock(return_value=types)
     asset_repo = AsyncMock()
     asset_repo.list_by_type_and_organization = AsyncMock(
-        side_effect=lambda type_id, org_id: assets_by_type.get(type_id, [])
+        side_effect=lambda type_id, org_id, limit=100, offset=0: assets_by_type.get(type_id, [])[
+            offset : offset + limit
+        ]
     )
     with (
         patch(
@@ -159,6 +161,46 @@ async def test_expired_and_distant_items() -> None:
     assert len(items) == 1
     assert items[0].days_until == -2
     assert items[0].window_days == 0
+
+
+@pytest.mark.asyncio
+async def test_scans_past_first_repository_page() -> None:
+    """An expiring asset beyond the first page is still found."""
+    from unittest.mock import patch
+
+    from src.services.expiration import ASSET_PAGE_SIZE
+
+    type_id = uuid4()
+    field_id = str(uuid4())
+    expires = (TODAY + timedelta(days=5)).isoformat()
+    filler = [_NS(id=uuid4(), values={}) for _ in range(ASSET_PAGE_SIZE)]
+    target = _NS(id=uuid4(), values={field_id: expires})
+    all_assets = filler + [target]
+
+    async def paged(type_id_arg, org_id, limit=100, offset=0):
+        return all_assets[offset : offset + limit]
+
+    type_repo = AsyncMock()
+    type_repo.get_all_active = AsyncMock(return_value=[_type(type_id, _field(field_id))])
+    asset_repo = AsyncMock()
+    asset_repo.list_by_type_and_organization = AsyncMock(side_effect=paged)
+
+    with (
+        patch(
+            "src.repositories.custom_asset_type.CustomAssetTypeRepository",
+            return_value=type_repo,
+        ),
+        patch(
+            "src.repositories.custom_asset.CustomAssetRepository",
+            return_value=asset_repo,
+        ),
+    ):
+        from src.services.expiration import find_upcoming_expirations as find
+
+        items = await find(AsyncMock(), uuid4(), today=TODAY)
+
+    assert [i.asset_id for i in items] == [target.id]
+    assert asset_repo.list_by_type_and_organization.call_count == 2
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,7 @@ describe("reconcileDashboardLayout", () => {
       { id: "favorites", visible: false },
       { id: "recent-activity", visible: true },
       { id: "quick-stats", visible: true },
+      { id: "expiring-soon", visible: true },
     ]);
   });
 
@@ -44,6 +45,21 @@ describe("reconcileDashboardLayout", () => {
       "quick-stats",
       "recent-activity",
       "favorites",
+      "expiring-soon",
+    ]);
+  });
+
+  it("appends expiring-soon to previously saved layouts", () => {
+    const layout = reconcileDashboardLayout([
+      { id: "recent-activity", visible: true },
+      { id: "favorites", visible: true },
+      { id: "quick-stats", visible: true },
+    ]);
+    expect(layout).toEqual([
+      { id: "recent-activity", visible: true },
+      { id: "favorites", visible: true },
+      { id: "quick-stats", visible: true },
+      { id: "expiring-soon", visible: true },
     ]);
   });
 
@@ -64,6 +80,7 @@ describe("toPersistedLayout", () => {
       { id: "favorites", visible: false },
       { id: "recent-activity", visible: true },
       { id: "quick-stats", visible: true },
+      { id: "expiring-soon", visible: true },
     ]);
   });
 });
