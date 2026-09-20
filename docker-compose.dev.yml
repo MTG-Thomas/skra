@@ -91,6 +91,7 @@ services:
       SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
       SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
       SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_S3_ENDPOINT: http://garage:3900
       SKRA_REDIS_URL: redis://valkey:6379/0
     volumes:
       - ./api/src:/app/src:ro

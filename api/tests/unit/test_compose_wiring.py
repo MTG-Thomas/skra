@@ -62,6 +62,18 @@ def test_base_client_keeps_nginx_probe():
     assert "http://127.0.0.1/health" in code
 
 
+def test_worker_s3_endpoint_targets_garage():
+    """Worker S3 must point at Garage, not the localhost:9000 default.
+
+    The worker boots the same Settings as the API; without an explicit
+    endpoint it falls back to the MinIO default and fails SigV4 calls
+    with EndpointConnectionError (VM101 finding).
+    """
+    for text, name in ((BASE, "base"), (DEV, "dev")):
+        block = _service_block(text, "worker")
+        assert "SKRA_S3_ENDPOINT: http://garage:3900" in block, name
+
+
 def test_dev_client_probes_vite_health_proxy():
     """The dev override targets the Vite /health proxy on port 80."""
     code = _uncommented(_service_block(DEV, "client"))

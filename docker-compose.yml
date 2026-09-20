@@ -216,6 +216,7 @@ services:
       # Same managed S3 credentials as api (issue #107); the worker image is
       # the api image, so the same uid-pinned app identity applies.
       SKRA_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
+      SKRA_S3_ENDPOINT: http://garage:3900
     depends_on:
       init:
         condition: service_completed_successfully
