@@ -7,6 +7,7 @@ Used by MSP users to see a unified view of all client data.
 
 import logging
 from dataclasses import asdict
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -20,7 +21,7 @@ from src.core.database import DbSession
 from src.models.contracts.custom_asset import FieldDefinition
 from src.models.contracts.expiration import (
     GlobalUpcomingExpirationPublic,
-    GlobalUpcomingExpirationsResponse,
+    GlobalUpcomingExpirationsPublic,
 )
 from src.models.orm.configuration import Configuration
 from src.models.orm.custom_asset import CustomAsset
@@ -638,15 +639,20 @@ async def list_global_custom_assets(
     )
 
 
-@router.get("/expirations/upcoming", response_model=GlobalUpcomingExpirationsResponse)
+@router.get("/expirations/upcoming", response_model=GlobalUpcomingExpirationsPublic)
 async def list_global_upcoming_expirations(
     _current_user: CurrentActiveUser,
     db: DbSession,
     within_days: int = Query(30, ge=1, le=365, description="Expiration horizon in days"),
+    search: str | None = Query(None, description="Search asset, type, field, or organization"),
+    sort_by: Literal["days_until", "asset_display", "organization_name"] = Query(
+        "days_until", description="Sort field"
+    ),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(20, ge=1, le=100, description="Maximum expirations to return"),
     offset: int = Query(0, ge=0, description="Number of expirations to skip"),
     show_disabled: bool = Query(False, description="Include archived organizations"),
-) -> GlobalUpcomingExpirationsResponse:
+) -> GlobalUpcomingExpirationsPublic:
     """
     List flagged expirations across readable organizations inside the horizon.
 
@@ -654,8 +660,8 @@ async def list_global_upcoming_expirations(
     organization, so readability is the standard global visibility rule —
     enabled organizations by default, archived ones opted in with
     show_disabled=true. One server-side aggregation reuses the org-scoped
-    expiration scan per visible organization (no client N+1); results merge
-    ordered by urgency and the response is capped by limit/offset.
+    expiration scan per visible organization (no client N+1); search and
+    sort apply to the merged list before limit/offset cap the response.
     limit/offset bound only the response: the scan itself pages through
     every flagged asset in every visible organization.
 
@@ -671,6 +677,31 @@ async def list_global_upcoming_expirations(
 
     merged = await find_global_upcoming_expirations(db, org_ids, within_days=within_days)
 
+    if search:
+        needle = search.casefold()
+        merged = [
+            item
+            for item in merged
+            if needle in (item.asset_display or "").casefold()
+            or needle in item.asset_type_name.casefold()
+            or needle in item.field_name.casefold()
+            or needle in org_names.get(item.organization_id, "").casefold()
+        ]
+
+    sort_keys = {
+        "days_until": lambda item: item.days_until,
+        "asset_display": lambda item: (item.asset_display or "").casefold(),
+        "organization_name": lambda item: org_names.get(item.organization_id, "").casefold(),
+    }
+    # Stable id tie-break first, so equal primary keys stay id-ordered
+    # regardless of sort direction.
+    merged = sorted(merged, key=lambda item: str(item.asset_id))
+    merged = sorted(
+        merged,
+        key=sort_keys.get(sort_by, sort_keys["days_until"]),
+        reverse=(sort_dir == "desc"),
+    )
+
     items = [
         GlobalUpcomingExpirationPublic(
             **asdict(item),
@@ -678,7 +709,7 @@ async def list_global_upcoming_expirations(
         )
         for item in merged[offset : offset + limit]
     ]
-    return GlobalUpcomingExpirationsResponse(
+    return GlobalUpcomingExpirationsPublic(
         items=items,
         total=len(merged),
         within_days=within_days,

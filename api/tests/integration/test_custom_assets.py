@@ -8,6 +8,7 @@ Note: CustomAssetType is now GLOBAL (not org-scoped), while CustomAsset
 instances remain org-scoped.
 """
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -255,6 +256,39 @@ class TestCustomAssetRepository:
         names = [a.values.get("name") for a in assets]
         assert "Production Server" in names
         assert "Staging Server" in names
+
+    async def test_list_by_type_and_organization_tie_breaks_on_id(
+        self,
+        db_session: AsyncSession,
+        test_org: Organization,
+        asset_type: CustomAssetType,
+    ):
+        """Equal created_at values fall back to id order (deterministic paging)."""
+        repo = CustomAssetRepository(db_session)
+        frozen = datetime.now(UTC)
+
+        await repo.create(
+            CustomAsset(
+                organization_id=test_org.id,
+                custom_asset_type_id=asset_type.id,
+                values={"name": "Tie A"},
+                created_at=frozen,
+            )
+        )
+        await repo.create(
+            CustomAsset(
+                organization_id=test_org.id,
+                custom_asset_type_id=asset_type.id,
+                values={"name": "Tie B"},
+                created_at=frozen,
+            )
+        )
+
+        assets = await repo.list_by_type_and_organization(asset_type.id, test_org.id)
+        tied = [a for a in assets if a.values.get("name") in ("Tie A", "Tie B")]
+
+        assert len(tied) == 2
+        assert [a.id for a in tied] == sorted(a.id for a in tied)
 
     async def test_search_by_field(
         self,

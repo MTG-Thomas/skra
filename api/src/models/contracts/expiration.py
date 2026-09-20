@@ -35,7 +35,7 @@ class GlobalUpcomingExpirationPublic(UpcomingExpirationPublic):
     organization_name: str
 
 
-class GlobalUpcomingExpirationsResponse(BaseModel):
+class GlobalUpcomingExpirationsPublic(BaseModel):
     """Cross-organization upcoming expirations with pagination."""
 
     items: list[GlobalUpcomingExpirationPublic]

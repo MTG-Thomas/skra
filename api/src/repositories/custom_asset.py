@@ -184,7 +184,7 @@ class CustomAssetRepository(BaseRepository[CustomAsset]):
                 CustomAsset.custom_asset_type_id == custom_asset_type_id,
                 CustomAsset.organization_id == organization_id,
             )
-            .order_by(CustomAsset.created_at.desc())
+            .order_by(CustomAsset.created_at.desc(), CustomAsset.id.asc())
             .limit(limit)
             .offset(offset)
         )
