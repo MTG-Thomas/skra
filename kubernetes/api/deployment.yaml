@@ -34,6 +34,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -53,6 +54,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
           volumeMounts:
             # Sole writable path: CPython tempfile + Starlette multipart
             # spool. Attachments move via S3 presigned URLs and exports are

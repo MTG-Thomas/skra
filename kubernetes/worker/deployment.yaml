@@ -31,6 +31,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
           volumeMounts:
             # Sole writable path: CPython tempfile use. The worker talks to
             # Redis/OpenAI over the network and streams files via S3/memory,

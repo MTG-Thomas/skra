@@ -43,6 +43,16 @@ def test_readonly_root_filesystem_enabled_on_all_runtime_containers():
     assert "readOnlyRootFilesystem: false" not in worker_text
 
 
+def test_privilege_escalation_disabled_on_all_runtime_containers():
+    """Init, API, and worker must not acquire privileges through setuid binaries."""
+    api_text = _api_text()
+    worker_text = _worker_text()
+
+    assert api_text.count("allowPrivilegeEscalation: false") == 2
+    assert worker_text.count("allowPrivilegeEscalation: false") == 1
+    assert "allowPrivilegeEscalation: true" not in api_text + worker_text
+
+
 def test_tmp_is_the_only_writable_mount_and_is_bounded():
     """/tmp is the sole volumeMount, backed by a size-limited emptyDir."""
     for text in (_api_text(), _worker_text()):
