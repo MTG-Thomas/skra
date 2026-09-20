@@ -30,11 +30,21 @@ async function firstOrgId(page: Page): Promise<string> {
   return orgs[0].id;
 }
 
+/** CSRF header for raw API writes (cookie sessions enforce it). */
+async function csrfHeaders(page: Page): Promise<Record<string, string>> {
+  const cookies = await page.context().cookies();
+  const csrf = cookies.find((c) => c.name.toLowerCase().includes('csrf'));
+  expect(csrf?.value).toBeTruthy();
+  return { 'X-CSRF-Token': csrf!.value };
+}
+
 test.describe('Sync Provenance', () => {
   test('password detail shows provenance card when synced', async ({ page }) => {
     const orgId = await firstOrgId(page);
 
+    const headers = await csrfHeaders(page);
     const create = await page.request.post(`/api/organizations/${orgId}/passwords`, {
+      headers,
       data: {
         name: `Provenance PW ${Date.now()}`,
         password: 'Secret123!',
@@ -57,7 +67,9 @@ test.describe('Sync Provenance', () => {
   test('unsafe source_url scheme never renders a link', async ({ page }) => {
     const orgId = await firstOrgId(page);
 
+    const headers = await csrfHeaders(page);
     const create = await page.request.post(`/api/organizations/${orgId}/passwords`, {
+      headers,
       data: {
         name: `Unsafe URL PW ${Date.now()}`,
         password: 'Secret123!',
@@ -80,7 +92,9 @@ test.describe('Sync Provenance', () => {
   test('password detail hides card gracefully without provenance', async ({ page }) => {
     const orgId = await firstOrgId(page);
 
+    const headers = await csrfHeaders(page);
     const create = await page.request.post(`/api/organizations/${orgId}/passwords`, {
+      headers,
       data: { name: `Plain PW ${Date.now()}`, password: 'Secret123!' },
     });
     expect(create.ok()).toBeTruthy();
@@ -93,7 +107,9 @@ test.describe('Sync Provenance', () => {
   test('location detail shows provenance card when synced', async ({ page }) => {
     const orgId = await firstOrgId(page);
 
+    const headers = await csrfHeaders(page);
     const create = await page.request.post(`/api/organizations/${orgId}/locations`, {
+      headers,
       data: { name: `Provenance Loc ${Date.now()}`, sync_metadata: SYNC_METADATA },
     });
     expect(create.ok()).toBeTruthy();
