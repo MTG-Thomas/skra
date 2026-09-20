@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from src.models.contracts.base import PublicEntityBase
+from src.models.contracts.sync import SyncMetadata
 
 
 class DocumentCreate(BaseModel):
@@ -17,6 +18,7 @@ class DocumentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Document title")
     content: str = Field(default="", description="Markdown content")
     metadata: dict | None = Field(default=None, description="External system metadata")
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Defaults to True if not provided
 
 
@@ -34,6 +36,7 @@ class DocumentUpdate(BaseModel):
     )
     content: str | None = Field(default=None, description="Markdown content")
     metadata: dict | None = Field(default=None, description="External system metadata")
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Don't change if not provided
 
 
@@ -43,6 +46,7 @@ class DocumentPublic(PublicEntityBase):
     path: str
     name: str
     content: str
+    sync_metadata: SyncMetadata | None = None
     updated_by_user_id: str | None = None
     updated_by_user_name: str | None = None
 

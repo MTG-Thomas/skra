@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, PrivateAttr, computed_field
 
 from src.models.contracts.base import PublicEntityBase
+from src.models.contracts.sync import SyncMetadata
 
 
 class PasswordCreate(BaseModel):
@@ -15,6 +16,7 @@ class PasswordCreate(BaseModel):
     url: str | None = Field(default=None, max_length=2048)
     notes: str | None = None
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Defaults to True if not provided
 
 
@@ -28,6 +30,7 @@ class PasswordUpdate(BaseModel):
     url: str | None = Field(default=None, max_length=2048)
     notes: str | None = None
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Don't change if not provided
 
 
@@ -38,6 +41,7 @@ class PasswordPublic(PublicEntityBase):
     username: str | None = None
     url: str | None = None
     notes: str | None = None
+    sync_metadata: SyncMetadata | None = None
     updated_by_user_id: str | None = None
     updated_by_user_name: str | None = None
 

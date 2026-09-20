@@ -19,6 +19,10 @@ from src.models.contracts.location import (
     LocationPublic,
     LocationUpdate,
 )
+from src.models.contracts.sync import (
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 from src.models.enums import AuditAction
 from src.models.orm.location import Location
 from src.repositories.location import LocationRepository
@@ -46,6 +50,7 @@ def _to_public(location: Location) -> LocationPublic:
     # (handles both real ORM objects and test mocks)
     metadata_value = getattr(location, "metadata_", None)
     metadata = metadata_value if isinstance(metadata_value, dict) else {}
+    sync_metadata = sync_metadata_to_response(getattr(location, "sync_metadata", None))
 
     updated_by_user = getattr(location, "updated_by_user", None)
     data = {
@@ -54,6 +59,7 @@ def _to_public(location: Location) -> LocationPublic:
         "name": getattr(location, "name", ""),
         "notes": getattr(location, "notes", None),
         "metadata": metadata,
+        "sync_metadata": sync_metadata,
         "is_enabled": getattr(location, "is_enabled", True),
         "created_at": getattr(location, "created_at", None),
         "updated_at": getattr(location, "updated_at", None),
@@ -154,6 +160,7 @@ async def create_location(
         name=location_data.name,
         notes=location_data.notes,
         metadata_=location_data.metadata,
+        sync_metadata=sync_metadata_to_storage(location_data.sync_metadata),
         is_enabled=location_data.is_enabled if location_data.is_enabled is not None else True,
         address_1=location_data.address_1,
         address_2=location_data.address_2,
@@ -352,6 +359,8 @@ async def update_location(
         location.notes = location_data.notes
     if location_data.metadata is not None:
         location.metadata_ = location_data.metadata
+    if location_data.sync_metadata is not None:
+        location.sync_metadata = sync_metadata_to_storage(location_data.sync_metadata)
     if location_data.is_enabled is not None:
         location.is_enabled = location_data.is_enabled
     if location_data.address_1 is not None:

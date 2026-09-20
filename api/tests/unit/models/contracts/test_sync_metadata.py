@@ -1,14 +1,40 @@
 """Tests for sync provenance metadata contracts."""
 
 from datetime import UTC, datetime
+from typing import TypeVar
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from src.models.contracts.configuration import ConfigurationPublic
 from src.models.contracts.custom_asset import CustomAssetPublic
-from src.models.contracts.sync import SyncMetadata, sync_metadata_to_storage
+from src.models.contracts.document import (
+    DocumentCreate,
+    DocumentPublic,
+    DocumentUpdate,
+)
+from src.models.contracts.location import (
+    LocationCreate,
+    LocationPublic,
+    LocationUpdate,
+)
+from src.models.contracts.organization import (
+    OrganizationCreate,
+    OrganizationPublic,
+    OrganizationUpdate,
+    OrganizationWithFrequent,
+)
+from src.models.contracts.password import (
+    PasswordCreate,
+    PasswordPublic,
+    PasswordUpdate,
+)
+from src.models.contracts.sync import (
+    SyncMetadata,
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 
 
 def test_sync_metadata_accepts_plan_fields() -> None:
@@ -154,3 +180,141 @@ def test_custom_asset_public_exposes_sync_metadata_from_orm_attribute() -> None:
     assert public.sync_metadata is not None
     assert public.sync_metadata.source_system == "halo"
     assert public.model_dump()["sync_metadata"]["external_id"] == "asset-789"
+
+
+SYNC_ATTRS = {
+    "source_system": "itglue",
+    "source_tenant_id": "tenant-123",
+    "external_id": "ext-001",
+    "last_synced_at": datetime.now(UTC),
+    "sync_status": "synced",
+    "sync_hash": "sha256:abc123",
+}
+
+
+def _base_attrs(**overrides: object) -> dict[str, object]:
+    now = datetime.now(UTC)
+    attrs: dict[str, object] = {
+        "id": uuid4(),
+        "organization_id": uuid4(),
+        "is_enabled": True,
+        "created_at": now,
+        "updated_at": now,
+        "metadata_": {},
+        "sync_metadata": dict(SYNC_ATTRS),
+    }
+    attrs.update(overrides)
+    return attrs
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def _public_from_attrs(public_cls: type[T], attrs: dict[str, object]) -> T:
+    fake = type("FakeOrm", (), attrs)()
+    return public_cls.model_validate(fake)
+
+
+def test_organization_public_exposes_sync_metadata() -> None:
+    """Organization responses expose non-secret sync provenance (issue #34)."""
+    public = _public_from_attrs(OrganizationPublic, _base_attrs(name="Acme"))
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.external_id == "ext-001"
+
+
+def test_location_public_exposes_sync_metadata() -> None:
+    """Location responses expose non-secret sync provenance (issue #34)."""
+    public = _public_from_attrs(LocationPublic, _base_attrs(name="HQ"))
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.source_system == "itglue"
+
+
+def test_document_public_exposes_sync_metadata() -> None:
+    """Document responses expose non-secret sync provenance (issue #34)."""
+    public = _public_from_attrs(
+        DocumentPublic, _base_attrs(path="/Runbooks", name="VPN", content="")
+    )
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.sync_hash == "sha256:abc123"
+
+
+def test_password_public_exposes_sync_metadata_without_secrets() -> None:
+    """Password responses expose provenance but never secret material (issue #34)."""
+    public = _public_from_attrs(PasswordPublic, _base_attrs(name="Admin"))
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.external_id == "ext-001"
+    assert not hasattr(public, "password")
+
+
+def test_sync_metadata_to_response_validates_raw_dicts() -> None:
+    """Response helper validates storage dicts into models (issue #34)."""
+    result = sync_metadata_to_response(dict(SYNC_ATTRS))
+
+    assert isinstance(result, SyncMetadata)
+    assert result.external_id == "ext-001"
+
+
+def test_sync_metadata_to_response_passes_through_models() -> None:
+    """Already-validated provenance is returned unchanged."""
+    model = SyncMetadata(**SYNC_ATTRS)
+
+    assert sync_metadata_to_response(model) is model
+
+
+def test_sync_metadata_to_response_returns_none_when_absent() -> None:
+    """Missing or empty provenance serializes as null."""
+    assert sync_metadata_to_response(None) is None
+    assert sync_metadata_to_response({}) is None
+    assert sync_metadata_to_response("ext-001") is None
+
+
+def test_organization_with_frequent_coerces_raw_sync_metadata() -> None:
+    """The get-organization path validates raw storage dicts (issue #34)."""
+    now = datetime.now(UTC)
+    public = OrganizationWithFrequent.model_validate(
+        {
+            "id": uuid4(),
+            "name": "Acme",
+            "is_enabled": True,
+            "created_at": now,
+            "updated_at": now,
+            "metadata": {},
+            "sync_metadata": dict(SYNC_ATTRS),
+        }
+    )
+
+    assert public.sync_metadata is not None
+    assert public.sync_metadata.external_id == "ext-001"
+
+
+def test_public_contracts_default_sync_metadata_to_none() -> None:
+    """Entities without provenance serialize sync_metadata as null."""
+    for public_cls, extra in [
+        (OrganizationPublic, {"name": "Acme"}),
+        (LocationPublic, {"name": "HQ"}),
+        (DocumentPublic, {"path": "/R", "name": "D", "content": ""}),
+        (PasswordPublic, {"name": "P"}),
+    ]:
+        attrs = _base_attrs(**extra)
+        attrs["sync_metadata"] = None
+        public = _public_from_attrs(public_cls, attrs)
+
+        assert public.sync_metadata is None
+
+
+def test_create_update_contracts_accept_sync_metadata() -> None:
+    """Write contracts accept provenance for later migrator use (issue #34)."""
+    payload = {"sync_metadata": dict(SYNC_ATTRS)}
+
+    assert OrganizationCreate(name="Acme", **payload).sync_metadata is not None
+    assert OrganizationUpdate(**payload).sync_metadata is not None
+    assert LocationCreate(name="HQ", **payload).sync_metadata is not None
+    assert LocationUpdate(**payload).sync_metadata is not None
+    assert DocumentCreate(path="/R", name="D", **payload).sync_metadata is not None
+    assert DocumentUpdate(**payload).sync_metadata is not None
+    assert PasswordCreate(name="P", password="secret", **payload).sync_metadata is not None
+    assert PasswordUpdate(**payload).sync_metadata is not None

@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from src.models.contracts.base import PublicEntityBase
+from src.models.contracts.sync import SyncMetadata
 
 
 class LocationCreate(BaseModel):
@@ -11,6 +12,7 @@ class LocationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     notes: str | None = None
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Defaults to True if not provided
     address_1: str | None = Field(None, max_length=255)
     address_2: str | None = Field(None, max_length=255)
@@ -27,6 +29,7 @@ class LocationUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     notes: str | None = None
     metadata: dict | None = None
+    sync_metadata: SyncMetadata | None = None
     is_enabled: bool | None = None  # Don't change if not provided
     address_1: str | None = Field(None, max_length=255)
     address_2: str | None = Field(None, max_length=255)
@@ -42,6 +45,7 @@ class LocationPublic(PublicEntityBase):
 
     name: str
     notes: str | None = None
+    sync_metadata: SyncMetadata | None = None
     address_1: str | None = None
     address_2: str | None = None
     city: str | None = None

@@ -62,6 +62,7 @@ class Location(Base):
     metadata_: Mapped[dict] = mapped_column(
         "metadata", JSONB, nullable=False, default=dict, server_default="{}"
     )
+    sync_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Relationships
     circuits: Mapped[list["Circuit"]] = relationship(
