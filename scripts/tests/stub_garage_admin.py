@@ -37,7 +37,9 @@ def mint(name):
 
 class H(BaseHTTPRequestHandler):
     def _send(self, obj, code=200):
-        body = json.dumps(obj).encode()
+        # indent=2: real Garage pretty-prints multi-line JSON (id and name
+        # land on separate lines), which naive same-line parsers mishandle.
+        body = json.dumps(obj, indent=2).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

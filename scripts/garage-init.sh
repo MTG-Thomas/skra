@@ -69,9 +69,11 @@ json_field() {
 
 key_id_for_name() {
     # Print access key IDs (one per line) whose list entry name exactly
-    # matches $1. List entries look like {"id":"GK...","name":"..."} with
-    # varying whitespace. grep/sed only (busybox awk lacks 3-arg match).
-    printf '%s' "$2" | tr '{}' '\n\n' \
+    # matches $1. Real Garage pretty-prints entries across lines (id and
+    # name on separate lines), so flatten newlines first: without this,
+    # reruns never match and mint a duplicate key on every restart.
+    # grep/sed only (busybox awk lacks 3-arg match).
+    printf '%s' "$2" | tr '\n' ' ' | tr '{}' '\n\n' \
         | grep "\"name\" *: *\"$1\"" \
         | grep -o '"id" *: *"[^"]*"' \
         | sed 's/^"id" *: *"//; s/"$//'
