@@ -49,15 +49,28 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 FROM nginx:alpine AS production
 
 # Copy built assets from builder
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
 # Copy nginx configurations
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY nginx-ssl.conf /app/nginx-ssl.conf
 
-# Create SSL directory
-RUN mkdir -p /etc/nginx/ssl
+# Run as non-root nginx user (uid 101 in nginx:alpine).
+# Main /etc/nginx/nginx.conf already sets `user nginx`; the master process
+# only stays root for privileged ports and root-owned paths, so this stage
+# listens on unprivileged ports and owns its runtime paths instead.
+# NOTE: operator-mounted TLS certs under /etc/nginx/ssl must be readable by
+# uid 101 (e.g. mount with :ro and group/other read or chown 101).
+RUN mkdir -p /etc/nginx/ssl && \
+    chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d /etc/nginx/ssl \
+        /var/cache/nginx /var/log/nginx && \
+    chown nginx:nginx /app/nginx-ssl.conf && \
+    sed -i 's|^pid .*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf
 
-EXPOSE 80 443
+EXPOSE 8080 8443
 
+USER nginx
+
+# /tmp is world-writable so the non-root master can write its pid file
+# (/run is root-owned and the pid directive cannot be set from conf.d).
 CMD ["nginx", "-g", "daemon off;"]

@@ -4,11 +4,8 @@
 
 FROM node:20-slim
 
-# Allow the non-root node user to bind port 80 (vite dev server)
-RUN apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
-    && setcap cap_net_bind_service=+ep /usr/local/bin/node \
-    && apt-get purge -y libcap2-bin \
-    && rm -rf /var/lib/apt/lists/*
+# Vite listens on unprivileged 8080 (same container port as production nginx),
+# so no extra capabilities are needed for the non-root node user.
 
 WORKDIR /app
 RUN chown node:node /app
@@ -21,10 +18,11 @@ RUN npm ci
 # Don't copy source code - it comes from volume mounts in docker-compose.dev.yml
 # This prevents any risk of stale built code overwriting live source
 
-# Expose port 80 to match production nginx
-EXPOSE 80
+# Expose port 8080 to match the production nginx container port
+EXPOSE 8080
 
 # Start Vite dev server with HMR
 # --host 0.0.0.0 allows external connections (needed for Docker)
-# --port 80 to match production nginx port
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "80"]
+# --port 8080 matches the production container port, so the base compose
+# port mapping works for both targets; host port stays localhost:8080
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "8080"]
