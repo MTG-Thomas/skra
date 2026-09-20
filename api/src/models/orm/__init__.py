@@ -18,6 +18,7 @@ from src.models.orm.custom_asset_type import CustomAssetType
 from src.models.orm.document import Document
 from src.models.orm.embedding_index import EmbeddingIndex
 from src.models.orm.expiration_alert import ExpirationAlertSighting
+from src.models.orm.expiration_projection import ExpirationProjection
 from src.models.orm.export import Export, ExportStatus
 from src.models.orm.location import Location
 from src.models.orm.mfa import MFARecoveryCode, UserMFAMethod
@@ -68,6 +69,7 @@ __all__ = [
     "CustomAsset",
     # Expiration Alerts
     "ExpirationAlertSighting",
+    "ExpirationProjection",
     # Attachments
     "Attachment",
     # Relationships
