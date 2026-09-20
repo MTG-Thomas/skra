@@ -473,7 +473,7 @@ jobs:
 
       - name: Run auth smoke suite (chromium)
         run: |
-          docker run --rm --network bifrost-docs-test_default \
+          docker run --rm --network skra-test_default \
             -v "${{ github.workspace }}/client:/work" -w /work \
             -e E2E_BASE_URL=http://client:3000 \
             mcr.microsoft.com/playwright:v1.59.1-noble \

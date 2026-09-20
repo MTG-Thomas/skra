@@ -9,10 +9,8 @@ import os
 import warnings
 from functools import lru_cache
 from typing import Any, Literal
-from urllib.parse import urlsplit
 
-import bcrypt
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field, computed_field
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -24,17 +22,6 @@ from pydantic_settings import (
 #: Previous env prefix, honored as a one-release fallback (see _LegacyEnvSource).
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
-
-#: Bcrypt hash of the retired development database password.
-#: Development database URLs used to ship as code defaults; every runtime
-#: (compose files, CI, test fixtures) now provides explicit URLs instead,
-#: so no credential literal remains in source. Production still refuses any
-#: configured URL whose password verifies against this hash (fail closed).
-#: A slow password hash (not SHA-256) is stored deliberately: this is a
-#: credential comparison, so the reference itself must resist offline
-#: brute force. Generated with bcrypt cost 12; verification runs only at
-#: production startup (two URLs), so the ~0.5s cost is negligible.
-_RETIRED_DEV_DB_HASH = "$2b$12$pY2KRTQ6QORom.Wtmsoz4uOFhRXI4ur9TP004tyhu2mq6PIgzWL0K"
 
 _warned_legacy_keys: set[str] = set()
 
@@ -438,42 +425,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production mode."""
         return self.environment == "production"
-
-    @model_validator(mode="after")
-    def _reject_dev_database_password_in_production(self) -> "Settings":
-        """Refuse to boot production on the retired development credential.
-
-        Database URLs have no code defaults: every runtime (compose files,
-        CI, test fixtures) provides explicit values, and a missing value
-        fails fast at startup instead of silently using the wrong database.
-        As a second layer, production refuses any configured URL whose
-        password verifies against the stored bcrypt hash of the retired
-        development credential. The password itself never appears in
-        source. Unparseable URLs are left for the database driver to
-        reject loudly at connect time. Over-long passwords (>72 bytes,
-        rejected by bcrypt) cannot match the short retired credential
-        and pass through.
-        """
-        if self.environment == "production":
-            for field_name in ("database_url", "database_url_sync"):
-                url = getattr(self, field_name, "") or ""
-                try:
-                    password = urlsplit(url).password or ""
-                except ValueError:
-                    continue
-                try:
-                    retired = bool(
-                        password
-                        and bcrypt.checkpw(password.encode(), _RETIRED_DEV_DB_HASH.encode())
-                    )
-                except ValueError:
-                    retired = False
-                if retired:
-                    raise ValueError(
-                        f"{field_name} still uses the retired development "
-                        f"password; set SKRA_{field_name.upper()} in production"
-                    )
-        return self
 
 
 @lru_cache
