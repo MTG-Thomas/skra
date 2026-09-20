@@ -18,7 +18,17 @@ or the asset ID fallback are stored here.
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.orm.base import Base
@@ -48,12 +58,15 @@ class ExpirationProjection(Base):
     field_id: Mapped[str] = mapped_column(String(255), nullable=False)
     # Human-readable field key: the projection key mandated by issue #136.
     field_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    field_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    asset_type_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    # Snapshots of unbounded contract strings (field names, type names,
+    # and display values carry no length validation): Text so the
+    # projection can never fail an otherwise valid asset write.
+    field_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    asset_type_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     expires_on: Mapped[date] = mapped_column(Date, nullable=False)
     # Plain-text display value resolved at write time, or str(asset.id).
     # Never a password/totp value or encrypted blob.
-    display_label: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    display_label: Mapped[str | None] = mapped_column(Text, nullable=True)
     asset_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

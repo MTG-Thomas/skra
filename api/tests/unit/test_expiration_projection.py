@@ -310,6 +310,40 @@ async def test_refresh_with_no_rows_prunes_everything():
     repo.delete_stale_for_asset.assert_awaited_once_with(ASSET_ID, set())
 
 
+def test_snapshot_columns_are_unbounded_text():
+    """Display/name snapshots must not truncate valid content (no length cap)."""
+    from sqlalchemy import String, Text
+
+    from src.models.orm.expiration_projection import ExpirationProjection
+
+    columns = ExpirationProjection.__table__.columns
+    for name in ("display_label", "field_name", "asset_type_name"):
+        assert isinstance(columns[name].type, Text), name
+    # Indexed key columns stay bounded.
+    for name in ("field_id", "field_key"):
+        assert isinstance(columns[name].type, String), name
+        assert columns[name].type.length == 255, name
+
+
+def test_long_display_value_projects_intact():
+    """A display value past 1024 chars projects whole: no new write failure."""
+    from src.services.expiration_projection import project_asset
+
+    date_id = str(uuid4())
+    name_id = str(uuid4())
+    long_name = "n" * 5000
+    asset = _asset({date_id: "2026-10-05", name_id: long_name})
+    asset_type = _type(
+        _field(date_id),
+        _field(name_id, key="name", field_type="text", alert=False, name="Name"),
+        display_field_key="name",
+    )
+
+    (row,) = project_asset(asset, asset_type)
+
+    assert row.display_label == long_name
+
+
 @pytest.mark.asyncio
 async def test_repository_upsert_conflicts_on_stable_id_and_updates_key():
     """Upsert targets (asset_id, field_id) so renames update the key in place."""

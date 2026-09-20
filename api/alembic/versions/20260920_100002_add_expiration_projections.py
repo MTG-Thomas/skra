@@ -33,10 +33,10 @@ def upgrade() -> None:
         sa.Column("asset_id", sa.UUID(), nullable=False),
         sa.Column("field_id", sa.String(length=255), nullable=False),
         sa.Column("field_key", sa.String(length=255), nullable=False),
-        sa.Column("field_name", sa.String(length=255), nullable=False, server_default=""),
-        sa.Column("asset_type_name", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("field_name", sa.Text(), nullable=False, server_default=""),
+        sa.Column("asset_type_name", sa.Text(), nullable=False, server_default=""),
         sa.Column("expires_on", sa.Date(), nullable=False),
-        sa.Column("display_label", sa.String(length=1024), nullable=True),
+        sa.Column("display_label", sa.Text(), nullable=True),
         sa.Column("asset_updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("is_asset_enabled", sa.Boolean(), server_default="true", nullable=False),
         sa.Column(
