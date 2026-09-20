@@ -44,7 +44,7 @@ FROM python:3.11-slim AS runtime-base
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
-    && apt-get install -y --only-upgrade perl-base \
+    && apt-get install -y --no-install-recommends --only-upgrade perl-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with a FIXED uid/gid (15000). garage-init (which runs
