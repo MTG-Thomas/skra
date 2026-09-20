@@ -34,6 +34,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Backfill MD5 hashes from the stored plaintext (searchable_text is a
+    # non-nullable Text column) before shrinking. Without this, PostgreSQL
+    # rejects the VARCHAR(64) -> VARCHAR(32) rewrite on 64-char SHA-256 rows.
+    op.execute("UPDATE embedding_index SET content_hash = md5(searchable_text)")
     op.alter_column(
         "embedding_index",
         "content_hash",
