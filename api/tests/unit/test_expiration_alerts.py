@@ -204,7 +204,8 @@ def test_notifier_starttls_failure_fails_closed():
 
 
 def test_notifier_failure_logs_no_exception_detail(caplog):
-    """SMTP failures log a static message without exception text or tracebacks."""
+    """SMTP failures log a bare static message: no exception text, tracebacks,
+    or user-supplied org/field context."""
     import logging
 
     from src.services.expiration_alerts import ExpirationNotifier
@@ -225,7 +226,8 @@ def test_notifier_failure_logs_no_exception_detail(caplog):
     ):
         instance = smtp.return_value.__enter__.return_value
         instance.starttls.side_effect = RuntimeError(f"AUTH failed: {sentinel}")
-        assert notifier.notify(_item(), org_name="Acme") is False
+        item = _item(field_key=f"expires_on-{sentinel}")
+        assert notifier.notify(item, org_name=f"Acme-{sentinel}") is False
 
     failure_records = [
         record
@@ -237,6 +239,17 @@ def test_notifier_failure_logs_no_exception_detail(caplog):
     assert record.exc_info is None
     assert record.exc_text is None
     assert sentinel not in record.getMessage()
+    for attr, value in vars(record).items():
+        if attr in {"message", "msg"}:
+            continue
+        if isinstance(value, str):
+            assert sentinel not in value, f"sentinel leaked in record.{attr}"
+        elif isinstance(value, dict):
+            for key, item_value in value.items():
+                assert sentinel not in str(key), f"sentinel leaked in record.{attr} key"
+                assert sentinel not in str(item_value), (
+                    f"sentinel leaked in record.{attr}[{key!r}]"
+                )
     assert sentinel not in caplog.text
     assert "Traceback" not in caplog.text
 

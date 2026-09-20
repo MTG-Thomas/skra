@@ -152,16 +152,10 @@ class ExpirationNotifier:
                     smtp.login(self.username, self.password)
                 smtp.send_message(message)
         except Exception:
-            # Static message only: exception text and tracebacks may carry
-            # SMTP credentials or headers (issue #120).
-            logger.error(
-                "Expiration alert SMTP delivery failed",
-                extra={
-                    "organization": org_name,
-                    "asset_id": str(item.asset_id),
-                    "field_key": item.field_key,
-                },
-            )
+            # Bare static message: exception text and tracebacks may carry
+            # SMTP credentials or headers, and org/field names are
+            # user-supplied, so no context fields are logged here (#120).
+            logger.error("Expiration alert SMTP delivery failed")
             return False
 
         logger.info(
