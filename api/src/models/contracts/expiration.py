@@ -27,3 +27,19 @@ class UpcomingExpirationsResponse(BaseModel):
     items: list[UpcomingExpirationPublic]
     total: int
     within_days: int
+
+
+class GlobalUpcomingExpirationPublic(UpcomingExpirationPublic):
+    """One flagged expiration with its organization context for global view."""
+
+    organization_name: str
+
+
+class GlobalUpcomingExpirationsResponse(BaseModel):
+    """Cross-organization upcoming expirations with pagination."""
+
+    items: list[GlobalUpcomingExpirationPublic]
+    total: int
+    within_days: int
+    limit: int
+    offset: int

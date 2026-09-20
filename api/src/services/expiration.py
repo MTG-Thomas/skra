@@ -17,6 +17,10 @@ ALERT_WINDOWS: tuple[int, ...] = (30, 14, 7, 1)
 
 DEFAULT_WITHIN_DAYS = 30
 
+# Assets scanned per repository call. The repository caps a single call,
+# so the scan pages to exhaustion instead of trusting one page.
+ASSET_PAGE_SIZE = 500
+
 
 def parse_expiration_value(value: Any) -> date | None:
     """Parse an ISO date/datetime string into a date, else None."""
@@ -76,8 +80,10 @@ async def find_upcoming_expirations(
     """Find flagged expirations for one organization inside the horizon.
 
     Scans active custom asset types for date fields with expiration_alert,
-    then each type's assets in the organization. Unparseable or blank
-    values are skipped; items beyond ``within_days`` are excluded.
+    then pages through each type's assets in the organization to exhaustion
+    (a single repository call is capped and would silently drop assets past
+    the first page). Unparseable or blank values are skipped; items beyond
+    ``within_days`` are excluded.
     """
     from src.repositories.custom_asset import CustomAssetRepository
     from src.repositories.custom_asset_type import CustomAssetTypeRepository
@@ -97,38 +103,75 @@ async def find_upcoming_expirations(
             continue
         key_to_id = {_field_get(f, "key"): _field_get(f, "id") for f in (asset_type.fields or [])}
         display_id = key_to_id.get(getattr(asset_type, "display_field_key", None))
-        assets = await asset_repo.list_by_type_and_organization(asset_type.id, organization_id)
-        for asset in assets:
-            values = asset.values or {}
-            for field in alert_fields:
-                expires_on = parse_expiration_value(values.get(_field_get(field, "id")))
-                if expires_on is None:
-                    continue
-                days_until = (expires_on - current).days
-                if days_until > within_days:
-                    continue
-                window = expiration_window(days_until)
-                if window is None:
-                    continue
-                display = None
-                if display_id:
-                    raw_display = values.get(display_id)
-                    display = str(raw_display) if raw_display is not None else None
-                if display is None:
-                    display = str(asset.id)
-                items.append(
-                    UpcomingExpiration(
-                        organization_id=organization_id,
-                        asset_id=asset.id,
-                        asset_display=display,
-                        asset_type_id=asset_type.id,
-                        asset_type_name=asset_type.name,
-                        field_key=_field_get(field, "key"),
-                        field_name=_field_get(field, "name"),
-                        expires_on=expires_on,
-                        days_until=days_until,
-                        window_days=window,
+        page_offset = 0
+        while True:
+            page = await asset_repo.list_by_type_and_organization(
+                asset_type.id, organization_id, limit=ASSET_PAGE_SIZE, offset=page_offset
+            )
+            for asset in page:
+                values = asset.values or {}
+                for field in alert_fields:
+                    expires_on = parse_expiration_value(values.get(_field_get(field, "id")))
+                    if expires_on is None:
+                        continue
+                    days_until = (expires_on - current).days
+                    if days_until > within_days:
+                        continue
+                    window = expiration_window(days_until)
+                    if window is None:
+                        continue
+                    display = None
+                    if display_id:
+                        raw_display = values.get(display_id)
+                        display = str(raw_display) if raw_display is not None else None
+                    if display is None:
+                        display = str(asset.id)
+                    items.append(
+                        UpcomingExpiration(
+                            organization_id=organization_id,
+                            asset_id=asset.id,
+                            asset_display=display,
+                            asset_type_id=asset_type.id,
+                            asset_type_name=asset_type.name,
+                            field_key=_field_get(field, "key"),
+                            field_name=_field_get(field, "name"),
+                            expires_on=expires_on,
+                            days_until=days_until,
+                            window_days=window,
+                        )
                     )
-                )
+            if len(page) < ASSET_PAGE_SIZE:
+                break
+            page_offset += ASSET_PAGE_SIZE
     items.sort(key=lambda i: (i.days_until, str(i.asset_id)))
     return items
+
+
+async def find_global_upcoming_expirations(
+    db: Any,
+    organization_ids: list[UUID],
+    *,
+    within_days: int = DEFAULT_WITHIN_DAYS,
+    today: date | None = None,
+) -> list[UpcomingExpiration]:
+    """Find flagged expirations across organizations inside the horizon.
+
+    Reuses the org-scoped scan per organization (single server-side
+    aggregation, no client N+1) and merges the results ordered by urgency
+    (days until expiration, then asset id for determinism). Callers slice
+    the merged list to enforce limit/offset caps.
+
+    Cost note: every page of every flagged type in every listed
+    organization is scanned, so work scales with total assets, not with
+    the caller's limit — limit/offset bound only the response, not the
+    scan.
+    """
+    merged: list[UpcomingExpiration] = []
+    for organization_id in organization_ids:
+        merged.extend(
+            await find_upcoming_expirations(
+                db, organization_id, within_days=within_days, today=today
+            )
+        )
+    merged.sort(key=lambda i: (i.days_until, str(i.organization_id), str(i.asset_id)))
+    return merged

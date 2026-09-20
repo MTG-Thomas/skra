@@ -17,7 +17,11 @@ export const PERSONAL_DASHBOARD_LAYOUT_KEY = "dashboard_layout_personal";
 
 export const MAX_DASHBOARD_WIDGETS = 12;
 
-export type DashboardWidgetId = "recent-activity" | "favorites" | "quick-stats";
+export type DashboardWidgetId =
+  | "recent-activity"
+  | "favorites"
+  | "quick-stats"
+  | "expiring-soon";
 
 export interface DashboardWidgetItem {
   id: string;
@@ -49,6 +53,11 @@ export const DASHBOARD_WIDGET_REGISTRY: Record<
     title: "Quick stats",
     description: "Counts by type across all organizations",
   },
+  "expiring-soon": {
+    id: "expiring-soon",
+    title: "Expiring soon",
+    description: "Upcoming expirations across organizations",
+  },
 };
 
 /** Default layout: every registered widget, visible, in registry order. */
@@ -56,6 +65,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetItem[] = [
   { id: "recent-activity", visible: true },
   { id: "favorites", visible: true },
   { id: "quick-stats", visible: true },
+  { id: "expiring-soon", visible: true },
 ];
 
 export function isKnownWidgetId(id: unknown): id is DashboardWidgetId {

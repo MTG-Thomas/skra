@@ -10,6 +10,7 @@ import {
   type DashboardWidgetId,
 } from "@/components/dashboard/widgetRegistry";
 import { entityLabel, entityPath } from "@/components/dashboard/entityLinks";
+import { ExpiringSoonWidget } from "@/components/dashboard/ExpiringSoonWidget";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -249,6 +250,8 @@ function renderWidget(id: DashboardWidgetId) {
       return <FavoritesWidget />;
     case "quick-stats":
       return <QuickStatsWidget />;
+    case "expiring-soon":
+      return <ExpiringSoonWidget />;
     default:
       return null;
   }
