@@ -5,14 +5,13 @@ Uses pydantic-settings for environment variable loading with validation.
 All configuration is centralized here for easy management.
 """
 
-import hmac
 import os
 import warnings
 from functools import lru_cache
-from hashlib import sha256
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
+import bcrypt
 from pydantic import Field, computed_field, model_validator
 from pydantic_settings import (
     BaseSettings,
@@ -26,13 +25,16 @@ from pydantic_settings import (
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
 
-#: SHA-256 digest of the retired development database password.
+#: Bcrypt hash of the retired development database password.
 #: Development database URLs used to ship as code defaults; every runtime
 #: (compose files, CI, test fixtures) now provides explicit URLs instead,
 #: so no credential literal remains in source. Production still refuses any
-#: configured URL whose password matches this digest (fail closed); the
-#: digest itself is not usable as a credential.
-_RETIRED_DEV_DB_DIGEST = "e87cbe88d74e239ab0e22b4bc34f434740fdee7f0b74f78869bccd3a79d2f7f3"
+#: configured URL whose password verifies against this hash (fail closed).
+#: A slow password hash (not SHA-256) is stored deliberately: this is a
+#: credential comparison, so the reference itself must resist offline
+#: brute force. Generated with bcrypt cost 12; verification runs only at
+#: production startup (two URLs), so the ~0.5s cost is negligible.
+_RETIRED_DEV_DB_HASH = "$2b$12$pY2KRTQ6QORom.Wtmsoz4uOFhRXI4ur9TP004tyhu2mq6PIgzWL0K"
 
 _warned_legacy_keys: set[str] = set()
 
@@ -445,19 +447,12 @@ class Settings(BaseSettings):
         CI, test fixtures) provides explicit values, and a missing value
         fails fast at startup instead of silently using the wrong database.
         As a second layer, production refuses any configured URL whose
-        password matches the retired development credential. The password
-        itself never appears in source; only its SHA-256 digest is stored,
-        which names no usable credential. Unparseable URLs are left for the
-        database driver to reject loudly at connect time.
-
-        NOTE (security review): the SHA-256 here is a blocklist-membership
-        check against one retired dev credential, not password storage —
-        no hash is persisted for later verification, so bcrypt-style key
-        stretching does not apply (same rationale as public compromised-
-        password lists, which use fast hashes for exactly this). The digest
-        comparison is timing-safe via hmac.compare_digest. CodeQL
-        py/insufficient-password-hash here is a false positive
-        (misclassified password hashing).
+        password verifies against the stored bcrypt hash of the retired
+        development credential. The password itself never appears in
+        source. Unparseable URLs are left for the database driver to
+        reject loudly at connect time. Over-long passwords (>72 bytes,
+        rejected by bcrypt) cannot match the short retired credential
+        and pass through.
         """
         if self.environment == "production":
             for field_name in ("database_url", "database_url_sync"):
@@ -466,9 +461,14 @@ class Settings(BaseSettings):
                     password = urlsplit(url).password or ""
                 except ValueError:
                     continue
-                if password and hmac.compare_digest(
-                    sha256(password.encode()).hexdigest(), _RETIRED_DEV_DB_DIGEST
-                ):
+                try:
+                    retired = bool(
+                        password
+                        and bcrypt.checkpw(password.encode(), _RETIRED_DEV_DB_HASH.encode())
+                    )
+                except ValueError:
+                    retired = False
+                if retired:
                     raise ValueError(
                         f"{field_name} still uses the retired development "
                         f"password; set SKRA_{field_name.upper()} in production"

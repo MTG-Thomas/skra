@@ -2,14 +2,15 @@
 
 Database URLs have no code defaults: every runtime provides explicit
 values, and a missing value fails fast. Production additionally refuses
-any URL whose password matches the retired development credential (by
-digest, so the password itself never appears in Python source).
+any URL whose password verifies against the stored bcrypt hash of the
+retired development credential, so the password itself never appears
+in Python source.
 """
 
-import hashlib
 import re
 from pathlib import Path
 
+import bcrypt
 import pytest
 from pydantic import ValidationError
 
@@ -53,13 +54,13 @@ def test_missing_database_urls_fail_fast(monkeypatch):
             Settings(environment=environment, secret_key="x" * 32)
 
 
-def test_production_refuses_matching_password_digest(monkeypatch):
-    """The digest mechanism refuses a known-bad password without naming it."""
+def test_production_refuses_matching_password_hash(monkeypatch):
+    """The hash mechanism refuses a known-bad password without naming it."""
     synthetic = "test-only-synthetic-credential"
     monkeypatch.setattr(
         config_module,
-        "_RETIRED_DEV_DB_DIGEST",
-        hashlib.sha256(synthetic.encode()).hexdigest(),
+        "_RETIRED_DEV_DB_HASH",
+        bcrypt.hashpw(synthetic.encode(), bcrypt.gensalt()).decode(),
     )
     with pytest.raises(ValidationError, match="retired development"):
         Settings(
@@ -70,8 +71,19 @@ def test_production_refuses_matching_password_digest(monkeypatch):
         )
 
 
+def test_production_allows_overlong_password_without_match(monkeypatch):
+    """Passwords bcrypt cannot hash pass through (they cannot match)."""
+    _isolate_database_urls(monkeypatch)
+    Settings(
+        environment="production",
+        secret_key="x" * 32,
+        database_url=f"postgresql+asyncpg://skra:{'p' * 80}@db:5432/skra",
+        database_url_sync=CLEAN_URL_SYNC,
+    )
+
+
 def test_production_accepts_non_matching_password():
-    """A different password passes the digest check."""
+    """A different password passes the retired-credential check."""
     Settings(
         environment="production",
         secret_key="x" * 32,
