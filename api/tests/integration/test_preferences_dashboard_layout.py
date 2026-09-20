@@ -69,24 +69,31 @@ class TestDashboardLayoutRoundTrip:
         try:
             with patch("src.routers.preferences.UserPreferencesRepository") as MockRepo:
                 mock_repo = AsyncMock()
-                mock_repo.upsert.return_value = _stored(WIDGETS_PAYLOAD)
-                mock_repo.get_by_user_and_entity.return_value = _stored(WIDGETS_PAYLOAD)
+                captured: dict = {}
+
+                async def _upsert(user_id, entity_type, preferences):
+                    captured["user_id"] = user_id
+                    captured["entity_type"] = entity_type
+                    captured["preferences"] = preferences
+                    return _stored(preferences)
+
+                async def _get_by_user_and_entity(user_id, entity_type):
+                    return _stored(captured["preferences"])
+
+                mock_repo.upsert.side_effect = _upsert
+                mock_repo.get_by_user_and_entity.side_effect = _get_by_user_and_entity
                 MockRepo.return_value = mock_repo
 
-                async with AsyncClient(
-                    transport=ASGITransport(app=app),
-                    base_url="http://test",
-                ) as test_client:
-                    put_response = await test_client.put(
-                        "/api/preferences/dashboard_layout",
-                        json={"preferences": WIDGETS_PAYLOAD},
-                    )
-                    assert put_response.status_code == 200
-                    put_data = put_response.json()
-                    assert put_data["entity_type"] == "dashboard_layout"
-                    assert put_data["preferences"]["widgets"] == WIDGETS_PAYLOAD["widgets"]
+                put_response = await client.put(
+                    "/api/preferences/dashboard_layout",
+                    json={"preferences": WIDGETS_PAYLOAD},
+                )
+                assert put_response.status_code == 200
+                put_data = put_response.json()
+                assert put_data["entity_type"] == "dashboard_layout"
+                assert put_data["preferences"]["widgets"] == WIDGETS_PAYLOAD["widgets"]
 
-                    get_response = await test_client.get("/api/preferences/dashboard_layout")
+                get_response = await client.get("/api/preferences/dashboard_layout")
 
             assert get_response.status_code == 200
             get_data = get_response.json()
@@ -96,6 +103,11 @@ class TestDashboardLayoutRoundTrip:
                 "quick-stats",
                 "recent-activity",
             ]
+            # The upsert received the exact widgets payload for this user.
+            mock_repo.upsert.assert_called_once()
+            assert captured["user_id"] == mock_user.user_id
+            assert captured["entity_type"] == "dashboard_layout"
+            assert captured["preferences"]["widgets"] == WIDGETS_PAYLOAD["widgets"]
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
