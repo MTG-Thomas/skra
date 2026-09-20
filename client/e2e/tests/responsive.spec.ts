@@ -84,6 +84,11 @@ test.describe('Responsive Design', () => {
     // Core header actions stay reachable on mobile.
     await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
     await expect(page.getByTestId('user-menu-trigger')).toBeVisible();
+
+    // Secondary actions (Chat, Recent items) live in the overflow menu.
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Chat' })).toBeVisible();
+    await expect(page.getByText('Recently Accessed')).toBeVisible();
   });
 
   test('forms should be usable on mobile', async ({ page }) => {

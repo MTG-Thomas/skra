@@ -3,6 +3,7 @@ import { Menu, Search, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { OrgSelector } from "./OrgSelector";
+import { MobileMoreMenu } from "./MobileMoreMenu";
 import { UserMenu } from "./UserMenu";
 import { RecentDropdown } from "./RecentDropdown";
 import { QuickCreateButton } from "./QuickCreateButton";
@@ -106,6 +107,7 @@ export function Header({
         >
           <MessageSquare className="h-5 w-5" />
         </Button>
+        <MobileMoreMenu onChatClick={onChatClick} />
         <UserMenu />
       </div>
     </header>

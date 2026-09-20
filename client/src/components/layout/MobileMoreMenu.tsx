@@ -1,34 +1,53 @@
-import { Clock } from "lucide-react";
+import { MessageSquare, MoreHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { useRecentlyAccessed } from "@/hooks/useRecentlyAccessed";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useRecentlyAccessed } from "@/hooks/useRecentlyAccessed";
 import { entityIconFor, getEntityPath } from "./recent-utils";
 
-export function RecentDropdown() {
+interface MobileMoreMenuProps {
+  onChatClick?: () => void;
+}
+
+/**
+ * Compact overflow menu for small screens. Hosts the header actions that
+ * don't fit below the sm breakpoint (Chat, Recent items) so hiding them
+ * from the header bar never removes access to them.
+ */
+export function MobileMoreMenu({ onChatClick }: MobileMoreMenuProps) {
   const navigate = useNavigate();
   const { data: recentItems, isLoading } = useRecentlyAccessed(10);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9">
-          <Clock className="h-4 w-4" />
-          <span className="sr-only">Recent items</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 sm:hidden"
+          aria-label="More actions"
+        >
+          <MoreHorizontal className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel>Recently Accessed</DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => onChatClick?.()}
+          className="cursor-pointer"
+        >
+          <MessageSquare className="h-4 w-4 mr-3 text-muted-foreground" />
+          <span className="text-sm font-medium">Chat</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-
+        <DropdownMenuLabel>Recently Accessed</DropdownMenuLabel>
         {isLoading ? (
           <div className="p-2 space-y-2">
             {[...Array(3)].map((_, i) => (
