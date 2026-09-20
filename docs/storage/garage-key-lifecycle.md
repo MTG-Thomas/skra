@@ -40,11 +40,14 @@ Garage-native lifecycle with one file-based secret handoff:
 
 ## Migration / backward compatibility
 
-- Existing deployments already run the imported key: keep them on
-  `GARAGE_KEY_MODE=import` (unchanged behavior, #99 verification intact).
-  Move to managed only via an explicit rotation window, never implicitly.
-- New deployments get managed mode with no preshared key material: the
-  only required secret is `GARAGE_ADMIN_TOKEN`.
+- Mode auto-selects with no operator action: a legacy pair in `.env`
+  selects import mode (existing deployments behave exactly as before, #99
+  verification intact); its absence selects managed mode (new deployments
+  mint natively, only `GARAGE_ADMIN_TOKEN` required); a partial pair fails
+  closed naming the missing half. Explicit `GARAGE_KEY_MODE` always wins.
+- Move an existing install to managed only via an explicit rotation
+  window, never implicitly: adopt the minted key, restart api+worker, then
+  revoke the legacy grant.
 - API precedence (unchanged behavior when file absent): explicit env >
   credentials file > unconfigured (S3 off). `dev.yml` fixture overrides
   are untouched.

@@ -68,10 +68,11 @@ services:
       - bifrost_docsgarage_creds:/run/garage-creds
     environment:
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required}
-      # Key lifecycle (issues #107, #109). Managed mode (default) mints keys
-      # via POST /v1/key and writes /run/garage-creds/s3.env; import mode is
-      # restore-only and needs the legacy pair below.
-      GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-managed}
+      # Key lifecycle (issues #107, #109). Mode auto-selects: legacy pair
+      # present => import (existing installs); absent => managed, minting via
+      # POST /v1/key into /run/garage-creds/s3.env. Explicit GARAGE_KEY_MODE
+      # always wins; partial pair fails closed.
+      GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-}
       GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-bifrost-docs-key}
       GARAGE_CREDS_FILE: /run/garage-creds/s3.env
       # Must match the pinned app uid/gid in api/Dockerfile (15000).

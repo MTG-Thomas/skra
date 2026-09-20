@@ -149,12 +149,65 @@ t_unknown_mode_fails() {
   kill "$pid" 2>/dev/null; rm -rf "$wd"
 }
 
+t_auto_selects_import_for_legacy_pair() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  local kid="GK00112233445566778899aabb"
+  local sec="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  if run_init "$wd" GARAGE_ACCESS_KEY_ID="$kid" GARAGE_SECRET_ACCESS_KEY="$sec"; then
+    grep -q 'Auto-selected import mode' "$wd/out.log" \
+      && grep -q 'POST /v1/key/import' "$wd/stub.log" \
+      && ok "legacy pair auto-selects import" \
+      || bad "legacy pair did not auto-select import"
+  else
+    bad "auto import exited nonzero"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
+t_partial_pair_fails_closed() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  if run_init "$wd" GARAGE_ACCESS_KEY_ID="GK00112233445566778899aabb"; then
+    bad "partial pair (id only) should fail"
+  else
+    grep -q 'without GARAGE_SECRET_ACCESS_KEY' "$wd/out.log" \
+      && ok "partial pair fails closed naming missing half" \
+      || bad "partial pair failure message wrong"
+  fi
+  if run_init "$wd" GARAGE_SECRET_ACCESS_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"; then
+    bad "partial pair (secret only) should fail"
+  else
+    ok "partial pair (secret only) fails closed"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
+t_explicit_managed_wins_over_pair() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  local kid="GK00112233445566778899aabb"
+  local sec="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  if run_init "$wd" GARAGE_KEY_MODE=managed GARAGE_ACCESS_KEY_ID="$kid" GARAGE_SECRET_ACCESS_KEY="$sec"; then
+    grep -q 'POST /v1/key$' "$wd/stub.log" \
+      && ! grep -q 'POST /v1/key/import' "$wd/stub.log" \
+      && ok "explicit managed wins over legacy pair" \
+      || bad "explicit managed did not take the managed path"
+  else
+    bad "explicit managed exited nonzero"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
 t_managed_clean_install
 t_managed_rerun_reuses
 t_managed_rotation_and_revoke
 t_import_mode_needs_pair
 t_import_mode_restores
 t_unknown_mode_fails
+t_auto_selects_import_for_legacy_pair
+t_partial_pair_fails_closed
+t_explicit_managed_wins_over_pair
 
 echo "pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

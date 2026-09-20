@@ -232,10 +232,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _load_s3_credentials_file(self) -> "Settings":
         """Fill unset S3 credentials from the managed credentials file."""
-        if (
-            self.s3_credentials_file
-            and (self.s3_access_key is None or self.s3_secret_key is None)
-        ):
+        if self.s3_credentials_file and (self.s3_access_key is None or self.s3_secret_key is None):
             creds = _read_env_file(self.s3_credentials_file)
             if self.s3_access_key is None:
                 self.s3_access_key = creds.get("S3_ACCESS_KEY_ID")
