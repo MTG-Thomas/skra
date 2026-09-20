@@ -58,9 +58,7 @@ async def test_get_upcoming_expirations_returns_items():
             new=AsyncMock(return_value=items),
         ),
     ):
-        result = await organizations.get_upcoming_expirations(
-            org_id, _user(), AsyncMock(), 30
-        )
+        result = await organizations.get_upcoming_expirations(org_id, _user(), AsyncMock(), 30)
 
     assert result.total == 2
     assert result.within_days == 30
@@ -81,8 +79,6 @@ async def test_get_upcoming_expirations_unknown_org_404s():
         return_value=org_repo,
     ):
         with pytest.raises(HTTPException) as exc_info:
-            await organizations.get_upcoming_expirations(
-                uuid4(), _user(), AsyncMock(), 30
-            )
+            await organizations.get_upcoming_expirations(uuid4(), _user(), AsyncMock(), 30)
 
     assert exc_info.value.status_code == 404

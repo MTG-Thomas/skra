@@ -175,9 +175,7 @@ async def test_within_days_filters_results() -> None:
         _NS(id=uuid4(), values={field_id: later}),
     ]
     type_repo = AsyncMock()
-    type_repo.get_all_active = AsyncMock(
-        return_value=[_type(type_id, _field(field_id))]
-    )
+    type_repo.get_all_active = AsyncMock(return_value=[_type(type_id, _field(field_id))])
     asset_repo = AsyncMock()
     asset_repo.list_by_type_and_organization = AsyncMock(return_value=assets)
 

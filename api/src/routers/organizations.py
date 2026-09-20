@@ -153,9 +153,7 @@ async def get_upcoming_expirations(
     org_id: UUID,
     current_user: CurrentActiveUser,
     db: DbSession,
-    within_days: int = Query(
-        30, ge=1, le=365, description="Expiration horizon in days"
-    ),
+    within_days: int = Query(30, ge=1, le=365, description="Expiration horizon in days"),
 ) -> UpcomingExpirationsResponse:
     """
     List flagged expirations for an organization inside the horizon.

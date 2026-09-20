@@ -95,14 +95,9 @@ async def find_upcoming_expirations(
         ]
         if not alert_fields:
             continue
-        key_to_id = {
-            _field_get(f, "key"): _field_get(f, "id")
-            for f in (asset_type.fields or [])
-        }
+        key_to_id = {_field_get(f, "key"): _field_get(f, "id") for f in (asset_type.fields or [])}
         display_id = key_to_id.get(getattr(asset_type, "display_field_key", None))
-        assets = await asset_repo.list_by_type_and_organization(
-            asset_type.id, organization_id
-        )
+        assets = await asset_repo.list_by_type_and_organization(asset_type.id, organization_id)
         for asset in assets:
             values = asset.values or {}
             for field in alert_fields:
