@@ -411,6 +411,8 @@ jobs:
         run: |
           docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T api python - <<'PYEOF'
           import json
+          import sys
+          import urllib.error
           import urllib.request
           from http.cookiejar import CookieJar
           from urllib.request import Request, build_opener, HTTPCookieProcessor
@@ -420,32 +422,49 @@ jobs:
           opener = build_opener(HTTPCookieProcessor(jar))
 
           def post(path, payload, headers=None):
+              # Surface the server's status + detail instead of raising,
+              # so a seed failure shows the exact API error in CI logs.
               req = Request(
                   BASE + path,
                   data=json.dumps(payload).encode(),
                   headers={"Content-Type": "application/json", **(headers or {})},
               )
-              with opener.open(req) as res:
-                  return res.status, (res.read().decode() or "{}")
+              try:
+                  with opener.open(req) as res:
+                      return res.status, (res.read().decode() or "{}")
+              except urllib.error.HTTPError as e:
+                  return e.code, (e.read().decode() or "{}")
 
-          status, _ = post(
+          def check(what, status, body, ok):
+              print(f"{what}: {status} {body[:200]}", flush=True)
+              if status not in ok:
+                  sys.exit(f"seed failed at {what}: {status} {body[:500]}")
+
+          status, body = post(
               "/auth/register",
               {"email": "test@example.com", "password": "TestPassword123!", "name": "E2E Smoke"},
           )
-          assert status == 201, f"register: {status}"
-          status, _ = post(
+          # 409 means a previous attempt already created the user; continue
+          # to login rather than failing the seed.
+          check("register", status, body, (201, 409))
+          status, body = post(
               "/auth/login",
               {"email": "test@example.com", "password": "TestPassword123!"},
           )
-          assert status == 200, f"login: {status}"
+          check("login", status, body, (200,))
           csrf = next((c.value for c in jar if "csrf" in c.name), "")
-          assert csrf, "no csrf cookie after login"
+          if not csrf:
+              sys.exit("seed failed: no csrf cookie after login")
           status, body = post(
               "/api/organizations", {"name": "E2E Smoke Org"}, {"X-CSRF-Token": csrf}
           )
-          assert status in (200, 201), f"org: {status} {body[:200]}"
+          check("org", status, body, (200, 201))
           print("seeded E2E Smoke user + org")
           PYEOF
+
+      - name: Dump API logs on seed failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e logs api 2>&1 | tail -n 40
 
       - name: Install client dependencies (Playwright container)
         run: |
