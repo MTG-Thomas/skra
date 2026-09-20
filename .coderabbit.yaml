@@ -5,14 +5,20 @@ early_access: false
 reviews:
   profile: "chill"
   request_changes_workflow: false
-  high_level_summary: true
+  # Noise reduction: drop the walkthrough/summary sections and the
+  # review-status churn, and stop auto-replying to comments. The review
+  # itself still runs (one comment per PR). Set auto_review.enabled: false
+  # to make reviews manual via `@coderabbitai review`.
+  high_level_summary: false
   poem: false
-  review_status: true
+  review_status: false
   review_details: false
+  sequence_diagrams: false
+  changed_files_summary: false
   auto_review:
     enabled: true
     drafts: false
 
 chat:
-  auto_reply: true
+  auto_reply: false
 
