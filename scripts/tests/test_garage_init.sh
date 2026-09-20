@@ -126,6 +126,42 @@ t_revoke_active_key_refused() {
   kill "$pid" 2>/dev/null; rm -rf "$wd"
 }
 
+t_rotate_and_revoke_same_run_fails() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  if run_init "$wd" GARAGE_ROTATE=1 GARAGE_REVOKE_KEY_ID="GK00112233445566778899aabb"; then
+    bad "rotate+revoke in one run should fail"
+  else
+    grep -q 'must not be set in the same run' "$wd/out.log" \
+      && ! grep -q 'POST /v1/key$' "$wd/stub.log" \
+      && ! grep -q 'POST /v1/bucket/deny' "$wd/stub.log" \
+      && ok "rotate+revoke combo fails closed before minting/denying" \
+      || bad "combo failure wrong or mint/deny issued"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
+t_revoke_id_shape_validated() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  if run_init "$wd" GARAGE_REVOKE_KEY_ID="not-a-key"; then
+    bad "malformed revoke ID should fail"
+  else
+    grep -q "must be 'GK' followed by 24 hex chars" "$wd/out.log" \
+      && ! grep -q 'POST /v1/bucket/deny' "$wd/stub.log" \
+      && ok "malformed revoke ID fails closed without deny call" \
+      || bad "revoke shape failure wrong or deny issued"
+  fi
+  if run_init "$wd" GARAGE_REVOKE_KEY_ID="GK00112233445566778899aabX"; then
+    bad "non-hex revoke ID should fail"
+  else
+    grep -q 'suffix must be hex' "$wd/out.log" \
+      && ok "non-hex revoke ID fails closed" \
+      || bad "revoke hex failure message wrong"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
 t_import_mode_needs_pair() {
   local wd; wd=$(mktemp -d)
   local pid; pid=$(start_stub "$wd"); sleep 1
@@ -227,6 +263,8 @@ t_managed_clean_install
 t_managed_rerun_reuses
 t_managed_rotation_and_revoke
 t_revoke_active_key_refused
+t_rotate_and_revoke_same_run_fails
+t_revoke_id_shape_validated
 t_import_mode_needs_pair
 t_import_mode_restores
 t_unknown_mode_fails

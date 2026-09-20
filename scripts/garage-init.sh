@@ -179,6 +179,28 @@ if [ -z "${MODE}" ]; then
     fi
 fi
 
+# Rotation and revocation must never share a run: revoking in the same run
+# that mints the replacement denies the old key while dependents still run
+# on it (they reload credentials only on restart). Rotate first, restart
+# dependents, then revoke in a follow-up run. Checked here, before any
+# minting or denying, in every mode.
+if [ -n "${GARAGE_ROTATE:-}" ] && [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
+    fail "GARAGE_ROTATE and GARAGE_REVOKE_KEY_ID must not be set in the same run (rotate, restart dependents, then revoke in a follow-up run)"
+fi
+
+# A malformed revoke ID would interpolate into the deny JSON and fail
+# opaquely (or deny nothing while reporting success). Validate the
+# `GK` + 24 hex shape upfront, mirroring the import-branch checks.
+if [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
+    case "${GARAGE_REVOKE_KEY_ID}" in
+        GK????????????????????????) ;;
+        *) fail "GARAGE_REVOKE_KEY_ID must be 'GK' followed by 24 hex chars" ;;
+    esac
+    case "${GARAGE_REVOKE_KEY_ID}" in
+        GK*[!0-9a-f]*) fail "GARAGE_REVOKE_KEY_ID suffix must be hex" ;;
+    esac
+fi
+
 # --- Restore-only import mode (backup-restore / adoption) -------------------
 if [ "${MODE}" = "import" ]; then
     [ -n "${GARAGE_ACCESS_KEY_ID:-}" ] \
