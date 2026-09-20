@@ -129,6 +129,8 @@ class CustomAssetRepository(BaseRepository[CustomAsset]):
         id: UUID,
         custom_asset_type_id: UUID,
         organization_id: UUID,
+        *,
+        for_update: bool = False,
     ) -> CustomAsset | None:
         """
         Get custom asset by ID, type, and organization.
@@ -137,11 +139,13 @@ class CustomAssetRepository(BaseRepository[CustomAsset]):
             id: CustomAsset UUID
             custom_asset_type_id: CustomAssetType UUID
             organization_id: Organization UUID
+            for_update: Lock the row (SELECT ... FOR UPDATE) so concurrent
+                writers serialize; used for checklist item toggles
 
         Returns:
             CustomAsset or None if not found
         """
-        result = await self.session.execute(
+        stmt = (
             select(CustomAsset)
             .options(selectinload(CustomAsset.updated_by_user))
             .where(
@@ -150,6 +154,9 @@ class CustomAssetRepository(BaseRepository[CustomAsset]):
                 CustomAsset.organization_id == organization_id,
             )
         )
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_by_type_and_organization(

@@ -153,10 +153,13 @@ export function CustomAssetForm({
   }, [open, defaultValues, form]);
 
   const handleSubmit = (data: { values: Record<string, unknown> }) => {
-    // Clean up values - remove empty strings and nulls for non-required fields
+    // Clean up values - remove empty strings and nulls for non-required fields.
+    // Checklist fields are excluded entirely: their state is owned by the
+    // interactive toggles (single-item deltas), so a stale edit form must
+    // never overwrite another user's completions with a full snapshot.
     const cleanedValues: Record<string, unknown> = {};
     for (const field of assetType.fields) {
-      if (field.type === "header") continue;
+      if (field.type === "header" || field.type === "checklist") continue;
       const value = data.values[field.key];
       if (value !== undefined && value !== "" && value !== null) {
         cleanedValues[field.key] = value;

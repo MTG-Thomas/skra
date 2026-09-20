@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import type { FieldDefinition } from "@/hooks/useCustomAssets";
 import { TiptapEditorAssetField } from "./TiptapEditorAssetField";
+import { ChecklistField } from "./ChecklistField";
 
 interface CustomFieldInputProps {
   field: FieldDefinition;
@@ -38,6 +39,25 @@ export function CustomFieldInput({
         <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
           {field.name}
         </h4>
+      </div>
+    );
+  }
+
+  // Checklist steps are completed interactively on the asset detail page,
+  // not in create/edit forms — show a read-only preview of the steps.
+  if (field.type === "checklist") {
+    return (
+      <div className="space-y-2">
+        <span className="text-sm font-medium">
+          {field.name}
+          {field.required && mode === "create" && (
+            <span className="text-destructive ml-1">*</span>
+          )}
+        </span>
+        <ChecklistField field={field} value={value} />
+        <p className="text-xs text-muted-foreground">
+          Steps start incomplete; check them off on the asset page after saving.
+        </p>
       </div>
     );
   }

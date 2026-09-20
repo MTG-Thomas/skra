@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/data-table";
 import { AssetTypeForm } from "@/components/assets/AssetTypeForm";
 import { CustomAssetForm } from "@/components/assets/CustomAssetForm";
+import { formatChecklistListValue } from "@/lib/checklist";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
@@ -219,9 +220,12 @@ function AssetTypesView({ orgId }: { orgId: string }) {
 
 // Helper function to format values for list display
 function formatListValue(
-  field: { type: string },
+  field: { type: string; checklist_items?: { id?: string | null }[] | null },
   value: unknown
 ): string {
+  if (field.type === "checklist") {
+    return formatChecklistListValue(field.checklist_items, value);
+  }
   if (value === undefined || value === null || value === "") {
     return "-";
   }

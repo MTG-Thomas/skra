@@ -4,8 +4,9 @@ Custom Asset Validation Service.
 Provides validation, encryption, and filtering functions for custom asset values.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from src.core.security import decrypt_secret, encrypt_secret
 from src.models.contracts.custom_asset import FieldDefinition
@@ -40,6 +41,27 @@ def validate_field_definitions(fields: list[FieldDefinition]) -> None:
                 f"Select field '{field.key}' requires options",
                 field_key=field.key,
             )
+        # Validate checklist type has items (mirrors the contract validator
+        # so service-level callers get the same guarantee)
+        if field.type == "checklist":
+            items = field.checklist_items or []
+            if len(items) == 0:
+                raise CustomAssetValidationError(
+                    f"Checklist field '{field.key}' requires at least one item",
+                    field_key=field.key,
+                )
+            labels = [item.label.strip() for item in items]
+            if any(not label for label in labels):
+                raise CustomAssetValidationError(
+                    f"Checklist field '{field.key}' items must have non-empty labels",
+                    field_key=field.key,
+                )
+            ids = [item.id for item in items]
+            if len(ids) != len(set(ids)):
+                raise CustomAssetValidationError(
+                    f"Checklist field '{field.key}' item ids must be unique",
+                    field_key=field.key,
+                )
 
 
 def validate_values(
@@ -151,6 +173,163 @@ def _validate_field_value(field: FieldDefinition, value: Any) -> None:
         case "header":
             # Headers don't have values
             pass
+        case "checklist":
+            _validate_checklist_value(field, value)
+
+
+def _validate_checklist_value(field: FieldDefinition, value: Any) -> None:
+    """
+    Validate a checklist value's shape against its item definitions.
+
+    The value must be a dict with an "items" list; every entry needs a known
+    item id and a boolean "completed". Client-supplied completion stamps are
+    ignored here (the server owns them in merge_checklist_value).
+
+    Args:
+        field: Field definition (must carry checklist_items)
+        value: Value to validate
+
+    Raises:
+        CustomAssetValidationError: If validation fails
+    """
+    if not isinstance(value, dict):
+        raise CustomAssetValidationError(
+            f"Field '{field.key}' must be an object with an items list",
+            field_key=field.key,
+        )
+    items = value.get("items", [])
+    if not isinstance(items, list):
+        raise CustomAssetValidationError(
+            f"Field '{field.key}' items must be a list",
+            field_key=field.key,
+        )
+    known_ids = {item.id for item in field.checklist_items or []}
+    seen_ids: set[str] = set()
+    for entry in items:
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+            raise CustomAssetValidationError(
+                f"Field '{field.key}' entries must have a string id",
+                field_key=field.key,
+            )
+        if entry["id"] in seen_ids:
+            raise CustomAssetValidationError(
+                f"Field '{field.key}' has duplicate checklist item '{entry['id']}'",
+                field_key=field.key,
+            )
+        seen_ids.add(entry["id"])
+        if entry["id"] not in known_ids:
+            raise CustomAssetValidationError(
+                f"Field '{field.key}' has unknown checklist item '{entry['id']}'",
+                field_key=field.key,
+            )
+        if not isinstance(entry.get("completed"), bool):
+            raise CustomAssetValidationError(
+                f"Checklist item '{entry['id']}' must have a boolean completed flag",
+                field_key=field.key,
+            )
+
+
+def merge_checklist_value(
+    field: FieldDefinition,
+    stored_value: Any | None,
+    incoming_value: Any | None,
+    completed_by_user_id: UUID,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """
+    Merge an incoming checklist state into the stored one at item granularity.
+
+    Items absent from the incoming list keep their stored state, so concurrent
+    writers toggling different items do not overwrite each other (provided the
+    caller serializes writers, e.g. via a row lock). Completion stamps are
+    server-owned: newly completed items are stamped with the acting user and
+    server time, persisting stamps are kept, uncompleted items lose stamps,
+    and any client-supplied stamps are ignored. Stored entries for items since
+    removed from the definition are preserved untouched so completion history
+    survives definition edits.
+
+    Args:
+        field: Field definition with checklist_items
+        stored_value: Previously stored value (dict with items list) or None
+        incoming_value: Incoming value (dict with items list) or None
+        completed_by_user_id: Acting user stamped on newly completed items
+        now: Timestamp for new stamps (defaults to current UTC time)
+
+    Returns:
+        Merged checklist value in storage shape
+    """
+    now = now or datetime.now(UTC)
+    timestamp = now.isoformat()
+
+    stored_items: dict[str, dict[str, Any]] = {}
+    if isinstance(stored_value, dict):
+        raw_items = stored_value.get("items", [])
+        if isinstance(raw_items, list):
+            for entry in raw_items:
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                    stored_items[entry["id"]] = entry
+
+    incoming_items: dict[str, bool] = {}
+    if isinstance(incoming_value, dict):
+        raw_items = incoming_value.get("items", [])
+        if isinstance(raw_items, list):
+            for entry in raw_items:
+                if isinstance(entry, dict) and isinstance(entry.get("completed"), bool):
+                    incoming_items[entry["id"]] = entry["completed"]
+
+    merged: dict[str, dict[str, Any]] = {}
+    for item_id, completed in incoming_items.items():
+        prior = stored_items.get(item_id, {})
+        if completed and not prior.get("completed"):
+            merged[item_id] = {
+                "id": item_id,
+                "completed": True,
+                "completed_by": str(completed_by_user_id),
+                "completed_at": timestamp,
+            }
+        elif completed:
+            merged[item_id] = {
+                "id": item_id,
+                "completed": True,
+                "completed_by": prior.get("completed_by"),
+                "completed_at": prior.get("completed_at"),
+            }
+        else:
+            merged[item_id] = {"id": item_id, "completed": False}
+
+    # Preserve stored entries the incoming list does not mention (unchanged
+    # items, plus history for items since removed from the definition).
+    for item_id, prior in stored_items.items():
+        if item_id not in merged:
+            merged[item_id] = dict(prior)
+
+    return {"items": list(merged.values())}
+
+
+def initialize_checklist_values(
+    type_fields: list[FieldDefinition],
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Ensure every checklist field has a value entry (initially all incomplete).
+
+    Checklist fields are completed interactively after creation, so a missing
+    key is initialized rather than treated as absent.
+
+    Args:
+        type_fields: List of field definitions from the custom asset type
+        values: Dictionary of provided values
+
+    Returns:
+        Values dictionary with empty checklist states for missing fields
+    """
+    result = values.copy()
+
+    for field in type_fields:
+        if field.type == "checklist" and field.key not in result:
+            result[field.key] = {"items": []}
+
+    return result
 
 
 def values_key_to_id(

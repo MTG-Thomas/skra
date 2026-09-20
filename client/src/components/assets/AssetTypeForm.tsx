@@ -60,17 +60,25 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: "header", label: "Section Header" },
   { value: "password", label: "Password (encrypted)" },
   { value: "totp", label: "TOTP Secret (encrypted)" },
+  { value: "checklist", label: "Checklist / SOP" },
 ];
+
+const checklistItemSchema = z.object({
+  id: z.string().optional(),
+  label: z.string().min(1, "Step label is required").max(200),
+  required: z.boolean(),
+});
 
 const fieldSchema = z.object({
   key: z.string().min(1, "Key is required").regex(/^[a-z0-9_]+$/, "Key must be lowercase letters, numbers, and underscores only"),
   name: z.string().min(1, "Name is required").max(100),
-  type: z.enum(["text", "textbox", "number", "date", "checkbox", "select", "header", "password", "totp"]),
+  type: z.enum(["text", "textbox", "number", "date", "checkbox", "select", "header", "password", "totp", "checklist"]),
   required: z.boolean(),
   show_in_list: z.boolean(),
   hint: z.string().nullable(),
   default_value: z.string().nullable(),
   options: z.array(z.string()).nullable(),
+  checklist_items: z.array(checklistItemSchema).nullable(),
 });
 
 const schema = z.object({
@@ -112,6 +120,7 @@ export function AssetTypeForm({
           hint: null,
           default_value: null,
           options: null,
+          checklist_items: null,
         },
       ];
     }
@@ -181,6 +190,7 @@ export function AssetTypeForm({
       hint: null,
       default_value: null,
       options: null,
+      checklist_items: null,
     });
     setExpandedFields((prev) => [...prev, newIndex]);
   };
@@ -216,6 +226,7 @@ export function AssetTypeForm({
               hint: null,
               default_value: null,
               options: null,
+          checklist_items: null,
             },
           ];
 
@@ -466,6 +477,10 @@ export function AssetTypeForm({
                             />
                           </div>
 
+                          {watchFieldType(index) === "checklist" && (
+                            <ChecklistItemsEditor control={form.control} fieldIndex={index} />
+                          )}
+
                           {watchFieldType(index) === "select" && (
                             <FormField
                               control={form.control}
@@ -588,5 +603,115 @@ export function AssetTypeForm({
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface ChecklistItemsEditorProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  control: any;
+  fieldIndex: number;
+}
+
+/**
+ * Ordered step editor for checklist fields. Step order is the array order;
+ * ids stay stable across edits so completion history is preserved.
+ */
+function ChecklistItemsEditor({ control, fieldIndex }: ChecklistItemsEditorProps) {
+  const { fields, append, remove, move } = useFieldArray({
+    control,
+    name: `fields.${fieldIndex}.checklist_items`,
+  });
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <p className="text-sm font-medium">Checklist steps *</p>
+      {fields.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          No steps yet — add the first step below.
+        </p>
+      )}
+      {fields.map((item, itemIndex) => (
+        <div key={item.id} className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-5 shrink-0">
+            {itemIndex + 1}
+          </span>
+          <FormField
+            control={control}
+            name={`fields.${fieldIndex}.checklist_items.${itemIndex}.label`}
+            render={({ field }) => (
+              <FormItem className="flex-1 space-y-0">
+                <FormControl>
+                  <Input
+                    placeholder={`Step ${itemIndex + 1} label`}
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={control}
+            name={`fields.${fieldIndex}.checklist_items.${itemIndex}.required`}
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value ?? false}
+                    onCheckedChange={field.onChange}
+                    aria-label="Required step"
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={itemIndex === 0}
+            onClick={() => move(itemIndex, itemIndex - 1)}
+            aria-label="Move step up"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            disabled={itemIndex === fields.length - 1}
+            onClick={() => move(itemIndex, itemIndex + 1)}
+            aria-label="Move step down"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => remove(itemIndex)}
+            aria-label="Remove step"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => append({ label: "", required: false })}
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Add step
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Tick the box to mark a step required. Order defines the SOP sequence.
+      </p>
+    </div>
   );
 }
