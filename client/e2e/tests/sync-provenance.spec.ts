@@ -45,9 +45,13 @@ test.describe('Sync Provenance', () => {
     const { id } = await create.json();
 
     await page.goto(`/org/${orgId}/passwords/${id}`);
-    await expect(page.getByText('Sync Provenance')).toBeVisible();
-    await expect(page.getByText('Itglue')).toBeVisible();
-    await expect(page.getByText(SYNC_METADATA.external_id)).toBeVisible();
+    const card = page.getByTestId('sync-provenance-card');
+    await expect(card).toBeVisible();
+    await expect(card.getByText('Itglue')).toBeVisible();
+    await expect(card.getByText(SYNC_METADATA.external_id)).toBeVisible();
+    // Read-only: no buttons, inputs, or textareas inside the card.
+    await expect(card.getByRole('button')).toHaveCount(0);
+    await expect(card.locator('input, textarea, select')).toHaveCount(0);
   });
 
   test('unsafe source_url scheme never renders a link', async ({ page }) => {
@@ -66,8 +70,9 @@ test.describe('Sync Provenance', () => {
     await page.goto(`/org/${orgId}/passwords/${id}`);
     // Card still renders (source/external ID are plain text), but no anchor
     // may point at the unsafe scheme.
-    await expect(page.getByText('Sync Provenance')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open source record' })).toHaveCount(0);
+    const card = page.getByTestId('sync-provenance-card');
+    await expect(card).toBeVisible();
+    await expect(card.getByRole('link', { name: 'Open source record' })).toHaveCount(0);
     const hrefs = await page.locator('a[href^="javascript:"]').count();
     expect(hrefs).toBe(0);
   });
@@ -82,7 +87,7 @@ test.describe('Sync Provenance', () => {
     const { id } = await create.json();
 
     await page.goto(`/org/${orgId}/passwords/${id}`);
-    await expect(page.getByText('Sync Provenance')).toHaveCount(0);
+    await expect(page.getByTestId('sync-provenance-card')).toHaveCount(0);
   });
 
   test('location detail shows provenance card when synced', async ({ page }) => {
@@ -95,7 +100,9 @@ test.describe('Sync Provenance', () => {
     const { id } = await create.json();
 
     await page.goto(`/org/${orgId}/locations/${id}`);
-    await expect(page.getByText('Sync Provenance')).toBeVisible();
-    await expect(page.getByText(SYNC_METADATA.external_id)).toBeVisible();
+    const card = page.getByTestId('sync-provenance-card');
+    await expect(card).toBeVisible();
+    await expect(card.getByText(SYNC_METADATA.external_id)).toBeVisible();
+    await expect(card.getByRole('button')).toHaveCount(0);
   });
 });

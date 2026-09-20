@@ -59,7 +59,7 @@ export function SyncProvenanceCard({ syncMetadata }: SyncProvenanceCardProps) {
   const freshness = formatRelativeTime(syncMetadata.last_synced_at);
 
   return (
-    <Card>
+    <Card data-testid="sync-provenance-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between gap-3 text-base">
           <span className="flex min-w-0 items-center gap-2">
