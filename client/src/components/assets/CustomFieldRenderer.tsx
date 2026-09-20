@@ -6,6 +6,7 @@ import { TOTPDisplay } from "@/components/ui/totp-display";
 import { toast } from "sonner";
 import { useTimedReveal } from "@/hooks/useTimedReveal";
 import type { FieldDefinition } from "@/hooks/useCustomAssets";
+import { ChecklistField } from "./ChecklistField";
 
 interface CustomFieldRendererProps {
   field: FieldDefinition;
@@ -14,6 +15,9 @@ interface CustomFieldRendererProps {
   onReveal?: () => void;
   onClear?: () => void;
   isRevealing?: boolean;
+  onChecklistToggle?: (itemId: string, completed: boolean) => void;
+  onChecklistReset?: () => void;
+  checklistDisabled?: boolean;
 }
 
 export function CustomFieldRenderer({
@@ -23,7 +27,14 @@ export function CustomFieldRenderer({
   onReveal,
   onClear,
   isRevealing,
+  onChecklistToggle,
+  onChecklistReset,
+  checklistDisabled,
 }: CustomFieldRendererProps) {
+  // Checklist fields render the interactive/read-only step list, with the
+  // standard field-name wrapper below.
+  const isChecklist = field.type === "checklist";
+
   // Header fields are just section dividers
   if (field.type === "header") {
     return (
@@ -60,8 +71,9 @@ export function CustomFieldRenderer({
       );
     }
 
-    // For all other field types, show "Not set" if empty
-    if (value === undefined || value === null || value === "") {
+    // For all other field types, show "Not set" if empty (checklists render
+    // their step list even without stored state so steps can be completed).
+    if (!isChecklist && (value === undefined || value === null || value === "")) {
       return <span className="text-muted-foreground italic">Not set</span>;
     }
 
@@ -116,6 +128,17 @@ export function CustomFieldRenderer({
 
       case "select":
         return <span>{String(value)}</span>;
+
+      case "checklist":
+        return (
+          <ChecklistField
+            field={field}
+            value={value}
+            onToggle={onChecklistToggle}
+            onReset={onChecklistReset}
+            disabled={checklistDisabled}
+          />
+        );
 
       default:
         return <span>{String(value)}</span>;
@@ -309,6 +332,9 @@ interface CustomFieldListProps {
   onReveal?: () => void;
   onClear?: () => void;
   isRevealing?: boolean;
+  onChecklistToggle?: (fieldKey: string, itemId: string, completed: boolean) => void;
+  onChecklistReset?: (fieldKey: string) => void;
+  checklistDisabled?: boolean;
 }
 
 export function CustomFieldList({
@@ -318,6 +344,9 @@ export function CustomFieldList({
   onReveal,
   onClear,
   isRevealing,
+  onChecklistToggle,
+  onChecklistReset,
+  checklistDisabled,
 }: CustomFieldListProps) {
   const hasSecretFields = fields.some((f) => f.type === "password" || f.type === "totp");
 
@@ -332,6 +361,11 @@ export function CustomFieldList({
           onReveal={hasSecretFields ? onReveal : undefined}
           onClear={hasSecretFields ? onClear : undefined}
           isRevealing={isRevealing}
+          onChecklistToggle={
+            onChecklistToggle ? (itemId, completed) => onChecklistToggle(field.key, itemId, completed) : undefined
+          }
+          onChecklistReset={onChecklistReset ? () => onChecklistReset(field.key) : undefined}
+          checklistDisabled={checklistDisabled}
         />
       ))}
     </dl>

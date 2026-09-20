@@ -4476,6 +4476,25 @@ export interface components {
             conversation_id: string;
         };
         /**
+         * ChecklistItemDefinition
+         * @description Definition of a single step in a checklist field.
+         *
+         *     The `id` is stable across definition edits so completion history survives
+         *     renames and reorders. The `required` flag marks mandatory steps for
+         *     display; completion enforcement is left to close-out flows.
+         */
+        ChecklistItemDefinition: {
+            /** Id */
+            id?: string;
+            /** Label */
+            label: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+        };
+        /**
          * CleanDocumentResponse
          * @description Response for document cleaning operation.
          */
@@ -5320,7 +5339,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "text" | "textbox" | "number" | "date" | "checkbox" | "select" | "header" | "password" | "totp";
+            type: "text" | "textbox" | "number" | "date" | "checkbox" | "select" | "header" | "password" | "totp" | "checklist";
             /**
              * Required
              * @default false
@@ -5337,6 +5356,8 @@ export interface components {
             default_value?: string | null;
             /** Options */
             options?: string[] | null;
+            /** Checklist Items */
+            checklist_items?: components["schemas"]["ChecklistItemDefinition"][] | null;
         };
         /**
          * FolderCount

@@ -18,6 +18,22 @@ from src.models.contracts.sync import SyncMetadata
 # =============================================================================
 
 
+class ChecklistItemDefinition(BaseModel):
+    """
+    Definition of a single step in a checklist field.
+
+    The `id` is stable across definition edits so completion history survives
+    renames and reorders. The `required` flag marks mandatory steps for
+    display; completion enforcement is left to close-out flows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    label: str
+    required: bool = False
+
+
 class FieldDefinition(BaseModel):
     """
     Definition of a single field in a custom asset type.
@@ -33,13 +49,23 @@ class FieldDefinition(BaseModel):
     key: str  # human-readable identifier for API
     name: str  # display name
     type: Literal[
-        "text", "textbox", "number", "date", "checkbox", "select", "header", "password", "totp"
+        "text",
+        "textbox",
+        "number",
+        "date",
+        "checkbox",
+        "select",
+        "header",
+        "password",
+        "totp",
+        "checklist",
     ]
     required: bool = False
     show_in_list: bool = False
     hint: str | None = None
     default_value: str | None = None
     options: list[str] | None = None  # required for select type
+    checklist_items: list[ChecklistItemDefinition] | None = None  # required for checklist type
 
     @field_validator("options")
     @classmethod
@@ -48,6 +74,24 @@ class FieldDefinition(BaseModel):
         field_type = info.data.get("type")
         if field_type == "select" and (not v or len(v) == 0):
             raise ValueError("Select field type requires options")
+        return v
+
+    @field_validator("checklist_items")
+    @classmethod
+    def validate_checklist_items(
+        cls, v: list[ChecklistItemDefinition] | None, info
+    ) -> list[ChecklistItemDefinition] | None:
+        """Validate checklist items: required, non-empty labels, unique ids."""
+        field_type = info.data.get("type")
+        if field_type == "checklist":
+            if not v or len(v) == 0:
+                raise ValueError("Checklist field type requires at least one item")
+            labels = [item.label.strip() for item in v]
+            if any(not label for label in labels):
+                raise ValueError("Checklist items must have non-empty labels")
+            ids = [item.id for item in v]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Checklist item ids must be unique within a field")
         return v
 
 

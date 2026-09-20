@@ -31,6 +31,8 @@ from src.services.audit_service import get_audit_service
 from src.services.custom_asset_validation import (
     CustomAssetValidationError,
     apply_default_values,
+    initialize_checklist_values,
+    merge_checklist_value,
     validate_values,
     values_id_to_key,
     values_key_to_id,
@@ -287,6 +289,7 @@ async def create_custom_asset(
 
     # Apply defaults and validate values
     values = apply_default_values(type_fields, data.values)
+    values = initialize_checklist_values(type_fields, values)
 
     try:
         validate_values(type_fields, values, partial=False)
@@ -295,6 +298,14 @@ async def create_custom_asset(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         ) from e
+
+    # Server-side checklist merge: stamps newly completed items with the
+    # acting user and time (no prior state on create).
+    for field in type_fields:
+        if field.type == "checklist" and field.key in values:
+            values[field.key] = merge_checklist_value(
+                field, None, values[field.key], current_user.user_id
+            )
 
     # Transform to ID-based storage format (also encrypts password fields)
     storage_values = values_key_to_id(type_fields, values)
@@ -545,7 +556,14 @@ async def update_custom_asset(
     type_fields = _get_field_definitions(asset_type)
 
     repo = CustomAssetRepository(db)
-    asset = await repo.get_by_id_type_and_org(asset_id, type_id, org_id)
+    # Lock the row when checklist fields are updated so concurrent item
+    # toggles serialize and the item-level merge below loses nothing.
+    lock_for_checklist = any(
+        f.type == "checklist" and f.key in (data.values or {}) for f in type_fields
+    )
+    asset = await repo.get_by_id_type_and_org(
+        asset_id, type_id, org_id, for_update=lock_for_checklist
+    )
 
     if not asset:
         raise HTTPException(
@@ -576,8 +594,27 @@ async def update_custom_asset(
         # Convert existing ID-based values to key-based (decrypting secrets)
         current_key_values = values_id_to_key(type_fields, asset.values, decrypt_secrets=True)
 
+        # Snapshot stored checklist states before overlay for item-level merge
+        checklist_priors = {
+            f.key: current_key_values.get(f.key)
+            for f in type_fields
+            if f.type == "checklist" and f.key in data.values
+        }
+
         # Merge with incoming key-based values
         current_key_values.update(data.values)
+
+        # Server-side checklist merge: per-item completion with acting-user
+        # stamps; untouched items keep stored state (concurrency-safe with
+        # the row lock above).
+        for field in type_fields:
+            if field.type == "checklist" and field.key in data.values:
+                current_key_values[field.key] = merge_checklist_value(
+                    field,
+                    checklist_priors.get(field.key),
+                    current_key_values[field.key],
+                    current_user.user_id,
+                )
 
         # Convert back to ID-based storage format (encrypting secrets)
         asset.values = values_key_to_id(type_fields, current_key_values)

@@ -307,6 +307,31 @@ export function CustomAssetDetailPage() {
     (f) => f.type === "password" || f.type === "totp"
   );
 
+  const hasChecklistFields = assetType?.fields.some((f) => f.type === "checklist");
+
+  const handleChecklistToggle = async (fieldKey: string, itemId: string, completed: boolean) => {
+    try {
+      await updateAsset.mutateAsync({
+        values: { [fieldKey]: { items: [{ id: itemId, completed }] } },
+      });
+    } catch {
+      toast.error("Failed to update checklist");
+    }
+  };
+
+  const handleChecklistReset = async (fieldKey: string) => {
+    const field = assetType?.fields.find((f) => f.key === fieldKey);
+    const items = (field?.checklist_items ?? [])
+      .filter((item) => item.id)
+      .map((item) => ({ id: item.id as string, completed: false }));
+    try {
+      await updateAsset.mutateAsync({ values: { [fieldKey]: { items } } });
+      toast.success("Checklist reset");
+    } catch {
+      toast.error("Failed to reset checklist");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex gap-6">
@@ -491,6 +516,9 @@ export function CustomAssetDetailPage() {
                 onReveal={hasSecretFields ? handleReveal : undefined}
                 onClear={hasSecretFields ? handleClearSecrets : undefined}
                 isRevealing={isRevealingSecrets}
+                onChecklistToggle={canEdit && hasChecklistFields ? handleChecklistToggle : undefined}
+                onChecklistReset={canEdit && hasChecklistFields ? handleChecklistReset : undefined}
+                checklistDisabled={updateAsset.isPending}
               />
             )}
           </CardContent>

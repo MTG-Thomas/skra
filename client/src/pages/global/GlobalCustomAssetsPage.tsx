@@ -18,13 +18,17 @@ import {
   useCustomAssetType,
   type CustomAssetType,
 } from "@/hooks/useCustomAssets";
+import { formatChecklistListValue } from "@/lib/checklist";
 import { stripAndTruncate } from "@/lib/text-utils";
 
 // Helper function to format values for list display
 function formatListValue(
-  field: { type: string },
+  field: { type: string; checklist_items?: { id?: string | null }[] | null },
   value: unknown
 ): string {
+  if (field.type === "checklist") {
+    return formatChecklistListValue(field.checklist_items, value);
+  }
   if (value === undefined || value === null || value === "") {
     return "-";
   }
