@@ -57,6 +57,36 @@ class TestFieldDefinitionValidation:
             )
         assert "requires options" in str(exc_info.value).lower()
 
+    def test_expiration_alert_allowed_on_date_field(self):
+        """Date fields accept the expiration alert flag (issue #40)."""
+        field = FieldDefinition(
+            key="warranty_expires",
+            name="Warranty Expires",
+            type="date",
+            expiration_alert=True,
+        )
+        assert field.expiration_alert is True
+        validate_field_definitions([field])
+
+    def test_expiration_alert_defaults_to_false(self):
+        """The flag is opt-in and off by default."""
+        field = FieldDefinition(
+            key="warranty_expires",
+            name="Warranty Expires",
+            type="date",
+        )
+        assert field.expiration_alert is False
+
+    def test_expiration_alert_rejected_on_non_date_field(self):
+        """The flag is meaningless off date fields and must fail fast."""
+        with pytest.raises(ValueError, match="expiration_alert.*date"):
+            FieldDefinition(
+                key="hostname",
+                name="Hostname",
+                type="text",
+                expiration_alert=True,
+            )
+
     def test_select_field_requires_options_none(self):
         """Test that a select field with None options fails validation."""
         with pytest.raises(ValueError) as exc_info:

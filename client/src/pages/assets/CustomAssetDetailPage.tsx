@@ -20,6 +20,11 @@ import { CustomFieldList } from "@/components/assets/CustomFieldRenderer";
 import { CustomFieldInput } from "@/components/assets/CustomFieldInput";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Badge } from "@/components/ui/badge";
+import {
+  expirationLabel,
+  useUpcomingExpirations,
+} from "@/hooks/useExpirations";
 import {
   useCustomAssetType,
   useCustomAsset,
@@ -150,6 +155,16 @@ export function CustomAssetDetailPage() {
 
   const { data: assetType, isLoading: typeLoading } = useCustomAssetType(typeId!);
   const { data: asset, isLoading: assetLoading } = useCustomAsset(orgId!, typeId!, id!);
+  const { data: expirations } = useUpcomingExpirations(orgId || "");
+
+  const assetExpirations = useMemo(
+    () =>
+      (expirations?.items || [])
+        .filter((item) => item.asset_id === id)
+        .sort((a, b) => a.days_until - b.days_until),
+    [expirations, id]
+  );
+  const nearestExpiration = assetExpirations[0];
   const updateAsset = useUpdateCustomAsset(orgId!, typeId!, id!);
   const deleteAsset = useDeleteCustomAsset(orgId!, typeId!, () => {
     // Navigate in onSuccess callback BEFORE cache removal to prevent stale query refetch
@@ -421,6 +436,17 @@ export function CustomAssetDetailPage() {
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
                 <p className="text-sm text-muted-foreground">{assetType.name}</p>
+                {nearestExpiration && (
+                  <Badge
+                    data-testid="expiration-badge"
+                    variant={
+                      nearestExpiration.days_until <= 1 ? "destructive" : "secondary"
+                    }
+                    className="mt-1.5"
+                  >
+                    {expirationLabel(nearestExpiration.days_until)}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>

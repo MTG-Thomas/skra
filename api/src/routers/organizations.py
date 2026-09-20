@@ -5,12 +5,17 @@ Provides CRUD endpoints for organizations.
 """
 
 import logging
+from dataclasses import asdict
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from src.core.auth import CurrentActiveUser, RequireAdmin
 from src.core.database import DbSession
+from src.models.contracts.expiration import (
+    UpcomingExpirationPublic,
+    UpcomingExpirationsResponse,
+)
 from src.models.contracts.organization import (
     OrganizationCreate,
     OrganizationPublic,
@@ -35,6 +40,7 @@ from src.repositories.location import LocationRepository
 from src.repositories.organization import OrganizationRepository
 from src.repositories.password import PasswordRepository
 from src.services.audit_service import get_audit_service
+from src.services.expiration import find_upcoming_expirations
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +146,52 @@ async def create_organization(
     )
 
     return _to_public(org)
+
+
+@router.get("/{org_id}/expirations/upcoming", response_model=UpcomingExpirationsResponse)
+async def get_upcoming_expirations(
+    org_id: UUID,
+    current_user: CurrentActiveUser,
+    db: DbSession,
+    within_days: int = Query(
+        30, ge=1, le=365, description="Expiration horizon in days"
+    ),
+) -> UpcomingExpirationsResponse:
+    """
+    List flagged expirations for an organization inside the horizon.
+
+    Scans active custom asset types for date fields with expiration_alert
+    and returns matching assets ordered by days until expiration. Expired
+    items report window_days 0.
+
+    No view audit is logged: dashboard widgets poll this endpoint and
+    audit entries would drown real access history.
+
+    Args:
+        org_id: Organization UUID
+        current_user: Current authenticated user
+        db: Database session
+        within_days: Expiration horizon in days (default 30)
+
+    Returns:
+        Upcoming expirations with alert windows
+
+    Raises:
+        HTTPException: If organization not found
+    """
+    org_repo = OrganizationRepository(db)
+    org = await org_repo.get_by_id(org_id)
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+    items = await find_upcoming_expirations(db, org_id, within_days=within_days)
+    return UpcomingExpirationsResponse(
+        items=[UpcomingExpirationPublic(**asdict(item)) for item in items],
+        total=len(items),
+        within_days=within_days,
+    )
 
 
 @router.get("/{org_id}", response_model=OrganizationWithFrequent)
