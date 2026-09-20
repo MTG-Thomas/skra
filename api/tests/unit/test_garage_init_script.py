@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -197,15 +198,30 @@ def stub_api() -> Any:
 
 
 def run_script(url: str, key_id: str, secret: str) -> subprocess.CompletedProcess[str]:
-    """Run garage-init.sh against the stub API."""
+    """Run garage-init.sh against the stub API.
+
+    Provides a throwaway credentials directory like the production volume
+    mount (import mode writes s3.env there), with ownership pinned to the
+    current user so the script's chown succeeds with or without root.
+    The path is attached as result.creds_file for content assertions.
+    """
+    creds_dir = tempfile.mkdtemp(prefix="garage-creds-")
+    creds_file = os.path.join(creds_dir, "s3.env")
     env = {
         **os.environ,
         "GARAGE_ADMIN_URL": url,
         "GARAGE_ADMIN_TOKEN": "test-admin-token",
         "GARAGE_ACCESS_KEY_ID": key_id,
         "GARAGE_SECRET_ACCESS_KEY": secret,
+        "GARAGE_CREDS_FILE": creds_file,
+        "GARAGE_CREDS_UID": str(os.getuid()),
+        "GARAGE_CREDS_GID": str(os.getgid()),
     }
-    return subprocess.run(["sh", str(SCRIPT)], capture_output=True, text=True, timeout=60, env=env)
+    result = subprocess.run(
+        ["sh", str(SCRIPT)], capture_output=True, text=True, timeout=60, env=env
+    )
+    result.creds_file = creds_file  # type: ignore[attr-defined]
+    return result
 
 
 def assert_secret_absent(result: subprocess.CompletedProcess[str], secret: str) -> None:
@@ -225,6 +241,17 @@ def test_success_imports_grants_and_verifies(stub_api: Any) -> None:
     assert state.calls == ["import", "allow"]
     assert state.grants[VALID_KEY_ID] == FULL_PERMS
     assert_secret_absent(result, VALID_SECRET)
+
+
+def test_import_writes_credentials_file_for_pair(stub_api: Any) -> None:
+    """Import mode persists the pair where api/worker load it from."""
+    url, state = stub_api
+    result = run_script(url, VALID_KEY_ID, VALID_SECRET)
+
+    assert result.returncode == 0, result.stderr
+    content = Path(result.creds_file).read_text()
+    assert f"S3_ACCESS_KEY_ID={VALID_KEY_ID}" in content
+    assert f"S3_SECRET_ACCESS_KEY={VALID_SECRET}" in content
 
 
 def test_invalid_key_id_format_fails_before_any_import(stub_api: Any) -> None:
