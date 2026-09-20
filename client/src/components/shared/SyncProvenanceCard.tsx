@@ -2,6 +2,7 @@ import { Clock3, Database, ExternalLink, Fingerprint, RefreshCw } from "lucide-r
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime, formatRelativeTime } from "@/lib/date-utils";
+import { isSafeExternalUrl } from "@/lib/external-url";
 
 export interface SyncMetadata {
   source_system: string;
@@ -77,11 +78,11 @@ export function SyncProvenanceCard({ syncMetadata }: SyncProvenanceCardProps) {
           <DetailRow icon={Clock3} label="Last sync" value={`${freshness} (${lastSynced})`} />
           <DetailRow icon={Fingerprint} label="Tenant" value={syncMetadata.source_tenant_id} mono />
         </dl>
-        {syncMetadata.source_url && (
+        {isSafeExternalUrl(syncMetadata.source_url) && (
           <a
-            href={syncMetadata.source_url}
+            href={syncMetadata.source_url as string}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
           >
             Open source record
