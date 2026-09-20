@@ -72,6 +72,18 @@ def test_image_identity_matches_dockerfile_uid():
         assert "runAsUser: 1000" not in text
 
 
+def test_worker_liveness_probe_reads_env_from_python():
+    """exec probes run without a shell: ${...} would be passed literally.
+
+    The probe must read SKRA_REDIS_URL via os.environ so it can actually
+    connect once deployed.
+    """
+    text = _worker_text()
+
+    assert "${SKRA_REDIS_URL}" not in text
+    assert "os.environ['SKRA_REDIS_URL']" in text
+
+
 def test_serving_behavior_preserved():
     """Hardening must not change commands, ports, probes, or env sources."""
     api_text = _api_text()

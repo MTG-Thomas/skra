@@ -51,7 +51,9 @@ spec:
               command:
                 - python
                 - -c
-                - "import redis; r = redis.from_url('${SKRA_REDIS_URL}'); r.ping()"
+                # NOTE: exec probes run without a shell, so ${...} would be
+                # passed literally; read the environment from Python instead.
+                - "import os, redis; redis.from_url(os.environ['SKRA_REDIS_URL']).ping()"
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 5
