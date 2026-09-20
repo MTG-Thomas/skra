@@ -105,6 +105,21 @@ class TestChecklistValueValidation:
                 partial=True,
             )
 
+    def test_rejects_duplicate_item_ids(self):
+        with pytest.raises(CustomAssetValidationError, match="duplicate"):
+            validate_values(
+                [_checklist_field()],
+                {
+                    "sop": {
+                        "items": [
+                            {"id": "step-1", "completed": True},
+                            {"id": "step-1", "completed": False},
+                        ]
+                    }
+                },
+                partial=True,
+            )
+
     def test_client_stamps_do_not_fail_validation(self):
         # Stamps are ignored server-side, never rejected at validation.
         validate_values(
@@ -231,6 +246,72 @@ class TestChecklistMerge:
         assert by_id["step-1"]["completed"] is True
         assert by_id["step-1"]["completed_by"] == str(self.USER_A)
         assert by_id["step-2"]["completed_by"] == str(self.USER_B)
+
+    def test_stale_view_delta_does_not_clobber_newer_completion(self):
+        # Writer B loaded the checklist before writer A completed step-1.
+        # B's UI sends only its own toggled item (delta discipline enforced
+        # by the client: toggles send one item, the edit form sends none),
+        # so A's newer completion must survive B's stale view.
+        stored_after_a = {
+            "items": [
+                {
+                    "id": "step-1",
+                    "completed": True,
+                    "completed_by": str(self.USER_A),
+                    "completed_at": "2026-04-01T10:00:00+00:00",
+                }
+            ]
+        }
+        merged = merge_checklist_value(
+            _checklist_field(),
+            stored_after_a,
+            {"items": [{"id": "step-2", "completed": True}]},
+            self.USER_B,
+            self.NOW,
+        )
+        by_id = {e["id"]: e for e in merged["items"]}
+        assert by_id["step-1"] == stored_after_a["items"][0]
+        assert by_id["step-2"]["completed"] is True
+        assert by_id["step-2"]["completed_by"] == str(self.USER_B)
+
+    def test_explicit_full_false_clears_all_reset_semantics(self):
+        # An explicit full-false payload (the Reset action) clears every
+        # stamp. Only deliberate full payloads do this; partial deltas
+        # never clear unmentioned items (see tests above).
+        stored = {
+            "items": [
+                {
+                    "id": "step-1",
+                    "completed": True,
+                    "completed_by": str(self.USER_A),
+                    "completed_at": "2026-04-01T10:00:00+00:00",
+                },
+                {
+                    "id": "step-2",
+                    "completed": True,
+                    "completed_by": str(self.USER_B),
+                    "completed_at": "2026-04-02T10:00:00+00:00",
+                },
+            ]
+        }
+        merged = merge_checklist_value(
+            _checklist_field(),
+            stored,
+            {
+                "items": [
+                    {"id": "step-1", "completed": False},
+                    {"id": "step-2", "completed": False},
+                ]
+            },
+            self.USER_A,
+            self.NOW,
+        )
+        assert merged == {
+            "items": [
+                {"id": "step-1", "completed": False},
+                {"id": "step-2", "completed": False},
+            ]
+        }
 
     def test_removed_definition_items_keep_history(self):
         field = _checklist_field(

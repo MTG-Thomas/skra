@@ -204,12 +204,19 @@ def _validate_checklist_value(field: FieldDefinition, value: Any) -> None:
             field_key=field.key,
         )
     known_ids = {item.id for item in field.checklist_items or []}
+    seen_ids: set[str] = set()
     for entry in items:
         if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
             raise CustomAssetValidationError(
                 f"Field '{field.key}' entries must have a string id",
                 field_key=field.key,
             )
+        if entry["id"] in seen_ids:
+            raise CustomAssetValidationError(
+                f"Field '{field.key}' has duplicate checklist item '{entry['id']}'",
+                field_key=field.key,
+            )
+        seen_ids.add(entry["id"])
         if entry["id"] not in known_ids:
             raise CustomAssetValidationError(
                 f"Field '{field.key}' has unknown checklist item '{entry['id']}'",
