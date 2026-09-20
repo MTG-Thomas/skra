@@ -23,6 +23,13 @@ equivalent.
 - **Dedupe in Postgres** (`expiration_alert_sightings`, unique on
   org/asset/field/window) with `ON CONFLICT DO NOTHING`, so worker
   restarts and retries never double-alert.
+- **Delivery semantics are at-least-once: a sighting row means
+  "delivered".** Each new window is atomically claimed, then delivered; a
+  failed or disabled (unconfigured SMTP) delivery releases the claim so a
+  later run retries instead of suppressing the alert forever. Sightings
+  commit per organization, and the job registers a 30-minute arq timeout
+  (`func(check_expirations_task, timeout=1800)`) instead of the 60s
+  default.
 - **Email is opt-in and off by default.** No existing SMTP/notification
   plumbing was found in the API (only Redis pubsub for websockets), so per
   the acceptance criteria the notifier stays disabled unless `smtp_*`

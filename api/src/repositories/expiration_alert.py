@@ -8,6 +8,7 @@ is a no-op that reports False so the caller can suppress duplicates.
 
 from uuid import UUID
 
+from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +51,32 @@ class ExpirationAlertRepository(BaseRepository[ExpirationAlertSighting]):
             window_days=window_days,
         )
         stmt = stmt.on_conflict_do_nothing(constraint="uq_expiration_alert_sighting")
+
+        result = await self.session.execute(stmt)
+        return result.rowcount == 1  # type: ignore[attr-defined]
+
+    async def delete_sighting(
+        self,
+        organization_id: UUID,
+        asset_id: UUID,
+        field_key: str,
+        window_days: int,
+    ) -> bool:
+        """
+        Release a previously recorded claim for a threshold window.
+
+        Used when delivery fails after the claim was recorded, so a later
+        run retries instead of suppressing the alert forever.
+
+        Returns:
+            True when a sighting was removed, False when none existed.
+        """
+        stmt = delete(ExpirationAlertSighting).where(
+            ExpirationAlertSighting.organization_id == organization_id,
+            ExpirationAlertSighting.asset_id == asset_id,
+            ExpirationAlertSighting.field_key == field_key,
+            ExpirationAlertSighting.window_days == window_days,
+        )
 
         result = await self.session.execute(stmt)
         return result.rowcount == 1  # type: ignore[attr-defined]

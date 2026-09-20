@@ -430,10 +430,15 @@ async def check_expirations_task(
     Notify on newly-crossed expiration threshold windows (issue #40).
 
     This task runs daily via cron. For every organization it scans flagged
-    custom-asset date fields, records first sightings of each threshold
-    window, and emails one alert per newly-crossed window. Repeat sightings
-    of the same window are suppressed; escalation to a nearer window alerts
-    again.
+    custom-asset date fields and emails one alert per newly-crossed
+    threshold window. Repeat sightings of the same window are suppressed;
+    escalation to a nearer window alerts again.
+
+    Delivery semantics are at-least-once: a sighting row means "delivered".
+    Each new window is atomically claimed, then delivered; a failed or
+    disabled delivery releases the claim so a later run retries instead of
+    suppressing the alert forever. Sightings commit per organization, so a
+    failure in one org never rolls back another org's delivered alerts.
     """
     notifier = build_expiration_notifier()
     notified = 0
@@ -450,11 +455,26 @@ async def check_expirations_task(
             for org in orgs:
                 items = await find_upcoming_expirations(db, org.id)
                 for item in items:
-                    if await alert_service.maybe_record(item):
-                        notifier.notify(item, org_name=org.name)
+                    if not await alert_service.maybe_record(item):
+                        continue
+                    try:
+                        delivered = notifier.notify(item, org_name=org.name)
+                    except Exception:
+                        logger.exception(
+                            "Expiration alert delivery failed",
+                            extra={
+                                "organization": org.name,
+                                "asset_id": str(item.asset_id),
+                                "field_key": item.field_key,
+                            },
+                        )
+                        delivered = False
+                    if delivered:
                         notified += 1
+                    else:
+                        await alert_service.release(item)
+                await db.commit()
             offset += len(orgs)
-        await db.commit()
 
     logger.info(f"Expiration check complete: {notified} new alerts", extra={"notified": notified})
 
@@ -481,7 +501,10 @@ class WorkerSettings:
     # Cron jobs for scheduled tasks
     cron_jobs = [
         cron(cleanup_audit_logs_task, hour=3, minute=0),  # Run daily at 3am
-        cron(check_expirations_task, hour=6, minute=0),  # Daily expiration alerts at 6am
+        # 30-minute timeout (not the 60s job_timeout): scans every org's
+        # flagged assets plus SMTP delivery. Note: cron entries replace the
+        # functions-registry entry by name, so the timeout lives here.
+        cron(check_expirations_task, hour=6, minute=0, timeout=1800),
     ]
 
     # Redis connection settings (loaded from environment)

@@ -122,6 +122,96 @@ def test_notifier_requires_recipients():
 
 
 @pytest.mark.asyncio
+async def test_service_release_deletes_claim():
+    """Releasing a claim lets a later run retry the delivery."""
+    from src.services.expiration_alerts import ExpirationAlertService
+
+    repo = AsyncMock()
+    repo.delete_sighting = AsyncMock(return_value=True)
+    service = ExpirationAlertService(repo)
+
+    assert await service.release(_item()) is True
+    repo.delete_sighting.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_task_releases_claim_when_notifier_disabled():
+    """A disabled notifier records nothing permanent for future runs."""
+    from src.worker import check_expirations_task
+
+    org = MagicMock()
+    org.id = ORG_ID
+    org.name = "Acme"
+    org_repo = AsyncMock()
+    org_repo.get_all = AsyncMock(side_effect=[[org], []])
+    items = [_item()]
+
+    with (
+        patch("src.worker.OrganizationRepository", return_value=org_repo),
+        patch(
+            "src.worker.find_upcoming_expirations",
+            new=AsyncMock(return_value=items),
+        ),
+        patch("src.worker.ExpirationAlertService") as alert_cls,
+        patch("src.worker.build_expiration_notifier") as build_notifier,
+        patch("src.worker.get_db_context") as db_context,
+    ):
+        alert_service = AsyncMock()
+        alert_service.maybe_record = AsyncMock(return_value=True)
+        alert_service.release = AsyncMock(return_value=True)
+        alert_cls.return_value = alert_service
+        notifier = build_notifier.return_value
+        notifier.notify = MagicMock(return_value=False)
+        db_session = AsyncMock()
+        db_context.return_value.__aenter__ = AsyncMock(return_value=db_session)
+        db_context.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await check_expirations_task({})
+
+    alert_service.release.assert_awaited_once()
+    assert db_session.commit.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_task_continues_when_smtp_send_fails():
+    """One failed delivery releases its claim without stopping the job."""
+    from src.worker import check_expirations_task
+
+    org = MagicMock()
+    org.id = ORG_ID
+    org.name = "Acme"
+    org_repo = AsyncMock()
+    org_repo.get_all = AsyncMock(side_effect=[[org], []])
+    items = [_item(), _item(asset_id=uuid4())]
+
+    with (
+        patch("src.worker.OrganizationRepository", return_value=org_repo),
+        patch(
+            "src.worker.find_upcoming_expirations",
+            new=AsyncMock(return_value=items),
+        ),
+        patch("src.worker.ExpirationAlertService") as alert_cls,
+        patch("src.worker.build_expiration_notifier") as build_notifier,
+        patch("src.worker.get_db_context") as db_context,
+    ):
+        alert_service = AsyncMock()
+        alert_service.maybe_record = AsyncMock(return_value=True)
+        alert_service.release = AsyncMock(return_value=True)
+        alert_cls.return_value = alert_service
+        notifier = build_notifier.return_value
+        notifier.notify = MagicMock(side_effect=[RuntimeError("smtp down"), True])
+        db_session = AsyncMock()
+        db_context.return_value.__aenter__ = AsyncMock(return_value=db_session)
+        db_context.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await check_expirations_task({})
+
+    assert notifier.notify.call_count == 2
+    alert_service.release.assert_awaited_once()
+    assert db_session.commit.await_count >= 1
+
+
+@pytest.mark.asyncio
 async def test_check_expirations_task_notifies_new_thresholds():
     """The daily job records, notifies, and counts per organization."""
     from src.worker import check_expirations_task

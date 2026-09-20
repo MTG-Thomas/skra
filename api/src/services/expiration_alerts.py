@@ -39,6 +39,20 @@ class ExpirationAlertService:
             window_days=item.window_days,
         )
 
+    async def release(self, item: UpcomingExpiration) -> bool:
+        """
+        Release a claim recorded by :meth:`maybe_record`.
+
+        Returns True when a sighting was removed (a later run will retry
+        the delivery), False when none existed.
+        """
+        return await self._repository.delete_sighting(
+            organization_id=item.organization_id,
+            asset_id=item.asset_id,
+            field_key=item.field_key,
+            window_days=item.window_days,
+        )
+
 
 @dataclass
 class ExpirationNotifier:
