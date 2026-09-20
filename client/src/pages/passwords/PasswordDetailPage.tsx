@@ -25,7 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { TiptapEditor } from "@/components/documents/TiptapEditor";
 import { RelatedItemsSidebar } from "@/components/relationships/RelatedItemsSidebar";
-import { EntityAttachments, ConfirmDialog, EditModeActions } from "@/components/shared";
+import { EntityAttachments, ConfirmDialog, EditModeActions, SyncProvenanceCard } from "@/components/shared";
 import { PasswordReveal } from "@/components/passwords/PasswordReveal";
 import { TOTPReveal } from "@/components/passwords/TOTPReveal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -463,6 +463,7 @@ export function PasswordDetailPage() {
 
       {/* Sidebar */}
       <aside className="w-[360px] shrink-0 hidden lg:block space-y-4">
+        <SyncProvenanceCard syncMetadata={password.sync_metadata} />
         <RelatedItemsSidebar
           orgId={orgId}
           entityType="password"

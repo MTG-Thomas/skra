@@ -5178,6 +5178,7 @@ export interface components {
             updated_by_user_id?: string | null;
             /** Updated By User Name */
             updated_by_user_name?: string | null;
+            sync_metadata?: components["schemas"]["SyncMetadata"] | null;
         };
         /**
          * DocumentUpdate
@@ -5822,6 +5823,7 @@ export interface components {
             updated_by_user_id?: string | null;
             /** Updated By User Name */
             updated_by_user_name?: string | null;
+            sync_metadata?: components["schemas"]["SyncMetadata"] | null;
         };
         /**
          * LocationUpdate
@@ -6259,6 +6261,7 @@ export interface components {
             } | null;
             /** Is Enabled */
             is_enabled?: boolean | null;
+            sync_metadata?: components["schemas"]["SyncMetadata"] | null;
         };
         /**
          * OrganizationPublic
@@ -6359,6 +6362,7 @@ export interface components {
             updated_by_user_name?: string | null;
             /** Frequently Accessed */
             frequently_accessed?: components["schemas"]["FrequentItem"][] | null;
+            sync_metadata?: components["schemas"]["SyncMetadata"] | null;
         };
         /**
          * PasskeyAuthOptionsRequest
@@ -6625,6 +6629,7 @@ export interface components {
             updated_by_user_id?: string | null;
             /** Updated By User Name */
             updated_by_user_name?: string | null;
+            sync_metadata?: components["schemas"]["SyncMetadata"] | null;
         };
         /**
          * PasswordReveal

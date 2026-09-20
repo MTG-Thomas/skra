@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ConfirmDialog, EditModeActions } from "@/components/shared";
+import { ConfirmDialog, EditModeActions, SyncProvenanceCard } from "@/components/shared";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useInlineEdit } from "@/hooks/useInlineEdit";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
@@ -364,6 +364,11 @@ export function OrganizationDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Sync provenance (read-only; hidden when the org was never synced) */}
+      <div className="mt-6">
+        <SyncProvenanceCard syncMetadata={organization.sync_metadata} />
+      </div>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

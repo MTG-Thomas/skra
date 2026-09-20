@@ -357,6 +357,7 @@ export function DocumentDetailPage() {
           orgId={orgId}
           documentId={id}
           content={displayContent}
+          syncMetadata={document?.sync_metadata}
         />
       )}
 

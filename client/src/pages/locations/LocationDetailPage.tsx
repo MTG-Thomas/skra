@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { TiptapEditor } from "@/components/documents/TiptapEditor";
 import { RelatedItemsSidebar } from "@/components/relationships/RelatedItemsSidebar";
-import { EntityAttachments, ConfirmDialog, EditModeActions } from "@/components/shared";
+import { EntityAttachments, ConfirmDialog, EditModeActions, SyncProvenanceCard } from "@/components/shared";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useInlineEdit } from "@/hooks/useInlineEdit";
 import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
@@ -453,6 +453,7 @@ export function LocationDetailPage() {
 
       {/* Sidebar */}
       <aside className="w-[360px] shrink-0 hidden lg:block space-y-4">
+        <SyncProvenanceCard syncMetadata={location.sync_metadata} />
         <RelatedItemsSidebar orgId={orgId} entityType="location" entityId={id} />
         <EntityAttachments entityType="location" entityId={id} />
       </aside>

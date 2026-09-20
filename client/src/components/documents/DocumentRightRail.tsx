@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { SyncProvenanceCard, type SyncMetadata } from "@/components/shared/SyncProvenanceCard";
 import { AddRelationshipDialog } from "@/components/relationships/AddRelationshipDialog";
 import { TableOfContents } from "./TableOfContents";
 import {
@@ -52,6 +53,7 @@ interface DocumentRightRailProps {
   orgId: string;
   documentId: string;
   content: string;
+  syncMetadata?: SyncMetadata | null;
 }
 
 function formatFileSize(bytes: number): string {
@@ -66,6 +68,7 @@ export function DocumentRightRail({
   orgId,
   documentId,
   content,
+  syncMetadata,
 }: DocumentRightRailProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -203,6 +206,7 @@ export function DocumentRightRail({
   return (
     <aside className="hidden xl:block w-64 border-l border-border shrink-0">
       <div className="sticky top-0 p-4 space-y-6 max-h-screen overflow-y-auto">
+        <SyncProvenanceCard syncMetadata={syncMetadata} />
         {/* Table of Contents */}
         <TableOfContents content={content} />
 
