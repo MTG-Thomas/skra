@@ -51,6 +51,7 @@ def _db_tls_params_of_url(url: str) -> tuple[str | None, str | None]:
         legacy_ssl[0].lower() if legacy_ssl else None,
     )
 
+
 _warned_legacy_keys: set[str] = set()
 
 
