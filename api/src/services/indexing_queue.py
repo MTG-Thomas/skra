@@ -42,23 +42,21 @@ async def enqueue_index_entity(
             entity_id,
             org_id,
         )
+        # Log a static event only: entity IDs trace to sensitive records and
+        # exception text can carry credentials, so neither is logged here.
         logger.debug(
-            f"Enqueued index job for {entity_type}/{entity_id}",
+            "Enqueued index job",
             extra={
                 "entity_type": entity_type,
-                "entity_id": entity_id,
-                "org_id": org_id,
             },
         )
-    except Exception as e:
-        # Log but don't fail the request - indexing is best-effort
+    except Exception:
+        # Log but don't fail the request - indexing is best-effort.
+        # No exception text or traceback: either can leak secrets.
         logger.warning(
-            f"Failed to enqueue index job for {entity_type}/{entity_id}: {e}",
+            "Failed to enqueue index job",
             extra={
                 "entity_type": entity_type,
-                "entity_id": entity_id,
-                "org_id": org_id,
-                "error": str(e),
             },
         )
 
@@ -85,20 +83,19 @@ async def enqueue_remove_entity(
             entity_type,
             entity_id,
         )
+        # Static event only (see note above).
         logger.debug(
-            f"Enqueued remove job for {entity_type}/{entity_id}",
+            "Enqueued remove job",
             extra={
                 "entity_type": entity_type,
-                "entity_id": entity_id,
             },
         )
-    except Exception as e:
-        # Log but don't fail the request - index removal is best-effort
+    except Exception:
+        # Log but don't fail the request - index removal is best-effort.
+        # No exception text or traceback: either can leak secrets.
         logger.warning(
-            f"Failed to enqueue remove job for {entity_type}/{entity_id}: {e}",
+            "Failed to enqueue remove job",
             extra={
                 "entity_type": entity_type,
-                "entity_id": entity_id,
-                "error": str(e),
             },
         )

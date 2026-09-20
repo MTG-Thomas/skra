@@ -41,12 +41,11 @@ async def index_entity_for_search(
     try:
         # Check if indexing is enabled (don't even enqueue if disabled)
         if not await is_indexing_enabled(db):
+            # Static event only: IDs trace to sensitive records.
             logger.debug(
-                f"Skipping indexing for {entity_type}/{entity_id} - indexing disabled",
+                "Skipping indexing - indexing disabled",
                 extra={
                     "entity_type": entity_type,
-                    "entity_id": str(entity_id),
-                    "org_id": str(org_id),
                 },
             )
             return
@@ -55,14 +54,13 @@ async def index_entity_for_search(
         from src.services.indexing_queue import enqueue_index_entity
 
         await enqueue_index_entity(entity_type, str(entity_id), str(org_id))
-    except Exception as e:
-        # Log but don't fail the request
+    except Exception:
+        # Log but don't fail the request.
+        # No exception text or traceback: either can leak secrets.
         logger.warning(
-            f"Failed to enqueue {entity_type}/{entity_id} for indexing: {e}",
+            "Failed to enqueue for indexing",
             extra={
                 "entity_type": entity_type,
-                "entity_id": str(entity_id),
-                "org_id": str(org_id),
             },
         )
 
@@ -89,12 +87,12 @@ async def remove_entity_from_search(
         from src.services.indexing_queue import enqueue_remove_entity
 
         await enqueue_remove_entity(entity_type, str(entity_id))
-    except Exception as e:
-        # Log but don't fail the request
+    except Exception:
+        # Log but don't fail the request.
+        # No exception text or traceback: either can leak secrets.
         logger.warning(
-            f"Failed to enqueue {entity_type}/{entity_id} for removal from index: {e}",
+            "Failed to enqueue for removal from index",
             extra={
                 "entity_type": entity_type,
-                "entity_id": str(entity_id),
             },
         )
