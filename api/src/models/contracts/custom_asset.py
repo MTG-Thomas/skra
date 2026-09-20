@@ -66,6 +66,7 @@ class FieldDefinition(BaseModel):
     default_value: str | None = None
     options: list[str] | None = None  # required for select type
     checklist_items: list[ChecklistItemDefinition] | None = None  # required for checklist type
+    expiration_alert: bool = False  # only meaningful on date fields (issue #40)
 
     @field_validator("options")
     @classmethod
@@ -92,6 +93,14 @@ class FieldDefinition(BaseModel):
             ids = [item.id for item in v]
             if len(ids) != len(set(ids)):
                 raise ValueError("Checklist item ids must be unique within a field")
+        return v
+
+    @field_validator("expiration_alert")
+    @classmethod
+    def validate_expiration_alert(cls, v: bool, info) -> bool:
+        """Validate that expiration alerts are only set on date fields."""
+        if v and info.data.get("type") != "date":
+            raise ValueError("expiration_alert is only supported on date fields")
         return v
 
 

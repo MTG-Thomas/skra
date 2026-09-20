@@ -224,6 +224,37 @@ class Settings(BaseSettings):
         default=30, description="Number of days a device stays trusted after MFA verification"
     )
 
+    # ==========================================================================
+    # Expiration Alert Notifications (issue #40)
+    # ==========================================================================
+    smtp_enabled: bool = Field(
+        default=False, description="Whether expiration alerts send email via SMTP"
+    )
+
+    smtp_host: str = Field(default="", description="SMTP server hostname for alert emails")
+
+    smtp_port: int = Field(default=587, description="SMTP server port for alert emails")
+
+    smtp_sender: str = Field(default="", description="From address for expiration alert emails")
+
+    smtp_recipients: str = Field(
+        default="", description="Comma-separated recipient addresses for expiration alerts"
+    )
+
+    smtp_use_starttls: bool = Field(
+        default=True, description="Upgrade SMTP alerts with STARTTLS (required for remote hosts)"
+    )
+
+    smtp_use_ssl: bool = Field(
+        default=False, description="Use implicit TLS for SMTP alerts (typically port 465)"
+    )
+
+    smtp_username: str = Field(default="", description="SMTP username for alert emails")
+
+    smtp_password: str = Field(default="", description="SMTP password for alert emails")
+
+    smtp_timeout: float = Field(default=10.0, description="SMTP connection timeout in seconds")
+
     mfa_setup_token_expire_minutes: int = Field(
         default=15,
         description="MFA setup token expiration time in minutes (longer than verify for setup flow)",

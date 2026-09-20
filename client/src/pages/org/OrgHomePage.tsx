@@ -33,7 +33,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RecentEntityCard } from "@/components/RecentEntityCard";
+import { UpcomingExpirationsWidget } from "@/components/UpcomingExpirationsWidget";
 import { useOrganization, useUpdateOrganization } from "@/hooks/useOrganizations";
+import { useUpcomingExpirations } from "@/hooks/useExpirations";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface QuickLinkProps {
@@ -79,6 +81,7 @@ export function OrgHomePage() {
   });
 
   const frequentItems = organization?.frequently_accessed || [];
+  const { data: expirations } = useUpcomingExpirations(orgId || "");
   const updateOrganization = useUpdateOrganization();
   const { canEdit } = usePermissions();
 
@@ -232,6 +235,11 @@ export function OrgHomePage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Upcoming Expirations */}
+      {orgId && expirations && (
+        <UpcomingExpirationsWidget orgId={orgId} items={expirations.items} />
       )}
 
       {/* Quick Links */}

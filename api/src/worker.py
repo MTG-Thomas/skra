@@ -9,6 +9,7 @@ Run the worker with:
     arq src.worker.WorkerSettings
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
@@ -18,6 +19,11 @@ from arq import cron, func
 from arq.connections import RedisSettings
 
 from src.config import get_settings
+from src.core.database import get_db_context
+from src.repositories.expiration_alert import ExpirationAlertRepository
+from src.repositories.organization import OrganizationRepository
+from src.services.expiration import find_upcoming_expirations
+from src.services.expiration_alerts import ExpirationAlertService, build_expiration_notifier
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +424,64 @@ async def cleanup_audit_logs_task(
     )
 
 
+async def check_expirations_task(
+    ctx: dict[str, Any],
+) -> None:
+    """
+    Notify on newly-crossed expiration threshold windows (issue #40).
+
+    This task runs daily via cron. For every organization it scans flagged
+    custom-asset date fields and emails one alert per newly-crossed
+    threshold window. Repeat sightings of the same window are suppressed;
+    escalation to a nearer window alerts again.
+
+    Delivery semantics are at-least-once: a sighting row means "delivered".
+    Each new window is atomically claimed, then delivered; a failed or
+    disabled delivery releases the claim so a later run retries instead of
+    suppressing the alert forever. Sightings commit per organization, so a
+    failure in one org never rolls back another org's delivered alerts.
+    """
+    notifier = build_expiration_notifier()
+    if not notifier.enabled:
+        logger.info("Expiration notifier disabled; skipping daily check")
+        return
+    notified = 0
+
+    async with get_db_context() as db:
+        org_repo = OrganizationRepository(db)
+        alert_service = ExpirationAlertService(ExpirationAlertRepository(db))
+
+        limit, offset = 100, 0
+        while True:
+            orgs = await org_repo.get_all(limit=limit, offset=offset)
+            if not orgs:
+                break
+            for org in orgs:
+                items = await find_upcoming_expirations(db, org.id)
+                for item in items:
+                    if not await alert_service.maybe_record(item):
+                        continue
+                    try:
+                        # Blocking SMTP must not stall the arq event loop.
+                        delivered = await asyncio.to_thread(
+                            notifier.notify, item, org_name=org.name
+                        )
+                    except Exception:
+                        # Bare static message: exception text and tracebacks
+                        # may carry SMTP credentials or headers, and org/field
+                        # names are user-supplied, so no context is logged (#120).
+                        logger.error("Expiration alert delivery failed")
+                        delivered = False
+                    if delivered:
+                        notified += 1
+                    else:
+                        await alert_service.release(item)
+                await db.commit()
+            offset += len(orgs)
+
+    logger.info(f"Expiration check complete: {notified} new alerts", extra={"notified": notified})
+
+
 class WorkerSettings:
     """
     arq worker settings.
@@ -434,11 +498,16 @@ class WorkerSettings:
         remove_entity_task,
         func(reindex_task, timeout=21600),  # 6 hours for bulk reindexing
         cleanup_audit_logs_task,
+        check_expirations_task,
     ]
 
     # Cron jobs for scheduled tasks
     cron_jobs = [
         cron(cleanup_audit_logs_task, hour=3, minute=0),  # Run daily at 3am
+        # 30-minute timeout (not the 60s job_timeout): scans every org's
+        # flagged assets plus SMTP delivery. Note: cron entries replace the
+        # functions-registry entry by name, so the timeout lives here.
+        cron(check_expirations_task, hour=6, minute=0, timeout=1800),
     ]
 
     # Redis connection settings (loaded from environment)
