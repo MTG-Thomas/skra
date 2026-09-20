@@ -59,7 +59,7 @@ def test_base_client_keeps_nginx_probe():
     code = _uncommented(_service_block(BASE, "client"))
 
     assert "wget" in code
-    assert "http://127.0.0.1/health" in code
+    assert "http://127.0.0.1:8080/health" in code
 
 
 def test_worker_s3_endpoint_targets_garage():
@@ -75,7 +75,18 @@ def test_worker_s3_endpoint_targets_garage():
 
 
 def test_dev_client_probes_vite_health_proxy():
-    """The dev override targets the Vite /health proxy on port 80."""
+    """The dev override targets the Vite /health proxy on port 8080."""
     code = _uncommented(_service_block(DEV, "client"))
 
-    assert "http://127.0.0.1/health" in code
+    assert "http://127.0.0.1:8080/health" in code
+
+
+def test_client_port_mapping_is_single_and_unprivileged():
+    """One published client mapping; dev adds none (Compose merges lists)."""
+    base_code = _uncommented(_service_block(BASE, "client"))
+
+    assert base_code.count("CLIENT_PORT") == 1
+    assert '"${CLIENT_PORT:-8080}:8080"' in base_code
+
+    dev_code = _uncommented(_service_block(DEV, "client"))
+    assert "ports:" not in dev_code

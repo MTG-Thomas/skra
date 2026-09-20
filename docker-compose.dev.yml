@@ -103,12 +103,15 @@ services:
       context: ./client
       dockerfile: Dockerfile.dev
       target: "" # Clear the production target from base compose file
+    # No ports override: base maps 8080:8080 and Dockerfile.dev serves
+    # Vite on container port 8080 (Compose port lists merge, so an extra
+    # entry here would double-claim the host port).
     environment:
       API_URL: http://api:8000
     # node:20-slim has no wget (base file probes nginx): probe the Vite
-    # /health proxy via node itself. Port 80 matches Dockerfile.dev.
+    # /health proxy via node itself. Port 8080 matches Dockerfile.dev.
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 3
