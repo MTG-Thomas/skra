@@ -203,6 +203,44 @@ def test_notifier_starttls_failure_fails_closed():
     assert instance.send_message.call_count == 0
 
 
+def test_notifier_failure_logs_no_exception_detail(caplog):
+    """SMTP failures log a static message without exception text or tracebacks."""
+    import logging
+
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    sentinel = "s3cret-password-sentinel"
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="mail.example.com",
+        smtp_port=587,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+        username="alerts",
+        password=sentinel,
+    )
+    with (
+        caplog.at_level(logging.ERROR, logger="src.services.expiration_alerts"),
+        patch("smtplib.SMTP") as smtp,
+    ):
+        instance = smtp.return_value.__enter__.return_value
+        instance.starttls.side_effect = RuntimeError(f"AUTH failed: {sentinel}")
+        assert notifier.notify(_item(), org_name="Acme") is False
+
+    failure_records = [
+        record
+        for record in caplog.records
+        if record.name == "src.services.expiration_alerts" and record.levelno == logging.ERROR
+    ]
+    assert len(failure_records) == 1
+    record = failure_records[0]
+    assert record.exc_info is None
+    assert record.exc_text is None
+    assert sentinel not in record.getMessage()
+    assert sentinel not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
 def test_notifier_localhost_plaintext_when_unrequested():
     """Loopback delivery without TLS stays allowed for local relays."""
     from src.services.expiration_alerts import ExpirationNotifier

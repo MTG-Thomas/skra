@@ -467,7 +467,9 @@ async def check_expirations_task(
                             notifier.notify, item, org_name=org.name
                         )
                     except Exception:
-                        logger.exception(
+                        # Static message only: exception text and tracebacks
+                        # may carry SMTP credentials or headers (issue #120).
+                        logger.error(
                             "Expiration alert delivery failed",
                             extra={
                                 "organization": org.name,
