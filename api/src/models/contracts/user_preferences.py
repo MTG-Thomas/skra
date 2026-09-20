@@ -6,10 +6,10 @@ order, and widths for DataTable components.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ColumnPreferences(BaseModel):
@@ -29,11 +29,40 @@ class ColumnPreferences(BaseModel):
     )
 
 
+MAX_DASHBOARD_WIDGETS = 12
+
+# Bounded widget identifier. Deliberately a constrained string rather than a
+# Literal registry: the frontend registry ignores unknown IDs, so the backend
+# must not require a deploy for each new widget.
+WidgetId = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Dashboard widget identifier (unknown IDs are ignored by the frontend)",
+    ),
+]
+
+
+class DashboardWidgetItem(BaseModel):
+    """Single dashboard widget entry. List order defines display order."""
+
+    id: WidgetId = Field(
+        description="Widget identifier; unknown IDs are ignored by the frontend registry",
+    )
+    visible: bool = Field(
+        default=True,
+        description="Whether the widget is shown",
+    )
+
+
 class PreferencesData(BaseModel):
     """
     User preferences data structure.
 
-    Stores column preferences for DataTable components.
+    Stores column preferences for DataTable components and, for the
+    ``dashboard_layout`` entity type, the dashboard widget layout.
     Extensible to support additional preference types in the future.
     """
 
@@ -41,6 +70,27 @@ class PreferencesData(BaseModel):
         default_factory=ColumnPreferences,
         description="Column visibility, order, and width preferences",
     )
+    widgets: list[DashboardWidgetItem] | None = Field(
+        default=None,
+        max_length=MAX_DASHBOARD_WIDGETS,
+        description=(
+            "Dashboard widget layout for the 'dashboard_layout' entity type. "
+            "Ordered items with id and visible; list order is display order. "
+            f"Max {MAX_DASHBOARD_WIDGETS} items with unique ids."
+        ),
+    )
+
+    @field_validator("widgets")
+    @classmethod
+    def _unique_widget_ids(
+        cls, value: list[DashboardWidgetItem] | None
+    ) -> list[DashboardWidgetItem] | None:
+        if value is None:
+            return value
+        ids = [item.id for item in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Widget ids must be unique")
+        return value
 
 
 class UserPreferencesCreate(BaseModel):
