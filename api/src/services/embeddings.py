@@ -115,15 +115,19 @@ class EmbeddingsService:
 
     def compute_content_hash(self, text: str) -> str:
         """
-        Compute MD5 hash of content to detect changes.
+        Compute SHA-256 hash of content to detect changes.
+
+        Old MD5 hashes stored in the database self-heal: they simply
+        mismatch the new SHA-256 value on the next index run, triggering
+        a one-time re-index of that entity.
 
         Args:
             text: Text to hash
 
         Returns:
-            32-character hex MD5 hash
+            64-character hex SHA-256 hash
         """
-        return hashlib.md5(text.encode("utf-8")).hexdigest()
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     async def _get_entity_and_org(
         self,
@@ -246,10 +250,20 @@ class EmbeddingsService:
 
             case "custom_asset":
                 # display name (from values) + non-password field values
+                # Never index the display field when it is a password-type
+                # field or an encrypted value holder.
                 if display_field_key and entity.values:
-                    display_name = entity.values.get(display_field_key)
-                    if display_name:
-                        parts.append(str(display_name))
+                    display_def = next(
+                        (f for f in (asset_type_fields or []) if f.key == display_field_key),
+                        None,
+                    )
+                    display_is_secret = display_field_key.endswith("_encrypted") or (
+                        display_def is not None and display_def.type == "password"
+                    )
+                    if not display_is_secret:
+                        display_name = entity.values.get(display_field_key)
+                        if display_name:
+                            parts.append(str(display_name))
                 if entity.values and asset_type_fields:
                     password_keys = {f.key for f in asset_type_fields if f.type == "password"}
                     for key, value in entity.values.items():

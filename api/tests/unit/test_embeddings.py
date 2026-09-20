@@ -23,14 +23,14 @@ def create_mock_service() -> EmbeddingsService:
 class TestContentHash:
     """Tests for content hash generation."""
 
-    def test_compute_content_hash_returns_md5(self) -> None:
-        """Test that content hash is a 32-character hex MD5."""
+    def test_compute_content_hash_returns_sha256(self) -> None:
+        """Test that content hash is a 64-character hex SHA-256."""
         service = create_mock_service()
         text = "Test content for hashing"
         result = service.compute_content_hash(text)
 
-        # MD5 produces 32-character hex string
-        assert len(result) == 32
+        # SHA-256 produces 64-character hex string
+        assert len(result) == 64
         assert all(c in "0123456789abcdef" for c in result)
 
     def test_compute_content_hash_deterministic(self) -> None:
@@ -53,12 +53,12 @@ class TestContentHash:
         assert hash1 != hash2
 
     def test_compute_content_hash_matches_hashlib(self) -> None:
-        """Test that hash matches Python's hashlib MD5."""
+        """Test that hash matches Python's hashlib SHA-256."""
         service = create_mock_service()
         text = "Verify against hashlib"
 
         result = service.compute_content_hash(text)
-        expected = hashlib.md5(text.encode("utf-8")).hexdigest()
+        expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
         assert result == expected
 
@@ -253,6 +253,38 @@ class TestExtractSearchableText:
         assert "encrypted_value_here" not in result
         # Password field values should not appear
         assert "secret_encrypted" not in result
+
+    def test_extract_custom_asset_password_display_field_excluded(self) -> None:
+        """Password-type display field must never enter searchable text (refs #134)."""
+        service = create_mock_service()
+
+        fields = [
+            FieldDefinition(key="api_secret", name="API Secret", type="password"),
+            FieldDefinition(key="hostname", name="Hostname", type="text"),
+        ]
+
+        asset = MagicMock()
+        asset.values = {
+            "api_secret": "super-secret-value",
+            "api_secret_encrypted": "ciphertext-blob",
+            "hostname": "server-01",
+        }
+
+        result = service.extract_searchable_text(
+            "custom_asset", asset, fields, display_field_key="api_secret"
+        )
+
+        assert "super-secret-value" not in result
+        assert "server-01" in result
+
+        encrypted_display = service.extract_searchable_text(
+            "custom_asset",
+            asset,
+            fields,
+            display_field_key="api_secret_encrypted",
+        )
+        assert "ciphertext-blob" not in encrypted_display
+        assert "server-01" in encrypted_display
 
     def test_extract_custom_asset_no_fields(self) -> None:
         """Test extracting text from custom asset with no field definitions."""
