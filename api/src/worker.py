@@ -441,6 +441,9 @@ async def check_expirations_task(
     failure in one org never rolls back another org's delivered alerts.
     """
     notifier = build_expiration_notifier()
+    if not notifier.enabled:
+        logger.info("Expiration notifier disabled; skipping daily check")
+        return
     notified = 0
 
     async with get_db_context() as db:

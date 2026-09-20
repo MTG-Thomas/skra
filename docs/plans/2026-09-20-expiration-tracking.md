@@ -33,7 +33,15 @@ equivalent.
 - **Email is opt-in and off by default.** No existing SMTP/notification
   plumbing was found in the API (only Redis pubsub for websockets), so per
   the acceptance criteria the notifier stays disabled unless `smtp_*`
-  settings are configured. No silent new dependency.
+  settings are configured. No silent new dependency. While disabled, the
+  daily job exits before scanning, so nothing is ever recorded that could
+  suppress alerts after later enablement.
+- **SMTP transport fails closed.** STARTTLS with certificate verification
+  is the default; `smtp_use_ssl` selects implicit TLS (port 465) and
+  `smtp_username`/`smtp_password` add optional auth. Remote hosts refuse
+  plaintext (only loopback may send without TLS, and only when STARTTLS
+  is explicitly unrequested); a failed handshake never falls back to
+  plaintext. `smtp_verify_certs` (default true) controls verification.
 - **Read-only surfacing, no view audit.** The upcoming endpoint logs no
   audit entries (dashboard polling would drown access history).
 - **Frontend follows existing patterns**: React Query hook, shadcn

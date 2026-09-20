@@ -104,6 +104,118 @@ def test_notifier_sends_email_when_configured():
     assert "Wildcard Cert" in message.get_content()
 
 
+def test_notifier_remote_refuses_plaintext():
+    """Remote SMTP without TLS stays silent instead of sending plaintext."""
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="mail.example.com",
+        smtp_port=587,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+        use_starttls=False,
+        use_ssl=False,
+    )
+    with (
+        patch("smtplib.SMTP") as smtp,
+        patch("smtplib.SMTP_SSL") as smtp_ssl,
+    ):
+        assert notifier.notify(_item(), org_name="Acme") is False
+
+    smtp.assert_not_called()
+    smtp_ssl.assert_not_called()
+
+
+def test_notifier_starttls_verifies_certificate_by_default():
+    """STARTTLS wraps the session in a verifying context before sending."""
+    import ssl
+
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="mail.example.com",
+        smtp_port=587,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+    )
+    with patch("smtplib.SMTP") as smtp:
+        assert notifier.notify(_item(), org_name="Acme") is True
+
+    instance = smtp.return_value.__enter__.return_value
+    assert instance.starttls.call_count == 1
+    context = instance.starttls.call_args.kwargs["context"]
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert instance.send_message.call_count == 1
+
+
+def test_notifier_ssl_and_auth():
+    """Implicit TLS plus credentials logs in before sending."""
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="mail.example.com",
+        smtp_port=465,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+        use_ssl=True,
+        username="alerts",
+        password="s3cret",
+    )
+    with (
+        patch("smtplib.SMTP") as smtp,
+        patch("smtplib.SMTP_SSL") as smtp_ssl,
+    ):
+        assert notifier.notify(_item(), org_name="Acme") is True
+
+    smtp.assert_not_called()
+    instance = smtp_ssl.return_value.__enter__.return_value
+    instance.login.assert_called_once_with("alerts", "s3cret")
+    assert instance.send_message.call_count == 1
+
+
+def test_notifier_starttls_failure_fails_closed():
+    """A failed STARTTLS handshake never falls back to plaintext."""
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="mail.example.com",
+        smtp_port=587,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+    )
+    with patch("smtplib.SMTP") as smtp:
+        instance = smtp.return_value.__enter__.return_value
+        instance.starttls.side_effect = RuntimeError("handshake failed")
+        assert notifier.notify(_item(), org_name="Acme") is False
+
+    assert instance.send_message.call_count == 0
+
+
+def test_notifier_localhost_plaintext_when_unrequested():
+    """Loopback delivery without TLS stays allowed for local relays."""
+    from src.services.expiration_alerts import ExpirationNotifier
+
+    notifier = ExpirationNotifier(
+        enabled=True,
+        smtp_host="localhost",
+        smtp_port=25,
+        sender="alerts@example.com",
+        recipients=["ops@example.com"],
+        use_starttls=False,
+    )
+    with patch("smtplib.SMTP") as smtp:
+        assert notifier.notify(_item(), org_name="Acme") is True
+
+    instance = smtp.return_value.__enter__.return_value
+    assert instance.starttls.call_count == 0
+    assert instance.send_message.call_count == 1
+
+
 def test_notifier_requires_recipients():
     """Enabled SMTP without recipients stays silent."""
     from src.services.expiration_alerts import ExpirationNotifier
@@ -135,41 +247,32 @@ async def test_service_release_deletes_claim():
 
 
 @pytest.mark.asyncio
-async def test_task_releases_claim_when_notifier_disabled():
-    """A disabled notifier records nothing permanent for future runs."""
+async def test_task_skips_scan_when_notifier_disabled():
+    """A disabled notifier records nothing, so later enablement still alerts."""
     from src.worker import check_expirations_task
 
-    org = MagicMock()
-    org.id = ORG_ID
-    org.name = "Acme"
     org_repo = AsyncMock()
-    org_repo.get_all = AsyncMock(side_effect=[[org], []])
-    items = [_item()]
+    org_repo.get_all = AsyncMock()
 
     with (
         patch("src.worker.OrganizationRepository", return_value=org_repo),
-        patch(
-            "src.worker.find_upcoming_expirations",
-            new=AsyncMock(return_value=items),
-        ),
         patch("src.worker.ExpirationAlertService") as alert_cls,
         patch("src.worker.build_expiration_notifier") as build_notifier,
         patch("src.worker.get_db_context") as db_context,
     ):
         alert_service = AsyncMock()
-        alert_service.maybe_record = AsyncMock(return_value=True)
-        alert_service.release = AsyncMock(return_value=True)
         alert_cls.return_value = alert_service
         notifier = build_notifier.return_value
-        notifier.notify = MagicMock(return_value=False)
+        notifier.enabled = False
         db_session = AsyncMock()
         db_context.return_value.__aenter__ = AsyncMock(return_value=db_session)
         db_context.return_value.__aexit__ = AsyncMock(return_value=False)
 
         await check_expirations_task({})
 
-    alert_service.release.assert_awaited_once()
-    assert db_session.commit.await_count >= 1
+    org_repo.get_all.assert_not_awaited()
+    alert_service.maybe_record.assert_not_awaited()
+    assert db_session.commit.await_count == 0
 
 
 @pytest.mark.asyncio
