@@ -10,7 +10,6 @@ This module provides:
 import os
 import sys
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -71,11 +70,6 @@ def setup_test_environment(tmp_path_factory):
     os.environ["SKRA_DATABASE_URL_SYNC"] = TEST_DATABASE_URL_SYNC
     os.environ["SKRA_REDIS_URL"] = TEST_REDIS_URL
     os.environ["SKRA_SECRET_KEY"] = "test-secret-key-for-testing-must-be-32-chars"
-
-    # Set up temp locations for tests
-    test_temp = Path("/tmp/skra/temp")
-    test_temp.mkdir(parents=True, exist_ok=True)
-    os.environ["SKRA_TEMP_LOCATION"] = str(test_temp)
 
     # Reset global database state to ensure it uses test settings
     from src.core.database import reset_db_state

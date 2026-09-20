@@ -8,8 +8,9 @@ All configuration is centralized here for easy management.
 import os
 import warnings
 from functools import lru_cache
-from pathlib import Path
+from hashlib import sha256
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, computed_field, model_validator
 from pydantic_settings import (
@@ -24,9 +25,15 @@ from pydantic_settings import (
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
 
-#: Password embedded in the published development database URL defaults.
-#: Production must never run with it (enforced by model validator below).
-_DEV_DATABASE_PASSWORD_MARKER = ":skradev@"
+#: SHA-256 digest of the retired development database password.
+#: Development database URLs used to ship as code defaults; every runtime
+#: (compose files, CI, test fixtures) now provides explicit URLs instead,
+#: so no credential literal remains in source. Production still refuses any
+#: configured URL whose password matches this digest (fail closed); the
+#: digest itself is not usable as a credential.
+_RETIRED_DEV_DB_DIGEST = (
+    "e87cbe88d74e239ab0e22b4bc34f434740fdee7f0b74f78869bccd3a79d2f7f3"
+)
 
 _warned_legacy_keys: set[str] = set()
 
@@ -132,13 +139,12 @@ class Settings(BaseSettings):
     # Database (PostgreSQL)
     # ==========================================================================
     database_url: str = Field(
-        default="postgresql+asyncpg://skra:skradev@localhost:5433/skra",
-        description="Async PostgreSQL connection URL",
+        description="Async PostgreSQL connection URL (SKRA_DATABASE_URL env var required)",
     )
 
     database_url_sync: str = Field(
-        default="postgresql://skra:skradev@localhost:5433/skra",
-        description="Sync PostgreSQL connection URL (for Alembic)",
+        description="Sync PostgreSQL connection URL for Alembic"
+        " (SKRA_DATABASE_URL_SYNC env var required)",
     )
 
     database_pool_size: int = Field(default=5, description="Database connection pool size")
@@ -258,12 +264,8 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.webauthn_origin.split(",") if o.strip()]
 
     # ==========================================================================
-    # File Storage (Local)
+    # File Storage
     # ==========================================================================
-    temp_location: str = Field(
-        default="/tmp/skra", description="Path to temporary storage directory"
-    )
-
     storage_backend: Literal["s3", "azure_blob"] = Field(
         default="s3",
         description="Attachment/export storage backend. Use 'azure_blob' for Azure Storage.",
@@ -436,31 +438,29 @@ class Settings(BaseSettings):
         """Check if running in production mode."""
         return self.environment == "production"
 
-    def validate_paths(self) -> None:
-        """
-        Validate that required filesystem paths exist.
-
-        Creates temp directory if it doesn't exist.
-        """
-        temp = Path(self.temp_location)
-        temp.mkdir(parents=True, exist_ok=True)
-
     @model_validator(mode="after")
     def _reject_dev_database_password_in_production(self) -> "Settings":
-        """Refuse to boot production on the published dev database password.
+        """Refuse to boot production on the retired development credential.
 
-        The database URL defaults exist for local development and testing.
-        A production process that inherits them would silently run against
-        the wrong database with a public credential, so fail fast instead.
-        The temp-dir default is intentionally unguarded: it is harmless and
-        standard across environments.
+        Database URLs have no code defaults: every runtime (compose files,
+        CI, test fixtures) provides explicit values, and a missing value
+        fails fast at startup instead of silently using the wrong database.
+        As a second layer, production refuses any configured URL whose
+        password matches the retired development credential. The password
+        itself never appears in source; only its SHA-256 digest is stored,
+        which names no usable credential. Unparseable URLs are left for the
+        database driver to reject loudly at connect time.
         """
         if self.environment == "production":
             for field_name in ("database_url", "database_url_sync"):
                 url = getattr(self, field_name, "") or ""
-                if _DEV_DATABASE_PASSWORD_MARKER in url:
+                try:
+                    password = urlsplit(url).password or ""
+                except ValueError:
+                    continue
+                if password and sha256(password.encode()).hexdigest() == _RETIRED_DEV_DB_DIGEST:
                     raise ValueError(
-                        f"{field_name} still uses the published development "
+                        f"{field_name} still uses the retired development "
                         f"password; set SKRA_{field_name.upper()} in production"
                     )
         return self
