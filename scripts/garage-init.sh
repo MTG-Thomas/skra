@@ -10,7 +10,7 @@
 #     * First run creates a key via POST /v1/key (AddKey); Garage mints the
 #       ID and secret. The secret is written once to GARAGE_CREDS_FILE
 #       (default /run/garage-creds/s3.env, mode 600) on a shared volume
-#       consumed by api/worker via BIFROST_DOCS_S3_CREDENTIALS_FILE.
+#       consumed by api/worker via SKRA_S3_CREDENTIALS_FILE.
 #     * Reruns look the key up by exact name (GET /v1/key?list) and refresh
 #       the credentials file from the stored secret (showSecretKey=true),
 #       so restarts never mint duplicate keys.
