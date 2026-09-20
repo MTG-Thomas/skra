@@ -13,9 +13,7 @@ uid 101, port 8080, and the probes must be preserved.
 
 from pathlib import Path
 
-DEPLOYMENT = (
-    Path(__file__).resolve().parents[3] / "kubernetes" / "client" / "deployment.yaml"
-)
+DEPLOYMENT = Path(__file__).resolve().parents[3] / "kubernetes" / "client" / "deployment.yaml"
 
 
 def _text() -> str:
