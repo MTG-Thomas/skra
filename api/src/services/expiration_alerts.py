@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 LOCAL_SMTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
+def _verified_context() -> ssl.SSLContext:
+    """
+    Build a TLS client context with explicit server verification.
+
+    Hostname checking and certificate validation are set explicitly (not
+    just inherited from the default context) so the guarantee is visible
+    to readers and static analysis: there is no path that negotiates TLS
+    without verifying the remote peer.
+    """
+    context = ssl.create_default_context()
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    return context
+
+
 class ExpirationAlertService:
     """Deduplicates expiration alerts against sent-alert sightings."""
 
@@ -125,14 +140,14 @@ class ExpirationNotifier:
                 server = smtplib.SMTP_SSL(
                     self.smtp_host,
                     self.smtp_port,
-                    context=ssl.create_default_context(),
+                    context=_verified_context(),
                     timeout=self.timeout,
                 )
             else:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=self.timeout)
             with server as smtp:
                 if not self.use_ssl and self.use_starttls:
-                    smtp.starttls(context=ssl.create_default_context())
+                    smtp.starttls(context=_verified_context())
                 if self.username:
                     smtp.login(self.username, self.password)
                 smtp.send_message(message)

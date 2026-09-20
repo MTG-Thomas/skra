@@ -148,6 +148,7 @@ def test_notifier_starttls_verifies_certificate_by_default():
     context = instance.starttls.call_args.kwargs["context"]
     assert isinstance(context, ssl.SSLContext)
     assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
     assert instance.send_message.call_count == 1
 
 
@@ -172,6 +173,12 @@ def test_notifier_ssl_and_auth():
         assert notifier.notify(_item(), org_name="Acme") is True
 
     smtp.assert_not_called()
+    import ssl as ssl_module
+
+    ssl_context = smtp_ssl.call_args.kwargs["context"]
+    assert isinstance(ssl_context, ssl_module.SSLContext)
+    assert ssl_context.verify_mode == ssl_module.CERT_REQUIRED
+    assert ssl_context.check_hostname is True
     instance = smtp_ssl.return_value.__enter__.return_value
     instance.login.assert_called_once_with("alerts", "s3cret")
     assert instance.send_message.call_count == 1
