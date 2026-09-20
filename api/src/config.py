@@ -8,9 +8,10 @@ All configuration is centralized here for easy management.
 import os
 import warnings
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
