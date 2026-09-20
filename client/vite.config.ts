@@ -15,7 +15,16 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5173,
     strictPort: true,
-    allowedHosts: ["dev.docs.midtowntg.com"],
+    // Extra dev-server hostnames from the environment (e.g. the Compose
+    // service name for in-network browser runs). The default stays locked
+    // to localhost + the production dev domain (DNS-rebinding protection).
+    allowedHosts: [
+      "dev.docs.midtowntg.com",
+      ...(process.env.VITE_DEV_ALLOWED_HOSTS ?? "")
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean),
+    ],
     proxy: {
       "/api": {
         target: process.env.API_URL || "http://localhost:8001",
