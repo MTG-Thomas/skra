@@ -105,6 +105,30 @@ class TestChecklistValueValidation:
                 partial=True,
             )
 
+    def test_rejects_non_list_items(self):
+        with pytest.raises(CustomAssetValidationError, match="must be a list"):
+            validate_values(
+                [_checklist_field()],
+                {"sop": {"items": "step-1"}},
+                partial=True,
+            )
+
+    def test_rejects_non_dict_entry(self):
+        with pytest.raises(CustomAssetValidationError, match="string id"):
+            validate_values(
+                [_checklist_field()],
+                {"sop": {"items": ["step-1"]}},
+                partial=True,
+            )
+
+    def test_rejects_non_string_entry_id(self):
+        with pytest.raises(CustomAssetValidationError, match="string id"):
+            validate_values(
+                [_checklist_field()],
+                {"sop": {"items": [{"id": 7, "completed": True}]}},
+                partial=True,
+            )
+
     def test_rejects_duplicate_item_ids(self):
         with pytest.raises(CustomAssetValidationError, match="duplicate"):
             validate_values(
@@ -138,6 +162,46 @@ class TestChecklistValueValidation:
             },
             partial=True,
         )
+
+
+class TestChecklistServiceDefinitionValidation:
+    """Service-level definition checks mirror the contract validators.
+
+    FieldDefinition normally rejects these at construction, so the tests
+    below bypass validation with model_construct to simulate service-layer
+    callers holding hand-built definitions.
+    """
+
+    def _unvalidated(self, items):
+        # ChecklistItemDefinition carries no validators itself, so invalid
+        # shapes can be built normally; only the FieldDefinition wrapper
+        # is constructed without validation.
+        return FieldDefinition.model_construct(
+            id="f1", key="sop", name="SOP", type="checklist", checklist_items=items
+        )
+
+    def test_service_rejects_empty_items(self):
+        with pytest.raises(CustomAssetValidationError, match="at least one item"):
+            validate_field_definitions([self._unvalidated([])])
+
+    def test_service_rejects_blank_labels(self):
+        with pytest.raises(CustomAssetValidationError, match="non-empty labels"):
+            validate_field_definitions(
+                [self._unvalidated([ChecklistItemDefinition(id="a", label="  ")])]
+            )
+
+    def test_service_rejects_duplicate_item_ids(self):
+        with pytest.raises(CustomAssetValidationError, match="unique"):
+            validate_field_definitions(
+                [
+                    self._unvalidated(
+                        [
+                            ChecklistItemDefinition(id="a", label="One"),
+                            ChecklistItemDefinition(id="a", label="Two"),
+                        ]
+                    )
+                ]
+            )
 
 
 class TestChecklistMerge:
@@ -396,6 +460,62 @@ class TestChecklistDisplayFallback:
         )
         assert _get_display_field_key(asset_type) == "title"
 
+    def test_scalar_non_text_field_used_as_display(self):
+        from src.routers.custom_assets import _get_display_field_key
+
+        asset_type = self._type(
+            [
+                {
+                    "id": "f1",
+                    "key": "steps",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "checklist_items": [{"id": "s1", "label": "One"}],
+                },
+                {"id": "f2", "key": "count", "name": "Count", "type": "number"},
+            ]
+        )
+        assert _get_display_field_key(asset_type) == "count"
+
+    def test_display_name_returns_plain_string_value(self):
+        from types import SimpleNamespace
+
+        from src.routers.custom_assets import _get_display_name
+
+        asset_id = uuid4()
+        asset = SimpleNamespace(id=asset_id, values={"fid1": "Server 01"})
+        asset_type = self._type([{"id": "fid1", "key": "title", "name": "Title", "type": "text"}])
+        fields = [FieldDefinition(id="fid1", key="title", name="Title", type="text")]
+        assert _get_display_name(asset, asset_type, fields) == "Server 01"
+
+    def test_display_name_falls_back_to_id_when_display_key_holds_checklist(self):
+        # Regression test for the list-view "[object Object]" bug: when the
+        # display field resolves to a structured checklist value (e.g. an
+        # explicit display key pointing at the checklist), the name must fall
+        # back to the asset id instead of rendering the raw object.
+        from types import SimpleNamespace
+
+        from src.routers.custom_assets import _get_display_name
+
+        asset_id = uuid4()
+        asset = SimpleNamespace(
+            id=asset_id, values={"fid1": {"items": [{"id": "s1", "completed": True}]}}
+        )
+        asset_type = SimpleNamespace(
+            display_field_key="steps",
+            fields=[
+                {
+                    "id": "fid1",
+                    "key": "steps",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "checklist_items": [{"id": "s1", "label": "One"}],
+                }
+            ],
+        )
+        fields = [_checklist_field(id="fid1")]
+        assert _get_display_name(asset, asset_type, fields) == str(asset_id)
+
     def test_display_name_falls_back_to_id_for_structured_value(self):
         from types import SimpleNamespace
         from uuid import uuid4
@@ -431,3 +551,247 @@ class TestChecklistInitialization:
         value = {"items": [{"id": "step-1", "completed": True}]}
         result = initialize_checklist_values([_checklist_field()], {"sop": value})
         assert result["sop"] == value
+
+
+class TestChecklistRowLock:
+    """The repository applies SELECT ... FOR UPDATE only on demand."""
+
+    def _repo(self):
+        from unittest.mock import AsyncMock, MagicMock
+
+        import src.models.orm.user_favorite  # noqa: F401 (registers mapper)
+        from src.repositories.custom_asset import CustomAssetRepository
+
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        session = AsyncMock()
+        session.execute.return_value = result
+        return CustomAssetRepository(session), session
+
+    async def test_for_update_locks_row(self):
+        repo, session = self._repo()
+        assert await repo.get_by_id_type_and_org(uuid4(), uuid4(), uuid4(), for_update=True) is None
+        (stmt,) = session.execute.call_args.args
+        assert "FOR UPDATE" in str(stmt)
+
+    async def test_without_lock_no_for_update(self):
+        repo, session = self._repo()
+        assert await repo.get_by_id_type_and_org(uuid4(), uuid4(), uuid4()) is None
+        (stmt,) = session.execute.call_args.args
+        assert "FOR UPDATE" not in str(stmt)
+
+
+class TestChecklistEndpointLogic:
+    """Checklist paths in the create/update endpoints, with mocked repos.
+
+    Sonar coverage runs unit tests only, so direct calls (not HTTP) carry
+    the endpoint new-code coverage; HTTP wiring for the same flows is
+    covered by the Playwright spec.
+    """
+
+    def _mocks(self, field_id="fld-steps"):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from src.models.orm.custom_asset_type import CustomAssetType
+
+        asset_type = CustomAssetType(
+            name="SOP Type",
+            fields=[
+                {
+                    "id": field_id,
+                    "key": "sop",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "show_in_list": True,
+                    "checklist_items": [
+                        {"id": "s1", "label": "First step"},
+                        {"id": "s2", "label": "Second step", "required": True},
+                    ],
+                }
+            ],
+        )
+        type_repo = AsyncMock()
+        type_repo.get_by_id.return_value = asset_type
+        asset_repo = AsyncMock()
+        audit = MagicMock()
+        audit.log = AsyncMock()
+        patches = [
+            patch("src.routers.custom_assets.CustomAssetTypeRepository", return_value=type_repo),
+            patch("src.routers.custom_assets.CustomAssetRepository", return_value=asset_repo),
+            patch("src.routers.custom_assets.get_audit_service", return_value=audit),
+            patch("src.routers.custom_assets.index_entity_for_search", new=AsyncMock()),
+        ]
+        for p in patches:
+            p.start()
+        user = SimpleNamespace(user_id=uuid4())
+        return asset_repo, user, patches
+
+    def _stop(self, patches):
+        for p in patches:
+            p.stop()
+
+    def _stored_asset(self, values, org_id=None, type_id=None):
+        from datetime import UTC, datetime
+
+        from src.models.orm.custom_asset import CustomAsset
+
+        return CustomAsset(
+            id=uuid4(),
+            organization_id=org_id or uuid4(),
+            custom_asset_type_id=type_id or uuid4(),
+            values=values,
+            metadata_={},
+            sync_metadata=None,
+            is_enabled=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+    async def test_create_stamps_completion(self):
+        from datetime import UTC, datetime
+        from unittest.mock import MagicMock
+
+        from src.models.contracts.custom_asset import CustomAssetCreate
+        from src.routers.custom_assets import create_custom_asset
+
+        asset_repo, user, patches = self._mocks()
+
+        async def _persist(asset):
+            asset.id = asset.id or uuid4()
+            now = datetime.now(UTC)
+            asset.created_at = now
+            asset.updated_at = now
+            return asset
+
+        try:
+            asset_repo.create.side_effect = _persist
+            org_id, type_id = uuid4(), uuid4()
+            created = await create_custom_asset(
+                org_id,
+                type_id,
+                CustomAssetCreate(
+                    values={"sop": {"items": [{"id": "s1", "completed": True}]}},
+                ),
+                user,
+                MagicMock(),
+            )
+            (entry,) = [e for e in created.values["sop"]["items"] if e["id"] == "s1"]
+            assert entry["completed"] is True
+            assert entry["completed_by"] == str(user.user_id)
+            assert "completed_at" in entry
+            assert asset_repo.create.call_args.args[0].organization_id == org_id
+        finally:
+            self._stop(patches)
+
+    async def test_create_initializes_missing_checklist(self):
+        from datetime import UTC, datetime
+        from unittest.mock import MagicMock
+
+        from src.models.contracts.custom_asset import CustomAssetCreate
+        from src.routers.custom_assets import create_custom_asset
+
+        asset_repo, user, patches = self._mocks()
+
+        async def _persist(asset):
+            asset.id = asset.id or uuid4()
+            now = datetime.now(UTC)
+            asset.created_at = now
+            asset.updated_at = now
+            return asset
+
+        try:
+            asset_repo.create.side_effect = _persist
+            created = await create_custom_asset(
+                uuid4(), uuid4(), CustomAssetCreate(values={}), user, MagicMock()
+            )
+            assert created.values["sop"] == {"items": []}
+        finally:
+            self._stop(patches)
+
+    async def test_create_rejects_unknown_item(self):
+        from unittest.mock import MagicMock
+
+        from fastapi import HTTPException
+
+        from src.models.contracts.custom_asset import CustomAssetCreate
+        from src.routers.custom_assets import create_custom_asset
+
+        _, user, patches = self._mocks()
+        try:
+            with pytest.raises(HTTPException) as exc_info:
+                await create_custom_asset(
+                    uuid4(),
+                    uuid4(),
+                    CustomAssetCreate(
+                        values={"sop": {"items": [{"id": "nope", "completed": True}]}}
+                    ),
+                    user,
+                    MagicMock(),
+                )
+            assert exc_info.value.status_code == 422
+        finally:
+            self._stop(patches)
+
+    async def test_update_toggle_locks_and_merges(self):
+        from unittest.mock import MagicMock
+
+        from src.models.contracts.custom_asset import CustomAssetUpdate
+        from src.routers.custom_assets import update_custom_asset
+
+        asset_repo, user, patches = self._mocks()
+        try:
+            stored = self._stored_asset(
+                {
+                    "fld-steps": {
+                        "items": [
+                            {
+                                "id": "s1",
+                                "completed": True,
+                                "completed_by": "prior-user",
+                                "completed_at": "2026-04-01T10:00:00+00:00",
+                            }
+                        ]
+                    }
+                }
+            )
+            asset_repo.get_by_id_type_and_org.return_value = stored
+            asset_repo.update.side_effect = lambda a: a
+            updated = await update_custom_asset(
+                stored.organization_id,
+                stored.custom_asset_type_id,
+                stored.id,
+                CustomAssetUpdate(values={"sop": {"items": [{"id": "s2", "completed": True}]}}),
+                user,
+                MagicMock(),
+            )
+            assert asset_repo.get_by_id_type_and_org.call_args.kwargs["for_update"] is True
+            by_id = {e["id"]: e for e in updated.values["sop"]["items"]}
+            assert by_id["s1"]["completed_by"] == "prior-user"
+            assert by_id["s2"]["completed_by"] == str(user.user_id)
+            assert "completed_at" in by_id["s2"]
+        finally:
+            self._stop(patches)
+
+    async def test_update_without_checklist_skips_lock(self):
+        from unittest.mock import MagicMock
+
+        from src.models.contracts.custom_asset import CustomAssetUpdate
+        from src.routers.custom_assets import update_custom_asset
+
+        asset_repo, user, patches = self._mocks()
+        try:
+            stored = self._stored_asset({"fld-steps": {"items": []}})
+            asset_repo.get_by_id_type_and_org.return_value = stored
+            asset_repo.update.side_effect = lambda a: a
+            await update_custom_asset(
+                stored.organization_id,
+                stored.custom_asset_type_id,
+                stored.id,
+                CustomAssetUpdate(metadata={"note": "x"}),
+                user,
+                MagicMock(),
+            )
+            assert asset_repo.get_by_id_type_and_org.call_args.kwargs["for_update"] is False
+        finally:
+            self._stop(patches)
