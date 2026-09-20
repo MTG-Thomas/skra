@@ -42,9 +42,7 @@ async def test_lifespan_starts_and_stops_dependencies(monkeypatch):
     manager.stop_pubsub = AsyncMock()
     monkeypatch.setattr(main, "init_db", init_db)
     monkeypatch.setattr(main, "close_db", close_db)
-    monkeypatch.setattr(
-        "src.core.pubsub.get_connection_manager", lambda: manager
-    )
+    monkeypatch.setattr("src.core.pubsub.get_connection_manager", lambda: manager)
 
     async with main.lifespan(main.app):
         init_db.assert_called_once()

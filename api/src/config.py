@@ -5,6 +5,7 @@ Uses pydantic-settings for environment variable loading with validation.
 All configuration is centralized here for easy management.
 """
 
+import hmac
 import os
 import warnings
 from functools import lru_cache
@@ -31,9 +32,7 @@ LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
 #: so no credential literal remains in source. Production still refuses any
 #: configured URL whose password matches this digest (fail closed); the
 #: digest itself is not usable as a credential.
-_RETIRED_DEV_DB_DIGEST = (
-    "e87cbe88d74e239ab0e22b4bc34f434740fdee7f0b74f78869bccd3a79d2f7f3"
-)
+_RETIRED_DEV_DB_DIGEST = "e87cbe88d74e239ab0e22b4bc34f434740fdee7f0b74f78869bccd3a79d2f7f3"
 
 _warned_legacy_keys: set[str] = set()
 
@@ -450,6 +449,15 @@ class Settings(BaseSettings):
         itself never appears in source; only its SHA-256 digest is stored,
         which names no usable credential. Unparseable URLs are left for the
         database driver to reject loudly at connect time.
+
+        NOTE (security review): the SHA-256 here is a blocklist-membership
+        check against one retired dev credential, not password storage —
+        no hash is persisted for later verification, so bcrypt-style key
+        stretching does not apply (same rationale as public compromised-
+        password lists, which use fast hashes for exactly this). The digest
+        comparison is timing-safe via hmac.compare_digest. CodeQL
+        py/insufficient-password-hash here is a false positive
+        (misclassified password hashing).
         """
         if self.environment == "production":
             for field_name in ("database_url", "database_url_sync"):
@@ -458,7 +466,9 @@ class Settings(BaseSettings):
                     password = urlsplit(url).password or ""
                 except ValueError:
                     continue
-                if password and sha256(password.encode()).hexdigest() == _RETIRED_DEV_DB_DIGEST:
+                if password and hmac.compare_digest(
+                    sha256(password.encode()).hexdigest(), _RETIRED_DEV_DB_DIGEST
+                ):
                     raise ValueError(
                         f"{field_name} still uses the retired development "
                         f"password; set SKRA_{field_name.upper()} in production"
