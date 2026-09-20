@@ -220,6 +220,8 @@ services:
         condition: service_completed_successfully
       valkey:
         condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
     command: arq src.worker.WorkerSettings
     # Custom healthcheck for ARQ worker - verifies process and Redis connectivity
     healthcheck:

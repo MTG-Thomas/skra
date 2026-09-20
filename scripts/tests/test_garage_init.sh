@@ -126,6 +126,55 @@ t_revoke_active_key_refused() {
   kill "$pid" 2>/dev/null; rm -rf "$wd"
 }
 
+t_import_writes_credentials_file() {
+  # Existing deployments start api/worker from s3.env (compose passes no
+  # legacy pair through): import must write the pair or services fail to
+  # start with the file absent.
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  local kid="GKabcdefabcdefabcdefabcdef"
+  local sec; sec=$(hex64)
+  if run_init "$wd" GARAGE_KEY_MODE=import GARAGE_ACCESS_KEY_ID="$kid" GARAGE_SECRET_ACCESS_KEY="$sec"; then
+    grep -q "^S3_ACCESS_KEY_ID=$kid$" "$wd/creds/s3.env" \
+      && grep -q "^S3_SECRET_ACCESS_KEY=$sec$" "$wd/creds/s3.env" \
+      && ok "import writes credentials file with pair" \
+      || bad "import did not write credentials file"
+  else
+    bad "import with pair exited nonzero"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
+t_state_loss_after_rotation_fails_closed() {
+  # Volume trouble after rotation: state file missing, empty, or naming the
+  # base key while rotated generations exist. Falling back to the base name
+  # could reuse a revoked key, so every variant must fail naming the
+  # detected generations without minting more.
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  run_init "$wd" >/dev/null 2>&1
+  run_init "$wd" GARAGE_ROTATE=1 >/dev/null 2>&1
+  local mints_before; mints_before=$(grep -c 'POST /v1/key$' "$wd/stub.log")
+  local variant
+  for variant in missing empty stale-base; do
+    case "$variant" in
+      missing) rm -f "$wd/creds/s3.keyname" ;;
+      empty) : > "$wd/creds/s3.keyname" ;;
+      stale-base) printf 'bifrost-docs-key\n' > "$wd/creds/s3.keyname" ;;
+    esac
+    if run_init "$wd"; then
+      bad "state loss ($variant) after rotation should fail"
+    else
+      local mints_after; mints_after=$(grep -c 'POST /v1/key$' "$wd/stub.log" || true)
+      grep -q 'credentials state lost after rotation' "$wd/out.log" \
+        && grep -q 'bifrost-docs-key-' "$wd/out.log" \
+        && [ "$mints_after" = "$mints_before" ] \
+        && ok "state loss ($variant) fails closed naming rotated generations" \
+        || bad "state-loss ($variant) failure wrong or mint issued"
+    fi
+  done
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
 t_rotate_and_revoke_same_run_fails() {
   local wd; wd=$(mktemp -d)
   local pid; pid=$(start_stub "$wd"); sleep 1
@@ -263,6 +312,8 @@ t_managed_clean_install
 t_managed_rerun_reuses
 t_managed_rotation_and_revoke
 t_revoke_active_key_refused
+t_import_writes_credentials_file
+t_state_loss_after_rotation_fails_closed
 t_rotate_and_revoke_same_run_fails
 t_revoke_id_shape_validated
 t_import_mode_needs_pair

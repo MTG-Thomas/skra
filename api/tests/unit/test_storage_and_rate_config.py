@@ -90,6 +90,49 @@ def test_missing_s3_credentials_file_fails_closed(tmp_path):
         )
 
 
+def test_partial_explicit_s3_pair_fails_closed(tmp_path):
+    """Half an explicit pair never mixes with the other half from the file."""
+    creds = tmp_path / "s3.env"
+    creds.write_text("S3_ACCESS_KEY_ID=GKfilekey\nS3_SECRET_ACCESS_KEY=filesecret\n")
+    with pytest.raises(ValidationError, match="both be set and non-empty"):
+        Settings(
+            secret_key="x" * 32,
+            s3_access_key="explicit-only",
+            s3_credentials_file=str(creds),
+        )
+    with pytest.raises(ValidationError, match="both be set and non-empty"):
+        Settings(
+            secret_key="x" * 32,
+            s3_secret_key="explicit-only",
+            s3_credentials_file=str(creds),
+        )
+
+
+def test_empty_explicit_s3_pair_fails_closed(tmp_path):
+    """Empty-string halves (e.g. unset env interpolation) fail, not fallback."""
+    creds = tmp_path / "s3.env"
+    creds.write_text("S3_ACCESS_KEY_ID=GKfilekey\nS3_SECRET_ACCESS_KEY=filesecret\n")
+    with pytest.raises(ValidationError, match="both be set and non-empty"):
+        Settings(secret_key="x" * 32, s3_access_key="", s3_secret_key="set")
+    with pytest.raises(ValidationError, match="both be set and non-empty"):
+        Settings(secret_key="x" * 32, s3_access_key="set", s3_secret_key="   ")
+    with pytest.raises(ValidationError, match="both be set and non-empty"):
+        Settings(
+            secret_key="x" * 32,
+            s3_access_key="",
+            s3_secret_key="",
+            s3_credentials_file=str(creds),
+        )
+
+
+def test_incomplete_s3_credentials_file_fails_closed(tmp_path):
+    """A file naming only one credential is a startup error, not S3-off."""
+    creds = tmp_path / "s3.env"
+    creds.write_text("S3_ACCESS_KEY_ID=GKfilekey\n")
+    with pytest.raises(ValidationError, match="must contain both"):
+        Settings(secret_key="x" * 32, s3_credentials_file=str(creds))
+
+
 def test_read_env_file_ignores_comments_and_blank_lines(tmp_path):
     """Parser tolerates comments, blanks, and quoted values."""
     creds = tmp_path / "s3.env"

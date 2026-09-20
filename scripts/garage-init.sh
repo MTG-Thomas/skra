@@ -266,6 +266,13 @@ if [ "${MODE}" = "import" ]; then
         fi
     fi
     RESOLVED_KEY_ID="${GARAGE_ACCESS_KEY_ID}"
+    # Existing deployments start api/worker from this file (compose no
+    # longer passes the legacy pair through): without this write the
+    # services fail to start with s3.env absent. Rewritten on every run,
+    # so restart healing and rotation repointing work as in managed mode.
+    ACTIVE_NAME="${KEY_NAME}"
+    write_creds_file "${RESOLVED_KEY_ID}" "${GARAGE_SECRET_ACCESS_KEY}"
+    echo "[garage-init] Credentials file written for imported key ${RESOLVED_KEY_ID}."
 else
     [ "${MODE}" = "managed" ] \
         || fail "unknown GARAGE_KEY_MODE '${MODE}' (want managed or import)"
@@ -286,10 +293,28 @@ else
     MATCHES=$(key_id_for_name "${ACTIVE_NAME}" "${KEY_LIST}")
     N_MATCHES=$(printf '%s' "${MATCHES}" | grep -c . || true)
 
+    # The state file and the credentials file share one disposable volume.
+    # Whenever the run falls back to the base name (state file missing,
+    # empty, or naming the base key) while rotated generations still exist,
+    # reusing or re-granting the base key could reactivate a revoked key
+    # (rotation mints first and revokes later, so rotated names outlive
+    # revocation). Fail closed naming the detected generations so the
+    # operator restores s3.keyname from backup — or points GARAGE_KEY_NAME
+    # at the known generation — instead. A clean install (no keys at all)
+    # and a never-rotated single base key are unaffected. Explicit rotation
+    # is exempt: it mints a fresh generation (never reusing the base key)
+    # and rewrites state, so it heals this condition instead of risking it.
+    if [ "${ACTIVE_NAME}" = "${KEY_NAME}" ] && [ -z "${GARAGE_ROTATE:-}" ]; then
+        ROTATED_NAMES=$(printf '%s' "${KEY_LIST}" | tr '\n' ' ' | tr '{}' '\n\n' \
+            | grep -o "\"name\" *: *\"${KEY_NAME}-[^\"]*\"" | sort -u || true)
+        [ -z "${ROTATED_NAMES}" ] || fail "credentials state lost after rotation: rotated key(s) $(printf '%s' "${ROTATED_NAMES}" | tr '\n' ' ') exist but the active generation is the base name '${KEY_NAME}'; refusing to fall back to it. Restore s3.keyname from backup, then re-run"
+    fi
+
     if [ -n "${GARAGE_ROTATE:-}" ]; then
         # Explicit rotation: mint a new timestamped key, repoint the
         # credentials file, keep the old key until the operator restarts
-        # dependents and prunes it (see GARAGE_PRUNE_KEY_ID above).
+        # dependents and revokes it with GARAGE_REVOKE_KEY_ID in a
+        # follow-up run (combined rotate+revoke in one run fails closed).
         STAMP=$(date -u +%Y%m%d-%H%M%S)
         NEW_NAME="${KEY_NAME}-${STAMP}"
         CREATED=$(api_post "/v1/key" "{\"name\":\"${NEW_NAME}\"}")
@@ -386,6 +411,9 @@ fi
 # deletion (DELETE /v1/key, unsupported by wget) stays a documented
 # manual admin step.
 if [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
+    # Every mode above rewrote the credentials file with RESOLVED_KEY_ID
+    # (import included), so the resolved ID and the file agree here: either
+    # comparison rejects the live key.
     [ "${GARAGE_REVOKE_KEY_ID}" != "${RESOLVED_KEY_ID}" ] \
         || fail "GARAGE_REVOKE_KEY_ID ${GARAGE_REVOKE_KEY_ID} is the active key for this run; refusing to deny it (revoke a superseded key only)"
     if api_post "/v1/bucket/deny" "{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_REVOKE_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null; then

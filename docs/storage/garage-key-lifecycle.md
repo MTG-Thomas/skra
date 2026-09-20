@@ -48,11 +48,13 @@ Garage-native lifecycle with one file-based secret handoff:
 - Move an existing install to managed only via an explicit rotation
   window, never implicitly: adopt the minted key, restart api+worker, then
   revoke the legacy grant.
-- API precedence (unchanged behavior when file absent): explicit env >
-  credentials file > unconfigured (S3 off). `dev.yml` fixture overrides
-  are untouched.
-- Worker mounts nothing new (it sets no S3 env today); if a worker S3 path
-  appears later, mount the same volume read-only.
+- API precedence (atomic pair): both explicit keys or neither (a partial
+  explicit pair fails startup); otherwise the credentials file, which must
+  contain both values; otherwise unconfigured (S3 off). `dev.yml` fixture
+  overrides are untouched.
+- Worker mounts the same credentials volume read-only and loads the file
+  at startup: include `worker` in every restart check and in rotation
+  (restart both `api` and `worker` before revoking).
 
 ## Runbook
 
@@ -66,10 +68,18 @@ Garage-native lifecycle with one file-based secret handoff:
 - Recover lost volume: restart `garage-init`; the file is rebuilt from the
   stored secret. If the key itself was deleted cluster-side, init mints a
   fresh one (data remains; bucket alias is stable).
+- Recover lost volume after rotation: the re-run fails closed naming the
+  detected rotated generations (it will not fall back to the possibly
+  revoked base key). Restore `s3.keyname` from backup — or from the
+  `Rotated: new key <id> (<name>)` log line — then re-run. Never delete
+  rotated keys to clear this error; that destroys the only record of the
+  active generation.
 - Restore from backup: `GARAGE_KEY_MODE=import` with the legacy pair.
 
-## Live proof (pending VM handoff)
+## Live proof (VM101, isolated project, torn down after)
 
-Clean install + restart + rotation against real Garage v1.3.1 on VM101
-after lane #111 tears down: isolated project, stub-free, verifying
-`showSecretKey` round-trip, file perms, and post-revoke inaccessibility.
+Clean install mints one key; restart reuses (inventory stays 1);
+`api`+`worker` read the 0600 file as uid 15000; sha-verified S3 PUT/GET
+as the app user before and after rotation; rotation mints + repoints;
+revoked key denied (`http=403 code=AccessDenied` on PUT and GET from a
+root-context probe) with the active key round-tripping in the same pass.
