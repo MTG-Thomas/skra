@@ -110,6 +110,22 @@ t_managed_rotation_and_revoke() {
   kill "$pid" 2>/dev/null; rm -rf "$wd"
 }
 
+t_revoke_active_key_refused() {
+  local wd; wd=$(mktemp -d)
+  local pid; pid=$(start_stub "$wd"); sleep 1
+  run_init "$wd" >/dev/null 2>&1
+  local kid; kid=$(grep -o '^S3_ACCESS_KEY_ID=.*' "$wd/creds/s3.env" | cut -d= -f2)
+  if run_init "$wd" GARAGE_REVOKE_KEY_ID="$kid"; then
+    bad "revoking the active key should fail"
+  else
+    grep -q 'refusing to deny it' "$wd/out.log" \
+      && ! grep -q 'POST /v1/bucket/deny' "$wd/stub.log" \
+      && ok "revoke of active key fails closed without deny call" \
+      || bad "active-key revoke failure message wrong or deny issued"
+  fi
+  kill "$pid" 2>/dev/null; rm -rf "$wd"
+}
+
 t_import_mode_needs_pair() {
   local wd; wd=$(mktemp -d)
   local pid; pid=$(start_stub "$wd"); sleep 1
@@ -210,6 +226,7 @@ t_explicit_managed_wins_over_pair() {
 t_managed_clean_install
 t_managed_rerun_reuses
 t_managed_rotation_and_revoke
+t_revoke_active_key_refused
 t_import_mode_needs_pair
 t_import_mode_restores
 t_unknown_mode_fails

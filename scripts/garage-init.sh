@@ -159,20 +159,6 @@ if [ -z "${BUCKET_ID}" ]; then
   exit 1
 fi
 
-# Optional revocation of a superseded key from a previous rotation, run
-# AFTER the operator restarts dependents on the new credentials: deactivates
-# its read/write/owner flags on this bucket (POST /v1/bucket/deny — note the
-# inverted semantics: true deactivates). Revokes only the exact ID given,
-# never by name matching. Full key deletion (DELETE /v1/key, unsupported by
-# wget) stays a documented manual admin step.
-if [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
-    if api_post "/v1/bucket/deny" "{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_REVOKE_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null; then
-        echo "[garage-init] Revoked bucket access for superseded key ${GARAGE_REVOKE_KEY_ID}."
-    else
-        fail "could not revoke key ${GARAGE_REVOKE_KEY_ID}"
-    fi
-fi
-
 # Backward-compatible mode selection (issue #107): an explicit
 # GARAGE_KEY_MODE always wins. Otherwise the legacy pair selects import
 # mode (existing deployments keep working with zero changes), its absence
@@ -365,5 +351,25 @@ if key_has_full_access; then
     echo "[garage-init] Key verified with read/write/owner on bucket (key: ${RESOLVED_KEY_ID})."
 else
     fail "key ${RESOLVED_KEY_ID} lacks read/write/owner on bucket after grant"
+fi
+
+# Optional revocation of a superseded key from a previous rotation, run
+# AFTER the operator restarts dependents on the new credentials — and only
+# after the resolved key verified above, so a failed run can never leave
+# the bucket without a working key. Deactivates the given ID's
+# read/write/owner flags on this bucket (POST /v1/bucket/deny — note the
+# inverted semantics: true deactivates). Revokes only the exact ID given,
+# never by name matching, and never the active key itself: denying
+# RESOLVED_KEY_ID would brick dependents on their next restart. Full key
+# deletion (DELETE /v1/key, unsupported by wget) stays a documented
+# manual admin step.
+if [ -n "${GARAGE_REVOKE_KEY_ID:-}" ]; then
+    [ "${GARAGE_REVOKE_KEY_ID}" != "${RESOLVED_KEY_ID}" ] \
+        || fail "GARAGE_REVOKE_KEY_ID ${GARAGE_REVOKE_KEY_ID} is the active key for this run; refusing to deny it (revoke a superseded key only)"
+    if api_post "/v1/bucket/deny" "{\"bucketId\":\"${BUCKET_ID}\",\"accessKeyId\":\"${GARAGE_REVOKE_KEY_ID}\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null; then
+        echo "[garage-init] Revoked bucket access for superseded key ${GARAGE_REVOKE_KEY_ID}."
+    else
+        fail "could not revoke key ${GARAGE_REVOKE_KEY_ID}"
+    fi
 fi
 echo "[garage-init] Initialization complete."
