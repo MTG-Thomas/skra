@@ -9,8 +9,28 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_env_file(path: str) -> dict[str, str]:
+    """Read a KEY=VALUE credentials file (blank lines and # comments ignored).
+
+    Raises:
+        ValueError: If the file cannot be read.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"S3 credentials file unreadable: {path}: {e}") from e
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
 
 
 class Settings(BaseSettings):
@@ -201,6 +221,43 @@ class Settings(BaseSettings):
     s3_secret_key: str | None = Field(
         default=None, description="S3 secret key (required for S3 operations)"
     )
+
+    s3_credentials_file: str | None = Field(
+        default=None,
+        description="Path to a KEY=VALUE file (S3_ACCESS_KEY_ID, "
+        "S3_SECRET_ACCESS_KEY) written by garage-init in managed mode. "
+        "Explicit s3_access_key/s3_secret_key always win.",
+    )
+
+    @model_validator(mode="after")
+    def _load_s3_credentials_file(self) -> "Settings":
+        """Resolve S3 credentials as one atomic pair.
+
+        Explicit credentials must both be set and non-empty, or both be
+        absent: half a pair (or an empty half, e.g. from an unset env
+        interpolation) mixed with file values yields mismatched credentials
+        while s3_configured reports true. The file is only consulted when
+        neither explicit value is set, and must then contain both non-empty
+        values — otherwise startup fails closed instead of running with S3
+        silently disabled.
+        """
+        explicit = (self.s3_access_key, self.s3_secret_key)
+        if any(v is not None for v in explicit):
+            if not all(v and v.strip() for v in explicit):
+                raise ValueError("s3_access_key and s3_secret_key must both be set and non-empty")
+            return self
+        if self.s3_credentials_file:
+            creds = _read_env_file(self.s3_credentials_file)
+            access_key = creds.get("S3_ACCESS_KEY_ID")
+            secret_key = creds.get("S3_SECRET_ACCESS_KEY")
+            if not access_key or not secret_key:
+                raise ValueError(
+                    f"S3 credentials file must contain both S3_ACCESS_KEY_ID and "
+                    f"S3_SECRET_ACCESS_KEY: {self.s3_credentials_file}"
+                )
+            self.s3_access_key = access_key
+            self.s3_secret_key = secret_key
+        return self
 
     s3_bucket: str = Field(default="bifrost-docs", description="S3 bucket name for file storage")
 

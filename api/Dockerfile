@@ -47,8 +47,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install -y --only-upgrade perl-base \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash app
+# Create non-root user with a FIXED uid/gid (15000). garage-init (which runs
+# as root in its own container) chowns the shared credentials file to this
+# identity; a dynamic UID would leave the 0600 file unreadable by the app
+# (issues #107, #109). Keep GARAGE_CREDS_UID/GID in docker-compose.yml in sync.
+RUN groupadd -r -g 15000 app && \
+    useradd -r -u 15000 -g app --create-home --shell /bin/bash app
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv

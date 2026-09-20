@@ -76,7 +76,7 @@ jobs:
         if: env.SONAR_TOKEN != ''
         working-directory: ./api
         env:
-          BIFROST_DOCS_SECRET_KEY: test-secret-key-must-be-at-least-32-characters-long
+          BIFROST_DOCS_SECRET_KEY: test-secret-key-000000000000000000000000
           BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
           BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
           BIFROST_DOCS_REDIS_URL: redis://localhost:6379/0

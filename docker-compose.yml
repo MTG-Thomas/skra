@@ -65,10 +65,23 @@ services:
         condition: service_healthy
     volumes:
       - ./scripts/garage-init.sh:/garage-init.sh:ro
+      - bifrost_docsgarage_creds:/run/garage-creds
     environment:
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required}
-      GARAGE_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY_ID:?GARAGE_ACCESS_KEY_ID is required}
-      GARAGE_SECRET_ACCESS_KEY: ${GARAGE_SECRET_ACCESS_KEY:?GARAGE_SECRET_ACCESS_KEY is required}
+      # Key lifecycle (issues #107, #109). Mode auto-selects: legacy pair
+      # present => import (existing installs); absent => managed, minting via
+      # POST /v1/key into /run/garage-creds/s3.env. Explicit GARAGE_KEY_MODE
+      # always wins; partial pair fails closed.
+      GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-}
+      GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-bifrost-docs-key}
+      GARAGE_CREDS_FILE: /run/garage-creds/s3.env
+      # Must match the pinned app uid/gid in api/Dockerfile (15000).
+      GARAGE_CREDS_UID: ${GARAGE_CREDS_UID:-15000}
+      GARAGE_CREDS_GID: ${GARAGE_CREDS_GID:-15000}
+      GARAGE_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY_ID:-}
+      GARAGE_SECRET_ACCESS_KEY: ${GARAGE_SECRET_ACCESS_KEY:-}
+      GARAGE_ROTATE: ${GARAGE_ROTATE:-}
+      GARAGE_REVOKE_KEY_ID: ${GARAGE_REVOKE_KEY_ID:-}
     entrypoint: ["sh", "/garage-init.sh"]
 
   # Valkey (Redis-compatible cache and pub/sub — BSD-3-Clause, replaces SSPL Redis)
@@ -139,6 +152,8 @@ services:
   api:
     image: jackmusick/bifrost-docs-api:latest
     container_name: bifrost-docs-api
+    volumes:
+      - bifrost_docsgarage_creds:/run/garage-creds:ro
     environment:
       # Core
       BIFROST_DOCS_ENVIRONMENT: ${BIFROST_DOCS_ENVIRONMENT:-production}
@@ -161,10 +176,11 @@ services:
       BIFROST_DOCS_WEBAUTHN_RP_ID: ${BIFROST_DOCS_WEBAUTHN_RP_ID:-localhost}
       BIFROST_DOCS_WEBAUTHN_RP_NAME: ${BIFROST_DOCS_WEBAUTHN_RP_NAME:-Bifrost Docs}
       BIFROST_DOCS_WEBAUTHN_ORIGIN: ${BIFROST_DOCS_WEBAUTHN_ORIGIN:-http://localhost:3000}
-      # S3/Garage Storage
+      # S3/Garage Storage (credentials come from the garage-creds volume
+      # written by garage-init in managed mode; explicit BIFROST_DOCS_S3_*
+      # env below still wins when set)
       BIFROST_DOCS_S3_ENDPOINT: http://garage:3900
-      BIFROST_DOCS_S3_ACCESS_KEY: ${GARAGE_ACCESS_KEY_ID:?GARAGE_ACCESS_KEY_ID is required}
-      BIFROST_DOCS_S3_SECRET_KEY: ${GARAGE_SECRET_ACCESS_KEY:?GARAGE_SECRET_ACCESS_KEY is required}
+      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
       BIFROST_DOCS_S3_BUCKET: ${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}
       BIFROST_DOCS_S3_REGION: us-east-1
       # OpenAI (for vector search)
@@ -190,15 +206,22 @@ services:
   worker:
     image: jackmusick/bifrost-docs-api:latest
     container_name: bifrost-docs-worker
+    volumes:
+      - bifrost_docsgarage_creds:/run/garage-creds:ro
     environment:
       BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:?BIFROST_DOCS_SECRET_KEY is required (32+ chars)}
       BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD}@pgbouncer:5432/bifrost_docs
       BIFROST_DOCS_REDIS_URL: redis://valkey:6379/0
+      # Same managed S3 credentials as api (issue #107); the worker image is
+      # the api image, so the same uid-pinned app identity applies.
+      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
     depends_on:
       init:
         condition: service_completed_successfully
       valkey:
         condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
     command: arq src.worker.WorkerSettings
     # Custom healthcheck for ARQ worker - verifies process and Redis connectivity
     healthcheck:
@@ -230,3 +253,4 @@ volumes:
   bifrost_docsvalkey_data:
   bifrost_docsgarage_meta:
   bifrost_docsgarage_data:
+  bifrost_docsgarage_creds:
