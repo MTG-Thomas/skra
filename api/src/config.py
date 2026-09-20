@@ -10,6 +10,7 @@ import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import parse_qs, urlparse
 
 from pydantic import Field, computed_field, model_validator
 from pydantic_settings import (
@@ -23,6 +24,32 @@ from pydantic_settings import (
 #: Previous env prefix, honored as a one-release fallback (see _LegacyEnvSource).
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
+
+#: The only sslmode accepted in production (issue #131): it is the sole
+#: mode that authenticates the managed database host. Absent sslmode
+#: (internal compose network) is also allowed; everything else negotiates
+#: unverified or plaintext traffic and is rejected.
+_PROD_SSLMODE_ALLOWLIST = "verify-full"
+
+
+def _db_tls_params_of_url(url: str) -> tuple[str | None, str | None]:
+    """Return the (sslmode, legacy ssl) query parameters of a DB URL.
+
+    Values are lowercased; each is None when the parameter is absent.
+    The legacy ``ssl`` parameter (e.g. the former documented
+    ``?ssl=require`` typo) bypasses sslmode handling downstream, so the
+    production guard must see it explicitly.
+    """
+    try:
+        query = parse_qs(urlparse(url).query)
+    except ValueError:
+        return None, None
+    sslmode = query.get("sslmode")
+    legacy_ssl = query.get("ssl")
+    return (
+        sslmode[0].lower() if sslmode else None,
+        legacy_ssl[0].lower() if legacy_ssl else None,
+    )
 
 _warned_legacy_keys: set[str] = set()
 
@@ -141,6 +168,37 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(
         default=10, description="Max overflow connections beyond pool size"
     )
+
+    @model_validator(mode="after")
+    def _require_verified_db_tls_in_production(self) -> "Settings":
+        """Fail fast when production traffic to Postgres is unverified.
+
+        Only sslmode=verify-full authenticates the server; every other
+        explicit sslmode (require, verify-ca, prefer, allow, disable)
+        negotiates unverified or plaintext traffic for secrets-bearing
+        data, and the legacy ``ssl`` parameter bypasses sslmode handling
+        entirely. Managed databases support verify-full with the system
+        CA bundle, so production accepts only verify-full or an absent
+        sslmode (absent covers the internal compose network).
+        Non-production keeps permissive behavior for local dev and tests.
+        """
+        if self.environment != "production":
+            return self
+        for field in ("database_url", "database_url_sync"):
+            sslmode, legacy_ssl = _db_tls_params_of_url(getattr(self, field))
+            if legacy_ssl is not None:
+                raise ValueError(
+                    f"{field} must not use the legacy ssl query parameter "
+                    f"in production (got ssl={legacy_ssl}); use "
+                    "sslmode=verify-full (issue #131)"
+                )
+            if sslmode is not None and sslmode != _PROD_SSLMODE_ALLOWLIST:
+                raise ValueError(
+                    f"{field} must use sslmode=verify-full in production "
+                    f"(got sslmode={sslmode}); unverified or plaintext "
+                    "TLS modes are rejected (issue #131)"
+                )
+        return self
 
     # ==========================================================================
     # Redis

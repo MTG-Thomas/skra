@@ -51,7 +51,7 @@ The current dev VM DB was measured at about 15 MB, so it fits comfortably in Neo
 ```powershell
 .\scripts\restore-neon-db.ps1 `
   -DumpPath ".migration-runs\azure-neon-proof\<timestamp>\skra-dev.dump" `
-  -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+  -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=verify-full"
 ```
 
 After restore, run the same smoke SQL against Neon:
@@ -76,8 +76,8 @@ ORDER BY table_name;
   -Location "eastus" `
   -EnvironmentName "neon-dev" `
   -ApiImage "ghcr.io/mtg-thomas/skra-api:<short-sha>" `
-  -DatabaseUrl "postgresql+asyncpg://USER:PASSWORD@HOST/DB?ssl=require" `
-  -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+  -DatabaseUrl "postgresql+asyncpg://USER:PASSWORD@HOST/DB?sslmode=verify-full" `
+  -DatabaseUrlSync "postgresql://USER:PASSWORD@HOST/DB?sslmode=verify-full"
 ```
 
 The script:
