@@ -90,6 +90,7 @@ services:
     environment:
       SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:-dev-secret-key-change-in-production-must-be-32-chars}
       SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD:-skradev}@pgbouncer:5432/skra
       SKRA_REDIS_URL: redis://valkey:6379/0
     volumes:
       - ./api/src:/app/src:ro
@@ -103,6 +104,14 @@ services:
       target: "" # Clear the production target from base compose file
     environment:
       API_URL: http://api:8000
+    # node:20-slim has no wget (base file probes nginx): probe the Vite
+    # /health proxy via node itself. Port 80 matches Dockerfile.dev.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - ./client/src:/app/src
       - ./client/public:/app/public
