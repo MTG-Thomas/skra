@@ -1,5 +1,5 @@
 """
-Enums for Bifrost Docs models.
+Enums for Skra models.
 """
 
 from enum import StrEnum

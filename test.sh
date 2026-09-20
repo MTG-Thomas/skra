@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bifrost Docs API - Test Runner
+# Skra API - Test Runner
 #
 # This script runs tests in an isolated Docker environment using docker-compose.test.yml.
 # All dependencies (PostgreSQL, Redis) are ephemeral and cleaned up after tests.
@@ -48,7 +48,7 @@ done
 # =============================================================================
 # Docker log export directory
 # =============================================================================
-LOG_DIR="/tmp/bifrost-docs"
+LOG_DIR="/tmp/skra"
 mkdir -p "$LOG_DIR"
 
 # =============================================================================
@@ -136,7 +136,7 @@ trap cleanup EXIT
 # Start services
 # =============================================================================
 echo "============================================================"
-echo "Bifrost Docs API - Test Runner (Containerized)"
+echo "Skra API - Test Runner (Containerized)"
 echo "============================================================"
 echo ""
 
@@ -155,7 +155,7 @@ docker compose -f "$COMPOSE_FILE" up -d postgres redis
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
 for i in {1..30}; do
-    if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U bifrost_docs -d bifrost_docs_test > /dev/null 2>&1; then
+    if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U skra -d skra_test > /dev/null 2>&1; then
         echo "PostgreSQL is ready!"
         break
     fi
@@ -189,7 +189,7 @@ docker compose -f "$COMPOSE_FILE" up -d pgbouncer
 # Wait for PgBouncer to be ready
 echo "Waiting for PgBouncer to be ready..."
 for i in {1..15}; do
-    if docker compose -f "$COMPOSE_FILE" exec -T pgbouncer pg_isready -h localhost -p 5432 -U bifrost_docs > /dev/null 2>&1; then
+    if docker compose -f "$COMPOSE_FILE" exec -T pgbouncer pg_isready -h localhost -p 5432 -U skra > /dev/null 2>&1; then
         echo "PgBouncer is ready!"
         break
     fi
@@ -205,7 +205,7 @@ done
 echo ""
 echo "Running database migrations..."
 docker compose -f "$COMPOSE_FILE" up init
-INIT_EXIT_CODE=$(docker inspect bifrost-docs-test-init --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
+INIT_EXIT_CODE=$(docker inspect skra-test-init --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
 if [ "$INIT_EXIT_CODE" != "0" ]; then
     echo "ERROR: Init container failed (migrations)"
     exit 1

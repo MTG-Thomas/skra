@@ -1,17 +1,17 @@
 # Staging environment overlay
 # Mirrors production but with smaller scale
 
-namespace: bifrost-docs
+namespace: skra
 
 resources:
-  - ../bifrost-docs/
+  - ../skra/
   - ../platform/network-policies/
 
 patches:
   # Two replicas for HA testing
   - target:
       kind: Deployment
-      name: bifrost-docs-api
+      name: skra-api
     patch: |
       - op: replace
         path: /spec/replicas
@@ -19,7 +19,7 @@ patches:
   # Update hostnames
   - target:
       kind: Ingress
-      name: bifrost-docs
+      name: skra
     patch: |
       - op: replace
         path: /spec/rules/0/host
@@ -29,12 +29,12 @@ patches:
         value: docs-staging.example.com
       - op: replace
         path: /spec/tls/0/secretName
-        value: bifrost-docs-staging-tls
+        value: skra-staging-tls
 
 configMapGenerator:
-  - name: bifrost-docs-config
+  - name: skra-config
     behavior: merge
     literals:
-      - BIFROST_DOCS_ENVIRONMENT=staging
-      - BIFROST_DOCS_DEBUG=false
-      - BIFROST_API_URL=http://external-bifrost-api.bifrost-docs.svc.cluster.local:8000
+      - SKRA_ENVIRONMENT=staging
+      - SKRA_DEBUG=false
+      - BIFROST_API_URL=http://external-bifrost-api.skra.svc.cluster.local:8000

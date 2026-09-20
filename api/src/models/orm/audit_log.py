@@ -1,7 +1,7 @@
 """
 AuditLog ORM model.
 
-Tracks all auditable actions in the Bifrost Docs platform.
+Tracks all auditable actions in the Skra platform.
 """
 
 from datetime import UTC, datetime

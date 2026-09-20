@@ -1,13 +1,13 @@
 # OWASP ZAP Baseline Scanning
 
-Bifrost Docs uses a sanctioned OWASP ZAP baseline workflow for passive DAST coverage of the Azure + Neon proof deployment.
+Skra uses a sanctioned OWASP ZAP baseline workflow for passive DAST coverage of the Azure + Neon proof deployment.
 
 ## Scope
 
 The workflow is intentionally limited to known Midtown-owned proof endpoints:
 
 - Frontend: `https://azure-docs.midtowntg.com`
-- API: `https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
+- API: `https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
 
 The workflow does not accept arbitrary URLs. Add new targets in code review so scan scope stays explicit.
 

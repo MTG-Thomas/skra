@@ -1,10 +1,10 @@
 # Backup and Restore Guide
 
-This guide covers automated backup procedures and disaster recovery for Bifrost Docs.
+This guide covers automated backup procedures and disaster recovery for Skra.
 
 ## Overview
 
-Bifrost Docs uses a multi-layered backup strategy:
+Skra uses a multi-layered backup strategy:
 
 1. **Database Backups** - PostgreSQL dumps (automated daily/weekly)
 2. **Attachment Backups** - S3 object replication for attachments
@@ -14,9 +14,9 @@ Bifrost Docs uses a multi-layered backup strategy:
 
 | Backup Type | Frequency | Retention | Storage |
 |-------------|-----------|-----------|---------|
-| Database - Daily | Daily at 2:00 AM | 7 days | S3 (bifrost-docs/backups/daily/) |
-| Database - Weekly | Sundays at 3:00 AM | 4 weeks | S3 (bifrost-docs/backups/weekly/) |
-| Attachments | On-demand / Sync | All versions | S3 (bifrost-docs-backup/attachments/) |
+| Database - Daily | Daily at 2:00 AM | 7 days | S3 (skra/backups/daily/) |
+| Database - Weekly | Sundays at 3:00 AM | 4 weeks | S3 (skra/backups/weekly/) |
+| Attachments | On-demand / Sync | All versions | S3 (skra-backup/attachments/) |
 | Manual Full | As needed | Custom | S3 + Local |
 
 ## Docker Compose Deployment
@@ -28,7 +28,7 @@ The production Docker Compose includes a backup service:
 ```yaml
 # docker-compose.prod.yml
 backup:
-  image: ghcr.io/mtg-thomas/bifrost-docs-api:latest
+  image: ghcr.io/mtg-thomas/skra-api:latest
   command: |
     sh -c "
       echo '0 2 * * * /app/scripts/backup.sh --daily' | crontab - &&
@@ -57,7 +57,7 @@ docker compose -f docker-compose.prod.yml exec backup /app/scripts/backup.sh --w
 ./scripts/verify-backup.sh --latest --daily
 
 # Verify specific backup with full restore test
-./scripts/verify-backup.sh s3://bifrost-docs/backups/daily/2026-04-06/bifrost_docs_daily_20260406_120000.sql.gz --full
+./scripts/verify-backup.sh s3://skra/backups/daily/2026-04-06/skra_daily_20260406_120000.sql.gz --full
 ```
 
 ### Restore from Backup
@@ -70,7 +70,7 @@ docker compose -f docker-compose.prod.yml stop api client worker
 
 # 2. Restore from backup
 docker compose -f docker-compose.prod.yml exec backup /app/scripts/backup.sh \
-    --restore s3://bifrost-docs/backups/daily/2026-04-06/bifrost_docs_daily_20260406_120000.sql.gz
+    --restore s3://skra/backups/daily/2026-04-06/skra_daily_20260406_120000.sql.gz
 
 # 3. Restart the application
 docker compose -f docker-compose.prod.yml up -d api client worker
@@ -101,27 +101,27 @@ curl http://localhost/api/health
 kubectl apply -f kubernetes/cronjobs/backup-cronjob.yaml
 
 # View scheduled backups
-kubectl get cronjobs -n bifrost-docs
+kubectl get cronjobs -n skra
 
 # View backup job history
-kubectl get jobs -n bifrost-docs | grep backup
+kubectl get jobs -n skra | grep backup
 
 # Check latest backup job logs
-kubectl logs -n bifrost-docs -l job-name=bifrost-docs-backup-daily-xxx
+kubectl logs -n skra -l job-name=skra-backup-daily-xxx
 ```
 
 ### Manual Backup (One-off Job)
 
 ```bash
 # Create manual backup job
-kubectl create job -n bifrost-docs manual-backup-$(date +%s) \
-    --from=cronjob/bifrost-docs-backup-daily
+kubectl create job -n skra manual-backup-$(date +%s) \
+    --from=cronjob/skra-backup-daily
 
 # Check job status
-kubectl wait -n bifrost-docs --for=condition=complete job/manual-backup-xxx
+kubectl wait -n skra --for=condition=complete job/manual-backup-xxx
 
 # Get backup location from logs
-kubectl logs -n bifrost-docs job/manual-backup-xxx
+kubectl logs -n skra job/manual-backup-xxx
 ```
 
 ### Restore in Kubernetes
@@ -130,19 +130,19 @@ kubectl logs -n bifrost-docs job/manual-backup-xxx
 
 ```bash
 # 1. Get the backup file from S3
-kubectl run -n bifrost-docs pg-restore --rm -it --image=postgres:15-alpine -- \
+kubectl run -n skra pg-restore --rm -it --image=postgres:15-alpine -- \
     sh -c '
-    aws s3 cp s3://bifrost-docs/backups/daily/2026-04-06/bifrost_docs_daily_20260406_120000.sql.gz /tmp/backup.sql.gz
+    aws s3 cp s3://skra/backups/daily/2026-04-06/skra_daily_20260406_120000.sql.gz /tmp/backup.sql.gz
     gunzip -c /tmp/backup.sql.gz | pg_restore \
-        -h postgres.bifrost-docs.svc.cluster.local \
-        -U bifrost_docs \
-        -d bifrost_docs \
+        -h postgres.skra.svc.cluster.local \
+        -U skra \
+        -d skra \
         --clean \
         --if-exists
     '
 
 # 2. Verify restoration
-kubectl exec -n bifrost-docs deployment/bifrost-docs-api -- \
+kubectl exec -n skra deployment/skra-api -- \
     curl -s http://localhost:8000/health
 ```
 
@@ -168,13 +168,13 @@ The daily backup job includes basic verification (gzip integrity check). For ful
 
 1. **Check backup exists:**
    ```bash
-   aws s3 ls s3://bifrost-docs/backups/daily/2026-04-06/ \
+   aws s3 ls s3://skra/backups/daily/2026-04-06/ \
        --endpoint-url http://localhost:3900
    ```
 
 2. **Verify gzip integrity:**
    ```bash
-   aws s3 cp s3://bifrost-docs/backups/daily/... /tmp/backup.sql.gz
+   aws s3 cp s3://skra/backups/daily/... /tmp/backup.sql.gz
    gzip -t /tmp/backup.sql.gz && echo "Valid"
    ```
 
@@ -192,13 +192,13 @@ The daily backup job includes basic verification (gzip integrity check). For ful
 **Recovery:**
 ```bash
 # 1. Identify last good backup
-aws s3 ls s3://bifrost-docs/backups/daily/ --recursive | sort -r | head -5
+aws s3 ls s3://skra/backups/daily/ --recursive | sort -r | head -5
 
 # 2. Stop application
 docker compose stop api client worker
 
 # 3. Restore from backup
-./scripts/backup.sh --restore s3://bifrost-docs/backups/daily/.../backup.sql.gz
+./scripts/backup.sh --restore s3://skra/backups/daily/.../backup.sql.gz
 
 # 4. Start application
 docker compose up -d
@@ -217,7 +217,7 @@ curl http://localhost/api/health
 # (Follow deployment guide for fresh install)
 
 # 2. Restore database from latest weekly backup
-./scripts/backup.sh --restore s3://bifrost-docs/backups/weekly/.../backup.sql.gz
+./scripts/backup.sh --restore s3://skra/backups/weekly/.../backup.sql.gz
 
 # 3. Restore attachments if needed
 ./scripts/backup-attachments.sh --sync
@@ -255,12 +255,12 @@ See `tools/itglue-migrate/docs/cutover-runbook.md` for detailed rollback procedu
 ```bash
 # Enable versioning on backup bucket
 aws s3api put-bucket-versioning \
-    --bucket bifrost-docs-backup \
+    --bucket skra-backup \
     --versioning-configuration Status=Enabled
 
 # Enable lifecycle policy (transition to cheaper storage)
 aws s3api put-bucket-lifecycle-configuration \
-    --bucket bifrost-docs-backup \
+    --bucket skra-backup \
     --lifecycle-configuration file://lifecycle-policy.json
 ```
 
@@ -271,7 +271,7 @@ For disaster recovery, replicate backups to a second region:
 ```bash
 # Set up cross-region replication
 aws s3api put-bucket-replication \
-    --bucket bifrost-docs \
+    --bucket skra \
     --replication-configuration file://replication-config.json
 ```
 
@@ -293,11 +293,11 @@ gpg --cipher-algo AES256 --compress-algo 1 --symmetric --output backup.sql.gz.gp
 
 ```bash
 # Check if daily backup completed today
-aws s3 ls s3://bifrost-docs/backups/daily/$(date +%Y-%m-%d)/ --endpoint-url ...
+aws s3 ls s3://skra/backups/daily/$(date +%Y-%m-%d)/ --endpoint-url ...
 
 # Check backup size (alert if < expected)
 aws s3api head-object \
-    --bucket bifrost-docs \
+    --bucket skra \
     --key backups/daily/.../backup.sql.gz
 ```
 

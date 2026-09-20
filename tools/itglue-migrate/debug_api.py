@@ -9,23 +9,23 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, "src")
 
-from itglue_migrate.api_client import BifrostDocsClient
+from itglue_migrate.api_client import SkraClient
 from itglue_migrate.state_fetcher import StateFetcher
 from itglue_migrate.csv_parser import CSVParser
 
 
 async def main():
-    api_url = os.environ.get("BIFROST_API_URL")
-    token = os.environ.get("BIFROST_API_TOKEN")
-    org_id = os.environ.get("BIFROST_ORG_ID")  # UUID of the org to test
-    export_path = os.environ.get("BIFROST_EXPORT_PATH")  # Path to CSV export
-    org_name = os.environ.get("BIFROST_ORG_NAME", "Covi, Inc.")  # Org name to filter
+    api_url = os.environ.get("SKRA_API_URL")
+    token = os.environ.get("SKRA_API_TOKEN")
+    org_id = os.environ.get("SKRA_ORG_ID")  # UUID of the org to test
+    export_path = os.environ.get("SKRA_EXPORT_PATH")  # Path to CSV export
+    org_name = os.environ.get("SKRA_ORG_NAME", "Covi, Inc.")  # Org name to filter
 
     if not all([api_url, token]):
-        print("Set BIFROST_API_URL and BIFROST_API_TOKEN environment variables")
+        print("Set SKRA_API_URL and SKRA_API_TOKEN environment variables")
         return
 
-    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+    async with SkraClient(base_url=api_url, api_key=token) as client:
         print("=" * 60)
         print("Testing API endpoints...")
         print("=" * 60)
@@ -65,7 +65,7 @@ async def main():
             print(f"   ERROR: {e}")
 
         if not org_id:
-            print("\n\nSet BIFROST_ORG_ID to test org-scoped endpoints")
+            print("\n\nSet SKRA_ORG_ID to test org-scoped endpoints")
             return
 
         # Test locations

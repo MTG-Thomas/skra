@@ -4,7 +4,7 @@
 
 set -e
 
-REPO="MTG-Thomas/bifrost-docs"
+REPO="MTG-Thomas/skra"
 COMMAND=${1:-help}
 
 show_help() {

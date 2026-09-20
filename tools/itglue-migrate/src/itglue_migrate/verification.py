@@ -331,7 +331,7 @@ def extract_markdown_image_urls(content: str) -> list[str]:
     """Extract image URLs from migrated markdown document content.
 
     Args:
-        content: Markdown text as stored in BifrostDocs.
+        content: Markdown text as stored in Skra.
 
     Returns:
         Image URLs in document order.
@@ -343,7 +343,7 @@ def extract_markdown_image_urls(content: str) -> list[str]:
 
 @dataclass(frozen=True)
 class MigratedAttachment:
-    """An attachment record as listed by the BifrostDocs API."""
+    """An attachment record as listed by the Skra API."""
 
     attachment_id: str
     entity_type: str

@@ -1,6 +1,6 @@
-name: bifrost-docs
+name: skra
 
-# Bifrost Docs Docker Stack - Production Configuration
+# Skra Docker Stack - Production Configuration
 #
 # Usage:
 #   docker compose up              # Start all services
@@ -11,10 +11,10 @@ name: bifrost-docs
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
 # Required environment variables:
-#   BIFROST_DOCS_SECRET_KEY   - 32+ char secret for JWT signing and secret encryption
+#   SKRA_SECRET_KEY   - 32+ char secret for JWT signing and secret encryption
 #   POSTGRES_PASSWORD   - PostgreSQL password
 #
-# The BIFROST_DOCS_SECRET_KEY is critical - it's used for:
+# The SKRA_SECRET_KEY is critical - it's used for:
 #   - JWT token signing (HS256)
 #   - Fernet encryption of passwords stored in PostgreSQL
 #   - Must be consistent across all services
@@ -24,15 +24,15 @@ services:
   # PostgreSQL Database (with pgvector extension for semantic search)
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: bifrost-docs-postgres
+    container_name: skra-postgres
     environment:
-      POSTGRES_DB: bifrost_docs
-      POSTGRES_USER: bifrost_docs
+      POSTGRES_DB: skra
+      POSTGRES_USER: skra
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
-      - bifrost_docspostgres_data:/var/lib/postgresql/data
+      - skrapostgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bifrost_docs -d bifrost_docs"]
+      test: ["CMD-SHELL", "pg_isready -U skra -d skra"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -41,11 +41,11 @@ services:
   # Scratch image: only /garage binary available — no shell, no curl
   garage:
     image: dxflrs/garage:v1.3.1
-    container_name: bifrost-docs-garage
+    container_name: skra-garage
     volumes:
       - ./config/garage.toml:/etc/garage.toml:ro
-      - bifrost_docsgarage_meta:/var/lib/garage/meta
-      - bifrost_docsgarage_data:/var/lib/garage/data
+      - skragarage_meta:/var/lib/garage/meta
+      - skragarage_data:/var/lib/garage/data
     # Ports only exposed in docker-compose.dev.yml
     healthcheck:
       test: ["CMD", "/garage", "status"]
@@ -59,13 +59,13 @@ services:
   # Note: No healthcheck - this is a one-shot container that exits after initialization
   garage-init:
     image: alpine:3
-    container_name: bifrost-docs-garage-init
+    container_name: skra-garage-init
     depends_on:
       garage:
         condition: service_healthy
     volumes:
       - ./scripts/garage-init.sh:/garage-init.sh:ro
-      - bifrost_docsgarage_creds:/run/garage-creds
+      - skragarage_creds:/run/garage-creds
     environment:
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN is required}
       # Key lifecycle (issues #107, #109). Mode auto-selects: legacy pair
@@ -73,7 +73,7 @@ services:
       # POST /v1/key into /run/garage-creds/s3.env. Explicit GARAGE_KEY_MODE
       # always wins; partial pair fails closed.
       GARAGE_KEY_MODE: ${GARAGE_KEY_MODE:-}
-      GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-bifrost-docs-key}
+      GARAGE_KEY_NAME: ${GARAGE_KEY_NAME:-skra-key}
       GARAGE_CREDS_FILE: /run/garage-creds/s3.env
       # Must match the pinned app uid/gid in api/Dockerfile (15000).
       GARAGE_CREDS_UID: ${GARAGE_CREDS_UID:-15000}
@@ -87,11 +87,11 @@ services:
   # Valkey (Redis-compatible cache and pub/sub — BSD-3-Clause, replaces SSPL Redis)
   valkey:
     image: valkey/valkey:8-alpine
-    container_name: bifrost-docs-valkey
+    container_name: skra-valkey
     command: valkey-server --appendonly yes
     # Port only exposed in docker-compose.dev.yml
     volumes:
-      - bifrost_docsvalkey_data:/data
+      - skravalkey_data:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -101,12 +101,12 @@ services:
   # PgBouncer - Connection Pooler for PostgreSQL
   pgbouncer:
     image: edoburu/pgbouncer:latest
-    container_name: bifrost-docs-pgbouncer
+    container_name: skra-pgbouncer
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: bifrost_docs
-      DB_USER: bifrost_docs
+      DB_NAME: skra
+      DB_USER: skra
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 1000
@@ -128,7 +128,7 @@ services:
           "-p",
           "5432",
           "-U",
-          "bifrost_docs",
+          "skra",
         ]
       interval: 5s
       timeout: 5s
@@ -137,12 +137,12 @@ services:
   # Init Container - Runs migrations before API starts
   # Note: No healthcheck - this is a one-shot container that exits after migrations
   init:
-    image: jackmusick/bifrost-docs-api:latest
-    container_name: bifrost-docs-init
+    image: ghcr.io/mtg-thomas/skra-api:latest
+    container_name: skra-init
     environment:
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:?BIFROST_DOCS_SECRET_KEY is required (32+ chars)}
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@pgbouncer:5432/bifrost_docs
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:?SKRA_SECRET_KEY is required (32+ chars)}
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@pgbouncer:5432/skra
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -150,42 +150,42 @@ services:
 
   # FastAPI Application
   api:
-    image: jackmusick/bifrost-docs-api:latest
-    container_name: bifrost-docs-api
+    image: ghcr.io/mtg-thomas/skra-api:latest
+    container_name: skra-api
     volumes:
-      - bifrost_docsgarage_creds:/run/garage-creds:ro
+      - skragarage_creds:/run/garage-creds:ro
     environment:
       # Core
-      BIFROST_DOCS_ENVIRONMENT: ${BIFROST_DOCS_ENVIRONMENT:-production}
-      BIFROST_DOCS_DEBUG: ${BIFROST_DOCS_DEBUG:-false}
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:?BIFROST_DOCS_SECRET_KEY is required (32+ chars)}
+      SKRA_ENVIRONMENT: ${SKRA_ENVIRONMENT:-production}
+      SKRA_DEBUG: ${SKRA_DEBUG:-false}
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:?SKRA_SECRET_KEY is required (32+ chars)}
       # Database (via PgBouncer for connection pooling)
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:${POSTGRES_PASSWORD}@pgbouncer:5432/bifrost_docs
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra
       # Redis
-      BIFROST_DOCS_REDIS_URL: redis://valkey:6379/0
+      SKRA_REDIS_URL: redis://valkey:6379/0
       # CORS (only needed if API is accessed directly, not through proxy)
-      BIFROST_DOCS_CORS_ORIGINS: ${BIFROST_DOCS_CORS_ORIGINS:-http://localhost:3000}
+      SKRA_CORS_ORIGINS: ${SKRA_CORS_ORIGINS:-http://localhost:3000}
       # JWT (optional, has defaults)
-      BIFROST_DOCS_ACCESS_TOKEN_EXPIRE_MINUTES: ${BIFROST_DOCS_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      BIFROST_DOCS_REFRESH_TOKEN_EXPIRE_DAYS: ${BIFROST_DOCS_REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      SKRA_ACCESS_TOKEN_EXPIRE_MINUTES: ${SKRA_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      SKRA_REFRESH_TOKEN_EXPIRE_DAYS: ${SKRA_REFRESH_TOKEN_EXPIRE_DAYS:-7}
       # MFA (optional, has defaults)
-      BIFROST_DOCS_MFA_ENABLED: ${BIFROST_DOCS_MFA_ENABLED:-true}
-      BIFROST_DOCS_MFA_TOTP_ISSUER: ${BIFROST_DOCS_MFA_TOTP_ISSUER:-BifrostDocs}
+      SKRA_MFA_ENABLED: ${SKRA_MFA_ENABLED:-true}
+      SKRA_MFA_TOTP_ISSUER: ${SKRA_MFA_TOTP_ISSUER:-Skra}
       # WebAuthn/Passkeys
-      BIFROST_DOCS_WEBAUTHN_RP_ID: ${BIFROST_DOCS_WEBAUTHN_RP_ID:-localhost}
-      BIFROST_DOCS_WEBAUTHN_RP_NAME: ${BIFROST_DOCS_WEBAUTHN_RP_NAME:-Bifrost Docs}
-      BIFROST_DOCS_WEBAUTHN_ORIGIN: ${BIFROST_DOCS_WEBAUTHN_ORIGIN:-http://localhost:3000}
+      SKRA_WEBAUTHN_RP_ID: ${SKRA_WEBAUTHN_RP_ID:-localhost}
+      SKRA_WEBAUTHN_RP_NAME: ${SKRA_WEBAUTHN_RP_NAME:-Skra}
+      SKRA_WEBAUTHN_ORIGIN: ${SKRA_WEBAUTHN_ORIGIN:-http://localhost:3000}
       # S3/Garage Storage (credentials come from the garage-creds volume
-      # written by garage-init in managed mode; explicit BIFROST_DOCS_S3_*
-      # env below still wins when set)
-      BIFROST_DOCS_S3_ENDPOINT: http://garage:3900
-      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
-      BIFROST_DOCS_S3_BUCKET: ${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}
-      BIFROST_DOCS_S3_REGION: us-east-1
+      # written by garage-init in managed mode; explicit SKRA_S3_* env
+      # still wins when set via .env)
+      SKRA_S3_ENDPOINT: http://garage:3900
+      SKRA_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
+      SKRA_S3_BUCKET: ${SKRA_S3_BUCKET:-skra}
+      SKRA_S3_REGION: us-east-1
       # OpenAI (for vector search)
-      BIFROST_DOCS_OPENAI_API_KEY: ${BIFROST_DOCS_OPENAI_API_KEY:-}
-      BIFROST_DOCS_OPENAI_EMBEDDING_MODEL: ${BIFROST_DOCS_OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
+      SKRA_OPENAI_API_KEY: ${SKRA_OPENAI_API_KEY:-}
+      SKRA_OPENAI_EMBEDDING_MODEL: ${SKRA_OPENAI_EMBEDDING_MODEL:-text-embedding-ada-002}
     # Note: API port not exposed - access via client proxy at http://localhost:3000
     # Debug port (5678) only exposed in docker-compose.dev.yml
     depends_on:
@@ -204,17 +204,19 @@ services:
 
   # arq Worker (processes indexing queue)
   worker:
-    image: jackmusick/bifrost-docs-api:latest
-    container_name: bifrost-docs-worker
+    image: ghcr.io/mtg-thomas/skra-api:latest
+    container_name: skra-worker
     volumes:
-      - bifrost_docsgarage_creds:/run/garage-creds:ro
+      - skragarage_creds:/run/garage-creds:ro
     environment:
-      BIFROST_DOCS_SECRET_KEY: ${BIFROST_DOCS_SECRET_KEY:?BIFROST_DOCS_SECRET_KEY is required (32+ chars)}
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:${POSTGRES_PASSWORD}@pgbouncer:5432/bifrost_docs
-      BIFROST_DOCS_REDIS_URL: redis://valkey:6379/0
+      SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:?SKRA_SECRET_KEY is required (32+ chars)}
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra
+      SKRA_REDIS_URL: redis://valkey:6379/0
       # Same managed S3 credentials as api (issue #107); the worker image is
       # the api image, so the same uid-pinned app identity applies.
-      BIFROST_DOCS_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
+      SKRA_S3_CREDENTIALS_FILE: /run/garage-creds/s3.env
+      SKRA_S3_ENDPOINT: http://garage:3900
     depends_on:
       init:
         condition: service_completed_successfully
@@ -233,8 +235,8 @@ services:
 
   # Frontend (Vite/React)
   client:
-    image: jackmusick/bifrost-docs-client:latest
-    container_name: bifrost-docs-client
+    image: ghcr.io/mtg-thomas/skra-client:latest
+    container_name: skra-client
     ports:
       - "${CLIENT_PORT:-8080}:80"
     depends_on:
@@ -249,8 +251,8 @@ services:
       start_period: 5s
 
 volumes:
-  bifrost_docspostgres_data:
-  bifrost_docsvalkey_data:
-  bifrost_docsgarage_meta:
-  bifrost_docsgarage_data:
-  bifrost_docsgarage_creds:
+  skrapostgres_data:
+  skravalkey_data:
+  skragarage_meta:
+  skragarage_data:
+  skragarage_creds:

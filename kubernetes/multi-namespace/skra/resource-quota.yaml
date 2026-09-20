@@ -1,10 +1,10 @@
-# Resource quotas for bifrost-docs namespace
+# Resource quotas for skra namespace
 # Prevents one app from starving the cluster
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: bifrost-docs-quota
-  namespace: bifrost-docs
+  name: skra-quota
+  namespace: skra
 spec:
   hard:
     requests.cpu: "4"

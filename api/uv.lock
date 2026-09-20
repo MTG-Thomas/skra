@@ -433,7 +433,7 @@ wheels = [
 ]
 
 [[package]]
-name = "bifrost-docs"
+name = "skra"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [

@@ -26,14 +26,14 @@ cd tools/itglue-migrate
 python -m itglue_migrate.cli preview \
     --export ../../tests/fixtures/minimal-export \
     --api-url http://localhost:8080 \
-    --token $BIFROST_TOKEN
+    --token $SKRA_TOKEN
 
 # Run the migration (dry-run first)
 python -m itglue_migrate.cli run \
     --export ../../tests/fixtures/minimal-export \
     --plan /tmp/test-plan.json \
     --api-url http://localhost:8080 \
-    --token $BIFROST_TOKEN \
+    --token $SKRA_TOKEN \
     --dry-run
 ```
 

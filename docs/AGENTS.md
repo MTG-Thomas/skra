@@ -1,6 +1,6 @@
 # Multi-Agent Development Workflow
 
-This repository uses multiple AI coding agents (OpenCode, Kilo, etc.) to collaboratively develop Bifrost Docs. This document defines the workflow for coordination.
+This repository uses multiple AI coding agents (OpenCode, Kilo, etc.) to collaboratively develop Skra. This document defines the workflow for coordination.
 
 ## Philosophy
 
@@ -55,13 +55,13 @@ gh issue list --label "Kilo" --state open
 gh issue list --label "P1-high" --state open --no-assignee
 
 # 3. Claim the issue
-gh api repos/MTG-Thomas/bifrost-docs/issues/{ISSUE_NUMBER}/labels \
+gh api repos/MTG-Thomas/skra/issues/{ISSUE_NUMBER}/labels \
   -X POST \
   -f "labels[]=OpenCode" \
   -f "labels[]=in-progress"
 
 # 4. Post a comment to start
-git api repos/MTG-Thomas/bifrost-docs/issues/{ISSUE_NUMBER}/comments \
+git api repos/MTG-Thomas/skra/issues/{ISSUE_NUMBER}/comments \
   -X POST \
   -f "body=Starting work on this. Plan:\n\n1. [step]\n2. [step]\n3. [step]"
 ```
@@ -263,11 +263,11 @@ If you want daily updates, agents can post to a dedicated issue (#daily-standup 
 gh issue list --label "OpenCode" --state open
 
 # Claim an issue
-gh api repos/MTG-Thomas/bifrost-docs/issues/{N}/labels \
+gh api repos/MTG-Thomas/skra/issues/{N}/labels \
   -X POST -f "labels[]=OpenCode" -f "labels[]=in-progress"
 
 # Post progress comment
-gh api repos/MTG-Thomas/bifrost-docs/issues/{N}/comments \
+gh api repos/MTG-Thomas/skra/issues/{N}/comments \
   -X POST -f "body=Update: ..."
 
 # Create branch

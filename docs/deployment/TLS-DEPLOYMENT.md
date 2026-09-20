@@ -1,6 +1,6 @@
 # Reverse Proxy & TLS Deployment Guide
 
-This directory contains production-ready configurations for deploying Bifrost Docs with reverse proxy and TLS termination.
+This directory contains production-ready configurations for deploying Skra with reverse proxy and TLS termination.
 
 ## Quick Start
 

@@ -1,15 +1,15 @@
 ---
-name: bifrost-docs-api-patterns
+name: skra-api-patterns
 description: |
-  FastAPI + SQLAlchemy patterns for Bifrost Docs backend (bifrost-docs repo).
+  FastAPI + SQLAlchemy patterns for Skra backend (skra repo).
   Use when adding new entities, APIs, repositories, or database operations.
   Triggers: "add entity", "create API", "new repository", "add router", 
   "create migration", "org-scoped query", "new model", "add endpoint".
 ---
 
-# Bifrost Docs API Patterns
+# Skra API Patterns
 
-Reusable patterns for Bifrost Docs backend (MTG-Thomas/bifrost-docs repo) using FastAPI, SQLAlchemy, and async PostgreSQL.
+Reusable patterns for Skra backend (MTG-Thomas/skra repo) using FastAPI, SQLAlchemy, and async PostgreSQL.
 
 ## Quick Start: Add New Entity
 
@@ -477,5 +477,5 @@ app.include_router(checklists_router)
 
 ## Related
 
-- Repo: `MTG-Thomas/bifrost-docs`
+- Repo: `MTG-Thomas/skra`
 - Stack: FastAPI, SQLAlchemy, PostgreSQL, Pydantic v2

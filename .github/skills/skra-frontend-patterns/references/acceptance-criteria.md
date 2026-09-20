@@ -1,6 +1,6 @@
-# Acceptance Criteria: bifrost-docs-frontend-patterns
+# Acceptance Criteria: skra-frontend-patterns
 
-**Repository:** `MTG-Thomas/bifrost-docs`  
+**Repository:** `MTG-Thomas/skra`  
 **Purpose:** Validate React + TanStack Query patterns
 
 ---

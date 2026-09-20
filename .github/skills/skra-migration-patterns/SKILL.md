@@ -1,15 +1,15 @@
 ---
-name: bifrost-docs-migration-patterns
+name: skra-migration-patterns
 description: |
-  IT Glue migration patterns for Bifrost Docs migration tool (bifrost-docs repo).
+  IT Glue migration patterns for Skra migration tool (skra repo).
   Use when building migration features, CSV parsing, reconciliation, or sync logic.
   Triggers: "migrate entity", "CSV import", "reconciliation report",
   "relationship sync", "attachment migration", "IT Glue import", "sync entity".
 ---
 
-# Bifrost Docs Migration Patterns
+# Skra Migration Patterns
 
-Reusable patterns for the IT Glue migration tool in Bifrost Docs (MTG-Thomas/bifrost-docs repo).
+Reusable patterns for the IT Glue migration tool in Skra (MTG-Thomas/skra repo).
 
 ## Quick Start: Add Migration Feature
 
@@ -20,7 +20,7 @@ cd tools/itglue-migrate/
 # Key files
 src/
   csv_parser.py          # Parse IT Glue CSV exports
-  importers.py           # Import logic to Bifrost API
+  importers.py           # Import logic to Skra API
   sync.py                # Two-way sync logic
   cli.py                 # CLI commands
   models.py              # Data models
@@ -38,7 +38,7 @@ tests/
 | **Idempotent** | Re-running should be safe |
 | **Reconcilable** | Compare source vs target, report gaps |
 | **Organized by type** | One flow per entity type |
-| **API-first** | Use Bifrost API, not direct DB |
+| **API-first** | Use Skra API, not direct DB |
 | **Validation** | Validate before importing |
 
 ## CSV Parser Pattern
@@ -170,7 +170,7 @@ class ImportResult:
 
 
 class OrganizationImporter:
-    """Import organizations to Bifrost."""
+    """Import organizations to Skra."""
 
     async def import_organizations(
         self,
@@ -315,12 +315,12 @@ from uuid import UUID
 
 
 class RelationshipMapper:
-    """Map IT Glue relationships to Bifrost relationships."""
+    """Map IT Glue relationships to Skra relationships."""
 
     def __init__(self, id_mapping: Dict[str, UUID]):
         """
         Args:
-            id_mapping: Map of IT Glue IDs to Bifrost UUIDs
+            id_mapping: Map of IT Glue IDs to Skra UUIDs
         """
         self.id_mapping = id_mapping
 
@@ -332,30 +332,30 @@ class RelationshipMapper:
         target_entity_id: str,
     ) -> Tuple[str, UUID, str, UUID] | None:
         """
-        Map IT Glue relationship to Bifrost relationship.
+        Map IT Glue relationship to Skra relationship.
         
         Returns:
             Tuple of (from_type, from_id, to_type, to_id) or None if can't map
         """
         # Map source entity
-        source_bifrost_id = self.id_mapping.get(source_entity_id)
-        if not source_bifrost_id:
+        source_skra_id = self.id_mapping.get(source_entity_id)
+        if not source_skra_id:
             return None
         
         # Map target entity
-        target_bifrost_id = self.id_mapping.get(target_entity_id)
-        if not target_bifrost_id:
+        target_skra_id = self.id_mapping.get(target_entity_id)
+        if not target_skra_id:
             return None
         
         return (
             self._map_entity_type(source_entity_type),
-            source_bifrost_id,
+            source_skra_id,
             self._map_entity_type(target_entity_type),
-            target_bifrost_id,
+            target_skra_id,
         )
 
     def _map_entity_type(self, itglue_type: str) -> str:
-        """Map IT Glue entity type to Bifrost entity type."""
+        """Map IT Glue entity type to Skra entity type."""
         mapping = {
             "Organization": "organization",
             "Configuration": "configuration",
@@ -385,7 +385,7 @@ class RelationshipSync:
         
         Args:
             relationships: List of IT Glue relationships
-            id_mapping: Mapping of IT Glue IDs to Bifrost UUIDs
+            id_mapping: Mapping of IT Glue IDs to Skra UUIDs
             dry_run: If True, don't actually create relationships
         
         Returns:
@@ -442,7 +442,7 @@ class RelationshipSync:
         to_type: str,
         to_id: UUID,
     ) -> bool:
-        """Create relationship in Bifrost."""
+        """Create relationship in Skra."""
         # Get organization from entity context
         # POST /api/organizations/{org_id}/relationships
         pass
@@ -461,7 +461,7 @@ import mimetypes
 
 
 class AttachmentMigrator:
-    """Migrate IT Glue attachments to Bifrost S3."""
+    """Migrate IT Glue attachments to Skra S3."""
 
     def __init__(self, api_url: str, api_token: str, s3_endpoint: str):
         self.api_url = api_url
@@ -482,7 +482,7 @@ class AttachmentMigrator:
         Args:
             source_path: Path to attachment file
             entity_type: Type of entity (document, password, etc.)
-            entity_id: Bifrost entity UUID
+            entity_id: Skra entity UUID
             org_id: Organization UUID
             dry_run: If True, don't actually upload
         
@@ -511,7 +511,7 @@ class AttachmentMigrator:
             }
 
         try:
-            # 1. Get upload URL from Bifrost
+            # 1. Get upload URL from Skra
             upload_url = await self._get_upload_url(
                 filename=source_path.name,
                 content_type=content_type,
@@ -551,7 +551,7 @@ class AttachmentMigrator:
         file_size: int,
         org_id: str,
     ) -> str:
-        """Get presigned upload URL from Bifrost."""
+        """Get presigned upload URL from Skra."""
         async with aiohttp.ClientSession() as session:
             headers = {"Authorization": f"Bearer {self.api_token}"}
             
@@ -611,7 +611,7 @@ from pathlib import Path
 
 @click.group()
 def cli():
-    """IT Glue to Bifrost Docs migration tool."""
+    """IT Glue to Skra migration tool."""
     pass
 
 @cli.command()
@@ -626,15 +626,15 @@ def cli():
     "--api-url",
     "-u",
     required=True,
-    envvar="BIFROST_API_URL",
-    help="Bifrost API URL",
+    envvar=["SKRA_API_URL", "BIFROST_API_URL"],
+    help="Skra API URL",
 )
 @click.option(
     "--token",
     "-t",
     required=True,
-    envvar="BIFROST_API_TOKEN",
-    help="Bifrost API token",
+    envvar=["SKRA_API_TOKEN", "BIFROST_API_TOKEN"],
+    help="Skra API token",
 )
 @click.option(
     "--dry-run",
@@ -701,13 +701,13 @@ def run(
     "--api-url",
     "-u",
     required=True,
-    help="Bifrost API URL",
+    help="Skra API URL",
 )
 @click.option(
     "--token",
     "-t",
     required=True,
-    help="Bifrost API token",
+    help="Skra API token",
 )
 def validate(
     export: Path,
@@ -739,11 +739,11 @@ def validate(
 |------|----------|
 | [references/acceptance-criteria.md](references/acceptance-criteria.md) | Correct/incorrect patterns |
 | [references/csv-patterns.md](references/csv-patterns.md) | CSV parsing edge cases |
-| [references/api-patterns.md](references/api-patterns.md) | Bifrost API interaction |
+| [references/api-patterns.md](references/api-patterns.md) | Skra API interaction |
 | [references/reconciliation.md](references/reconciliation.md) | Reconciliation report format |
 
 ## Related
 
-- Repo: `MTG-Thomas/bifrost-docs`
+- Repo: `MTG-Thomas/skra`
 - Tool: `tools/itglue-migrate/`
 - Stack: Python, asyncio, aiohttp, pandas (optional)

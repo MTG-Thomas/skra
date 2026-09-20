@@ -1,5 +1,5 @@
 rules:
-  - id: bifrost-docs-no-secret-logging
+  - id: skra-no-secret-logging
     message: Do not log secrets, OAuth tokens, passwords, or decrypted credential material.
     severity: ERROR
     languages: [python]
@@ -12,7 +12,7 @@ rules:
           metavariable: $SECRET
           regex: (?i)^(secret|token|password|refresh_token|access_token|access_key|client_secret|api_key)$
 
-  - id: bifrost-docs-raw-html-rendering
+  - id: skra-raw-html-rendering
     message: Raw HTML rendering must pass through DOMPurify or a vetted safe renderer.
     severity: ERROR
     languages: [generic]
@@ -23,7 +23,7 @@ rules:
       - pattern-regex: 'dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:'
       - pattern-not-regex: 'dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*DOMPurify\.sanitize\('
 
-  - id: bifrost-docs-subprocess-review
+  - id: skra-subprocess-review
     message: Review subprocess usage for fixed executable paths, validated args, and no shell injection.
     severity: WARNING
     languages: [python]
@@ -32,7 +32,7 @@ rules:
       - pattern: asyncio.create_subprocess_exec(...)
       - pattern: asyncio.create_subprocess_shell(...)
 
-  - id: bifrost-docs-org-scope-review
+  - id: skra-org-scope-review
     message: Tenant or organization scoped queries should use the repo's scope helper or explicit authorization checks.
     severity: WARNING
     languages: [python]
@@ -41,7 +41,7 @@ rules:
       - pattern: $MODEL.tenant_id == $TENANT
       - pattern: $MODEL.org_id == $ORG
 
-  - id: bifrost-docs-migration-secret-material
+  - id: skra-migration-secret-material
     message: Migration tooling should not print or serialize live API keys, passwords, or tokens.
     severity: WARNING
     languages: [python]

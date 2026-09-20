@@ -49,7 +49,7 @@ async function installAuthenticatedSession(page: Page) {
       window.localStorage.setItem("access_token", token);
       window.localStorage.setItem("refresh_token", token);
       window.localStorage.setItem(
-        "bifrost-docs-auth",
+        "skra-auth",
         JSON.stringify({
           state: {
             user: {
@@ -70,7 +70,7 @@ async function installAuthenticatedSession(page: Page) {
         })
       );
       window.localStorage.setItem(
-        "bifrost-docs-organization",
+        "skra-organization",
         JSON.stringify({
           state: {
             currentOrg: org,

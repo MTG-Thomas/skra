@@ -31,13 +31,13 @@ jobs:
         run: |
           case "${TARGET}" in
             all)
-              MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"},{"name":"api","url":"https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
+              MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"},{"name":"api","url":"https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
               ;;
             frontend)
               MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"}]}'
               ;;
             api)
-              MATRIX='{"include":[{"name":"api","url":"https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
+              MATRIX='{"include":[{"name":"api","url":"https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
               ;;
             *)
               echo "Unsupported target: ${TARGET}" >&2

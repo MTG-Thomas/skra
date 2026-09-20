@@ -1,7 +1,7 @@
 """
 Relationship ORM model.
 
-Represents bidirectional relationships between entities in the Bifrost Docs platform.
+Represents bidirectional relationships between entities in the Skra platform.
 A universal junction table that links any entity to any other entity.
 """
 

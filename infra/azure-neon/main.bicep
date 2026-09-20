@@ -1,10 +1,10 @@
-@description('Azure region for Bifrost Docs proof resources.')
+@description('Azure region for Skra proof resources.')
 param location string = resourceGroup().location
 
 @description('Short environment name used in resource names.')
 param environmentName string = 'neon-dev'
 
-@description('Pinned API image published by CI, e.g. ghcr.io/mtg-thomas/bifrost-docs-api:abcdef1.')
+@description('Pinned API image published by CI, e.g. ghcr.io/mtg-thomas/skra-api:abcdef1.')
 param apiImage string
 
 @description('Optional Azure Container Registry login server, e.g. myregistry.azurecr.io.')
@@ -23,8 +23,8 @@ param webauthnRpId string
 param webauthnOrigin string
 
 @secure()
-@description('Bifrost Docs JWT/encryption secret.')
-param bifrostDocsSecretKey string
+@description('Skra JWT/encryption secret.')
+param skraSecretKey string
 
 @secure()
 @description('Neon async SQLAlchemy URL, postgresql+asyncpg://...')
@@ -43,11 +43,11 @@ param apiMaxReplicas int = 2
 var normalizedEnvironment = toLower(replace(environmentName, '-', ''))
 var suffix = uniqueString(resourceGroup().id, environmentName)
 var storageName = take('bifdocs${normalizedEnvironment}${suffix}', 24)
-var logName = 'log-bifrost-docs-${environmentName}'
-var appInsightsName = 'appi-bifrost-docs-${environmentName}'
-var containerEnvName = 'cae-bifrost-docs-${environmentName}'
-var apiName = 'ca-bifrost-docs-api-${environmentName}'
-var initJobName = 'caj-bifrost-docs-init-${environmentName}'
+var logName = 'log-skra-${environmentName}'
+var appInsightsName = 'appi-skra-${environmentName}'
+var containerEnvName = 'cae-skra-${environmentName}'
+var apiName = 'ca-skra-api-${environmentName}'
+var initJobName = 'caj-skra-init-${environmentName}'
 var keyVaultName = take('kv-bifdocs-${normalizedEnvironment}-${suffix}', 24)
 var attachmentsContainerName = 'attachments'
 var backupsContainerName = 'backups'
@@ -127,11 +127,11 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-resource secretBifrostKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource secretSkraKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'bifrost-docs-secret-key'
+  name: 'skra-secret-key'
   properties: {
-    value: bifrostDocsSecretKey
+    value: skraSecretKey
   }
 }
 
@@ -196,8 +196,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       secrets: [
         {
-          name: 'bifrost-docs-secret-key'
-          value: bifrostDocsSecretKey
+          name: 'skra-secret-key'
+          value: skraSecretKey
         }
         {
           name: 'database-url'
@@ -238,55 +238,55 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             {
-              name: 'BIFROST_DOCS_ENVIRONMENT'
+              name: 'SKRA_ENVIRONMENT'
               value: 'production'
             }
             {
-              name: 'BIFROST_DOCS_DEBUG'
+              name: 'SKRA_DEBUG'
               value: 'false'
             }
             {
-              name: 'BIFROST_DOCS_RATE_LIMITING_ENABLED'
+              name: 'SKRA_RATE_LIMITING_ENABLED'
               value: 'false'
             }
             {
-              name: 'BIFROST_DOCS_SECRET_KEY'
-              secretRef: 'bifrost-docs-secret-key'
+              name: 'SKRA_SECRET_KEY'
+              secretRef: 'skra-secret-key'
             }
             {
-              name: 'BIFROST_DOCS_DATABASE_URL'
+              name: 'SKRA_DATABASE_URL'
               secretRef: 'database-url'
             }
             {
-              name: 'BIFROST_DOCS_DATABASE_URL_SYNC'
+              name: 'SKRA_DATABASE_URL_SYNC'
               secretRef: 'database-url-sync'
             }
             {
-              name: 'BIFROST_DOCS_CORS_ORIGINS'
+              name: 'SKRA_CORS_ORIGINS'
               value: corsOrigins
             }
             {
-              name: 'BIFROST_DOCS_WEBAUTHN_RP_ID'
+              name: 'SKRA_WEBAUTHN_RP_ID'
               value: webauthnRpId
             }
             {
-              name: 'BIFROST_DOCS_WEBAUTHN_ORIGIN'
+              name: 'SKRA_WEBAUTHN_ORIGIN'
               value: webauthnOrigin
             }
             {
-              name: 'BIFROST_DOCS_STORAGE_BACKEND'
+              name: 'SKRA_STORAGE_BACKEND'
               value: 'azure_blob'
             }
             {
-              name: 'BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_URL'
+              name: 'SKRA_AZURE_STORAGE_ACCOUNT_URL'
               value: storage.properties.primaryEndpoints.blob
             }
             {
-              name: 'BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_KEY'
+              name: 'SKRA_AZURE_STORAGE_ACCOUNT_KEY'
               secretRef: 'storage-account-key'
             }
             {
-              name: 'BIFROST_DOCS_AZURE_BLOB_CONTAINER'
+              name: 'SKRA_AZURE_BLOB_CONTAINER'
               value: attachmentsContainerName
             }
             {
@@ -339,8 +339,8 @@ resource initJob 'Microsoft.App/jobs@2024-03-01' = {
         }
       secrets: [
         {
-          name: 'bifrost-docs-secret-key'
-          value: bifrostDocsSecretKey
+          name: 'skra-secret-key'
+          value: skraSecretKey
         }
         {
           name: 'database-url'
@@ -372,19 +372,19 @@ resource initJob 'Microsoft.App/jobs@2024-03-01' = {
           }
           env: [
             {
-              name: 'BIFROST_DOCS_ENVIRONMENT'
+              name: 'SKRA_ENVIRONMENT'
               value: 'production'
             }
             {
-              name: 'BIFROST_DOCS_SECRET_KEY'
-              secretRef: 'bifrost-docs-secret-key'
+              name: 'SKRA_SECRET_KEY'
+              secretRef: 'skra-secret-key'
             }
             {
-              name: 'BIFROST_DOCS_DATABASE_URL'
+              name: 'SKRA_DATABASE_URL'
               secretRef: 'database-url'
             }
             {
-              name: 'BIFROST_DOCS_DATABASE_URL_SYNC'
+              name: 'SKRA_DATABASE_URL_SYNC'
               secretRef: 'database-url-sync'
             }
           ]

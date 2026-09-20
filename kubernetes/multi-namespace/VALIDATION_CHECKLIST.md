@@ -15,7 +15,7 @@
 - [ ] Verify: `kubectl get namespaces --show-labels`
 - [ ] Confirm all three namespaces exist with correct labels:
   - bifrost
-  - bifrost-docs
+  - skra
   - bifrost-platform
 
 ## Platform Infrastructure
@@ -30,15 +30,15 @@
 - [ ] Verify default deny policies exist:
   ```bash
   kubectl get networkpolicy -n bifrost
-  kubectl get networkpolicy -n bifrost-docs
+  kubectl get networkpolicy -n skra
   ```
 - [ ] Test cross-namespace connectivity (should fail without explicit allow)
 
-## Bifrost Docs Deployment
+## Skra Deployment
 
-- [ ] Secrets created in bifrost-docs namespace:
-  - bifrost-docs-secrets (database credentials, encryption keys)
-- [ ] ConfigMap created: bifrost-docs-config
+- [ ] Secrets created in skra namespace:
+  - skra-secrets (database credentials, encryption keys)
+- [ ] ConfigMap created: skra-config
 - [ ] Deployments running: api, client, worker
 - [ ] Services created and endpoints populated
 - [ ] Ingress configured with TLS
@@ -52,17 +52,17 @@
 
 ## Cross-Namespace Integration
 
-- [ ] ExternalName service exists in bifrost-docs pointing to bifrost-api
+- [ ] ExternalName service exists in skra pointing to bifrost-api
 - [ ] NetworkPolicy allows-docs-to-bifrost-api is applied in bifrost namespace
 - [ ] Test connectivity:
   ```bash
-  kubectl run debug -n bifrost-docs --rm -it --image=curlimages/curl -- \
-    curl http://external-bifrost-api.bifrost-docs.svc.cluster.local:8000/health
+  kubectl run debug -n skra --rm -it --image=curlimages/curl -- \
+    curl http://external-bifrost-api.skra.svc.cluster.local:8000/health
   ```
 
 ## Smoke Tests
 
-### Bifrost Docs
+### Skra
 
 - [ ] https://dev.docs.midtowntg.com loads without certificate errors
 - [ ] API health endpoint responds: https://dev.docs.midtowntg.com/api/health
@@ -76,7 +76,7 @@
 
 ### Integration
 
-- [ ] Docs can query Bifrost API (check integration features)
+- [ ] Skra can query Bifrost API (check integration features)
 - [ ] No 403/connection errors in logs from cross-namespace calls
 
 ## Monitoring & Observability
@@ -88,7 +88,7 @@
 
 ## Backup Verification
 
-- [ ] CronJob for bifrost-docs backup exists
+- [ ] CronJob for skra backup exists
 - [ ] Backup can be run manually and produces valid output
 - [ ] Restore procedure tested in non-production environment
 

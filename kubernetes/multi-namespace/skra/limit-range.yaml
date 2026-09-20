@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: LimitRange
 metadata:
-  name: bifrost-docs-limits
-  namespace: bifrost-docs
+  name: skra-limits
+  namespace: skra
 spec:
   limits:
     - default:

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Bifrost Docs API Dockerfile
+# Skra API Dockerfile
 # Multi-stage build for production
 
 FROM python:3.11-slim AS builder

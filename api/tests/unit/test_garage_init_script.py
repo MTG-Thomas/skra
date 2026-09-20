@@ -84,7 +84,7 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send(
                         200,
-                        [{"id": kid, "name": "bifrost-docs-key"} for kid in state.key_secrets],
+                        [{"id": kid, "name": "skra-key"} for kid in state.key_secrets],
                     )
                     return
                 if not state.key_endpoint:
@@ -105,13 +105,13 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                 if kid not in state.key_secrets:
                     self._send(400, {"code": "InvalidRequest", "message": "No such key"})
                 elif show != "true" or state.omit_secret:
-                    self._send(200, {"accessKeyId": kid, "name": "bifrost-docs-key"})
+                    self._send(200, {"accessKeyId": kid, "name": "skra-key"})
                 else:
                     self._send(
                         200,
                         {
                             "accessKeyId": kid,
-                            "name": "bifrost-docs-key",
+                            "name": "skra-key",
                             "secretAccessKey": state.key_secrets[kid],
                         },
                     )
@@ -119,7 +119,7 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                 keys = [
                     {
                         "accessKeyId": key_id,
-                        "name": "bifrost-docs-key",
+                        "name": "skra-key",
                         "permissions": perms,
                     }
                     for key_id, perms in state.grants.items()
@@ -128,7 +128,7 @@ def make_handler(state: StubState) -> type[BaseHTTPRequestHandler]:
                     200,
                     {
                         "id": BUCKET_ID,
-                        "globalAliases": ["bifrost-docs"],
+                        "globalAliases": ["skra"],
                         "keys": keys,
                         "objects": 0,
                     },

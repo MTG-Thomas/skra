@@ -1,4 +1,4 @@
-"""CLI module for IT Glue to BifrostDocs migration tool.
+"""CLI module for IT Glue to Skra migration tool.
 
 This module provides the command-line interface using Typer with two main commands:
 - preview: Scan export and generate a migration plan file
@@ -25,7 +25,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
 from rich.table import Table
 
-from itglue_migrate.api_client import APIError, BifrostDocsClient
+from itglue_migrate.api_client import APIError, SkraClient
 from itglue_migrate.attachments import AttachmentScanner, validate_attachments
 from itglue_migrate.csv_parser import CSVParser, CSVParserError, slugify_to_display_name
 from itglue_migrate.document_processor import DocumentProcessor
@@ -67,7 +67,7 @@ from itglue_migrate.warnings import ParsedData, Warning, WarningDetector, summar
 # Create Typer app
 app = typer.Typer(
     name="itglue-migrate",
-    help="IT Glue to BifrostDocs Migration Tool",
+    help="IT Glue to Skra Migration Tool",
     no_args_is_help=True,
 )
 
@@ -99,8 +99,8 @@ ApiUrlOption = Annotated[
     typer.Option(
         "--api-url",
         "-u",
-        help="BifrostDocs API URL (e.g., https://api.example.com)",
-        envvar="BIFROST_API_URL",
+        help="Skra API URL (e.g., https://api.example.com)",
+        envvar=["SKRA_API_URL", "BIFROST_API_URL"],
     ),
 ]
 ApiTokenOption = Annotated[
@@ -108,8 +108,8 @@ ApiTokenOption = Annotated[
     typer.Option(
         "--token",
         "-t",
-        help="BifrostDocs API authentication token",
-        envvar="BIFROST_API_TOKEN",
+        help="Skra API authentication token",
+        envvar=["SKRA_API_TOKEN", "BIFROST_API_TOKEN"],
     ),
 ]
 
@@ -166,10 +166,10 @@ async def _fetch_existing_organizations(
     api_url: str,
     token: str,
 ) -> list[dict[str, Any]]:
-    """Fetch existing organizations from the BifrostDocs API.
+    """Fetch existing organizations from the Skra API.
 
     Args:
-        api_url: Base URL of the BifrostDocs API.
+        api_url: Base URL of the Skra API.
         token: API authentication token.
 
     Returns:
@@ -179,7 +179,7 @@ async def _fetch_existing_organizations(
         typer.Exit: If API request fails.
     """
     try:
-        async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+        async with SkraClient(base_url=api_url, api_key=token) as client:
             return await client.list_organizations()
     except APIError as e:
         error_console.print(f"[red]Error:[/red] Failed to fetch organizations: {e}")
@@ -481,7 +481,7 @@ def _build_plan(
 
     Args:
         export_path: Path to the export directory.
-        api_url: BifrostDocs API URL.
+        api_url: Skra API URL.
         parsed: Parsed export data.
         org_mapping: Organization matching mapping.
         matcher_stats: Organization matcher statistics.
@@ -652,8 +652,8 @@ def preview(
         typer.Option(
             "--api-url",
             "-u",
-            help="BifrostDocs API URL (e.g., https://api.example.com)",
-            envvar="BIFROST_API_URL",
+            help="Skra API URL (e.g., https://api.example.com)",
+            envvar=["SKRA_API_URL", "BIFROST_API_URL"],
         ),
     ],
     token: Annotated[
@@ -661,8 +661,8 @@ def preview(
         typer.Option(
             "--token",
             "-t",
-            help="BifrostDocs API authentication token",
-            envvar="BIFROST_API_TOKEN",
+            help="Skra API authentication token",
+            envvar=["SKRA_API_TOKEN", "BIFROST_API_TOKEN"],
         ),
     ],
     output: Annotated[
@@ -920,14 +920,14 @@ async def _verify_api_connectivity(
     """Verify API connectivity by fetching organizations.
 
     Args:
-        api_url: Base URL of the BifrostDocs API.
+        api_url: Base URL of the Skra API.
         token: API authentication token.
 
     Returns:
         True if connectivity verified, False otherwise.
     """
     try:
-        async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+        async with SkraClient(base_url=api_url, api_key=token) as client:
             await client.list_organizations()
             return True
     except APIError:
@@ -935,7 +935,7 @@ async def _verify_api_connectivity(
 
 
 async def _migrate_organizations(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_orgs: list[dict[str, Any]],
     org_mapping: dict[str, dict[str, Any]],
     state: MigrationState,
@@ -946,7 +946,7 @@ async def _migrate_organizations(
     """Migrate organizations (create new ones, store mappings for existing).
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_orgs: List of parsed organizations from CSV.
         org_mapping: Organization mapping from plan (name -> status/uuid).
         state: Migration state for tracking progress.
@@ -1020,7 +1020,7 @@ async def _migrate_organizations(
 
 
 async def _migrate_locations(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_locations: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1032,7 +1032,7 @@ async def _migrate_locations(
     """Migrate locations.
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_locations: List of parsed locations from CSV.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1123,7 +1123,7 @@ async def _migrate_locations(
 
 
 async def _migrate_configuration_types(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_configs: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1132,7 +1132,7 @@ async def _migrate_configuration_types(
     """Migrate configuration types (extract unique types and create them).
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_configs: List of parsed configurations from CSV.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1197,7 +1197,7 @@ async def _migrate_configuration_types(
 
 
 async def _migrate_configurations(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_configs: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1209,7 +1209,7 @@ async def _migrate_configurations(
     """Migrate configurations.
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_configs: List of parsed configurations from CSV.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1313,7 +1313,7 @@ async def _migrate_configurations(
 
 
 async def _migrate_custom_asset_types(
-    client: BifrostDocsClient,
+    client: SkraClient,
     custom_asset_schemas: dict[str, dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1322,7 +1322,7 @@ async def _migrate_custom_asset_types(
     """Migrate custom asset types (create type definitions).
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         custom_asset_schemas: Custom asset type schemas from plan.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1463,7 +1463,7 @@ def _build_field_type_map(
 
 
 async def _migrate_custom_assets(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_custom_assets: dict[str, list[dict[str, Any]]],
     custom_asset_schemas: dict[str, dict[str, Any]],
     state: MigrationState,
@@ -1476,7 +1476,7 @@ async def _migrate_custom_assets(
     """Migrate custom assets.
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_custom_assets: Dict of asset type slug to list of assets.
         custom_asset_schemas: Dict of asset type slug to schema info.
         state: Migration state for tracking progress.
@@ -1657,7 +1657,7 @@ def _build_document_folder_map(
 
 
 async def _migrate_documents(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_docs: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1670,7 +1670,7 @@ async def _migrate_documents(
     """Migrate documents.
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_docs: List of parsed documents from CSV.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1815,7 +1815,7 @@ async def _migrate_documents(
 
 
 async def _migrate_passwords(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_passwords: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1827,7 +1827,7 @@ async def _migrate_passwords(
     """Migrate passwords.
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_passwords: List of parsed passwords from CSV.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -1921,7 +1921,7 @@ async def _migrate_passwords(
 
 
 async def _migrate_relationships(
-    client: BifrostDocsClient,
+    client: SkraClient,
     parsed_passwords: list[dict[str, Any]],
     state: MigrationState,
     reporter: Any,
@@ -1931,7 +1931,7 @@ async def _migrate_relationships(
     """Migrate relationships (embedded passwords -> configurations/assets).
 
     Args:
-        client: BifrostDocs API client.
+        client: Skra API client.
         parsed_passwords: List of parsed passwords from CSV (with resource links).
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -2044,7 +2044,7 @@ async def _execute_migration(
 
     Args:
         plan_data: Loaded plan JSON data.
-        api_url: BifrostDocs API URL.
+        api_url: Skra API URL.
         token: API authentication token.
         state: Migration state for tracking progress.
         reporter: Progress reporter.
@@ -2110,7 +2110,7 @@ async def _execute_migration(
     if target_org:
         target_org_names = {target_org}
 
-    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+    async with SkraClient(base_url=api_url, api_key=token) as client:
         # Create document processor for HTML processing (always needed)
         doc_processor = DocumentProcessor(client=client, export_path=export_path)
 
@@ -2301,8 +2301,8 @@ def run(
         typer.Option(
             "--api-url",
             "-u",
-            help="BifrostDocs API URL (overrides plan file)",
-            envvar="BIFROST_API_URL",
+            help="Skra API URL (overrides plan file)",
+            envvar=["SKRA_API_URL", "BIFROST_API_URL"],
         ),
     ] = None,
     token: Annotated[
@@ -2310,8 +2310,8 @@ def run(
         typer.Option(
             "--token",
             "-t",
-            help="BifrostDocs API authentication token",
-            envvar="BIFROST_API_TOKEN",
+            help="Skra API authentication token",
+            envvar=["SKRA_API_TOKEN", "BIFROST_API_TOKEN"],
         ),
     ] = None,
     state_file: Annotated[
@@ -2430,14 +2430,14 @@ def run(
     effective_api_url = api_url or plan_data.get("api_url")
     if not effective_api_url:
         error_console.print(
-            "[red]Error:[/red] No API URL specified. Use --api-url, set BIFROST_API_URL, or ensure plan file has api_url."
+            "[red]Error:[/red] No API URL specified. Use --api-url, set SKRA_API_URL (or legacy BIFROST_API_URL), or ensure plan file has api_url."
         )
         raise typer.Exit(1)
 
     # Validate token
     if not token:
         error_console.print(
-            "[red]Error:[/red] No API token specified. Use --token or set BIFROST_API_TOKEN."
+            "[red]Error:[/red] No API token specified. Use --token or set SKRA_API_TOKEN (or legacy BIFROST_API_TOKEN)."
         )
         raise typer.Exit(1)
 
@@ -2769,7 +2769,7 @@ async def _run_sync(
 
     Args:
         export_path: Path to IT Glue export directory.
-        api_url: BifrostDocs API URL.
+        api_url: Skra API URL.
         token: API authentication token.
         target_org: Organization name to sync (if not all).
         all_orgs: Whether to sync all organizations.
@@ -2822,7 +2822,7 @@ async def _run_sync(
         else None
     )
 
-    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+    async with SkraClient(base_url=api_url, api_key=token) as client:
         fetcher = StateFetcher(client)
 
         # First, get all organizations to resolve org name -> UUID mapping
@@ -2898,7 +2898,7 @@ async def _run_sync(
                             OrganizationReconciliation(
                                 name=org_name,
                                 itglue_id=org_itglue_id,
-                                bifrost_id=None,
+                                skra_id=None,
                                 dry_run=dry_run,
                                 entities=build_plan_counts(SyncPlan()),
                                 errors=[message],
@@ -3111,7 +3111,7 @@ async def _run_sync(
                     OrganizationReconciliation(
                         name=org_name,
                         itglue_id=org_itglue_id,
-                        bifrost_id=org_uuid,
+                        skra_id=org_uuid,
                         dry_run=dry_run,
                         entities=org_counts,
                         warnings=warnings,
@@ -3200,9 +3200,9 @@ def sync(
         ),
     ] = None,
 ) -> None:
-    """Sync IT Glue export data with existing BifrostDocs data.
+    """Sync IT Glue export data with existing Skra data.
 
-    This command compares the IT Glue export with existing data in BifrostDocs
+    This command compares the IT Glue export with existing data in Skra
     and creates only the missing entities. Unlike the 'run' command which uses
     a plan file and state tracking, 'sync' fetches current state from the API
     and diffs against the CSV export.
@@ -3344,7 +3344,7 @@ def _probe_allowed_origins(
     trust decision by the operator.
 
     Args:
-        api_url: BifrostDocs API URL whose origin is always allowed.
+        api_url: Skra API URL whose origin is always allowed.
         extra_hosts: Optional comma-separated URL entries with explicit scheme.
 
     Returns:
@@ -3815,7 +3815,7 @@ async def _run_verify(
         "organizations": [],
     }
 
-    async with BifrostDocsClient(base_url=api_url, api_key=token) as client:
+    async with SkraClient(base_url=api_url, api_key=token) as client:
         fetcher = StateFetcher(client)
         all_orgs_state = await fetcher.fetch_all_orgs()
 

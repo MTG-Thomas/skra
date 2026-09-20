@@ -1,7 +1,7 @@
 # Infrastructure & Hardening Assessment
 
 > Assessment Date: 2026-04-06
-> Target: Get Bifrost Docs production-ready before adding new features
+> Target: Get Skra production-ready before adding new features
 
 ---
 

@@ -1,4 +1,4 @@
-# Bifrost Docs API Test Dockerfile
+# Skra API Test Dockerfile
 # Includes dev dependencies for running tests
 
 FROM python:3.11-slim AS builder
@@ -28,15 +28,22 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user (mirrors production Dockerfile)
+RUN useradd --create-home --shell /bin/bash app
+
 # Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder --chown=app:app /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Set working directory
+# Set working directory (owned by app so test output is writable)
 WORKDIR /app
+RUN chown app:app /app
 
 # Copy application code
-COPY . .
+COPY --chown=app:app . .
+
+# Run tests as non-root user
+USER app
 
 # Default command
 CMD ["pytest", "tests/", "-v"]

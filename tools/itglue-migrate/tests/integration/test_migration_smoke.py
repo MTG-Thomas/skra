@@ -249,7 +249,7 @@ class TestCLICommands:
         result = runner.invoke(app, ["--help"])
         
         assert result.exit_code == 0, f"CLI help failed: {result.output}"
-        assert "IT Glue to BifrostDocs Migration Tool" in result.output
+        assert "IT Glue to Skra Migration Tool" in result.output
     
     def test_preview_command_validates_fixture(self):
         """Verify preview command can validate the fixture structure."""

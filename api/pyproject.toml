@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bifrost-docs"
+name = "skra"
 version = "1.0.0"
-description = "BifrostDocs Documentation Platform API"
+description = "Skra MSP Documentation Platform API"
 requires-python = ">=3.11"
 dependencies = [
     # Web Framework

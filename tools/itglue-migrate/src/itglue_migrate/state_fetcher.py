@@ -1,6 +1,6 @@
 """State fetcher - retrieves existing state from API.
 
-This module fetches all existing entities from the BifrostDocs API
+This module fetches all existing entities from the Skra API
 and builds lookup tables by metadata.itglue_id for comparison with
 CSV export data.
 """
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from itglue_migrate.api_client import BifrostDocsClient
+    from itglue_migrate.api_client import SkraClient
 
 
 @dataclass
@@ -53,7 +53,7 @@ class ExistingState:
 class StateFetcher:
     """Fetches existing state from API for comparison."""
 
-    def __init__(self, client: BifrostDocsClient) -> None:
+    def __init__(self, client: SkraClient) -> None:
         self.client = client
 
     async def fetch_all_orgs(self) -> ExistingState:

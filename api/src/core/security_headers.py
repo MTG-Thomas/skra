@@ -34,7 +34,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def add_security_headers_to_response(response: Response) -> Response:
-    """Apply Bifrost Docs security headers to a response object."""
+    """Apply Skra security headers to a response object."""
     settings = get_settings()
 
     # Prevent MIME type sniffing

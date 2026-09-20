@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Bifrost Docs - Environment Setup Script
+# Skra - Environment Setup Script
 # Generates secure secrets and configures the environment
 
 set -e
 
-echo "🚀 Bifrost Docs Setup"
+echo "🚀 Skra Setup"
 echo "===================="
 echo ""
 
@@ -33,18 +33,18 @@ generate_password() {
 }
 
 # Generate secrets
-BIFROST_DOCS_SECRET_KEY=$(generate_secret)
+SKRA_SECRET_KEY=$(generate_secret)
 POSTGRES_PASSWORD=$(generate_password)
 MINIO_ROOT_PASSWORD=$(generate_password)
 
 # Update .env with generated values
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS sed requires different syntax
-    sed -i '' "s|^BIFROST_DOCS_SECRET_KEY=.*|BIFROST_DOCS_SECRET_KEY=${BIFROST_DOCS_SECRET_KEY}|" .env
+    sed -i '' "s|^SKRA_SECRET_KEY=.*|SKRA_SECRET_KEY=${SKRA_SECRET_KEY}|" .env
     sed -i '' "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
     sed -i '' "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}|" .env
 else
-    sed -i "s|^BIFROST_DOCS_SECRET_KEY=.*|BIFROST_DOCS_SECRET_KEY=${BIFROST_DOCS_SECRET_KEY}|" .env
+    sed -i "s|^SKRA_SECRET_KEY=.*|SKRA_SECRET_KEY=${SKRA_SECRET_KEY}|" .env
     sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" .env
     sed -i "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}|" .env
 fi
@@ -78,13 +78,13 @@ fi
 
 # Update WebAuthn configuration
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s|^BIFROST_DOCS_WEBAUTHN_RP_ID=.*|BIFROST_DOCS_WEBAUTHN_RP_ID=${DOMAIN}|" .env
-    sed -i '' "s|^BIFROST_DOCS_WEBAUTHN_ORIGIN=.*|BIFROST_DOCS_WEBAUTHN_ORIGIN=${ORIGIN}|" .env
-    sed -i '' "s|^BIFROST_DOCS_CORS_ORIGINS=.*|BIFROST_DOCS_CORS_ORIGINS=${ORIGIN}|" .env
+    sed -i '' "s|^SKRA_WEBAUTHN_RP_ID=.*|SKRA_WEBAUTHN_RP_ID=${DOMAIN}|" .env
+    sed -i '' "s|^SKRA_WEBAUTHN_ORIGIN=.*|SKRA_WEBAUTHN_ORIGIN=${ORIGIN}|" .env
+    sed -i '' "s|^SKRA_CORS_ORIGINS=.*|SKRA_CORS_ORIGINS=${ORIGIN}|" .env
 else
-    sed -i "s|^BIFROST_DOCS_WEBAUTHN_RP_ID=.*|BIFROST_DOCS_WEBAUTHN_RP_ID=${DOMAIN}|" .env
-    sed -i "s|^BIFROST_DOCS_WEBAUTHN_ORIGIN=.*|BIFROST_DOCS_WEBAUTHN_ORIGIN=${ORIGIN}|" .env
-    sed -i "s|^BIFROST_DOCS_CORS_ORIGINS=.*|BIFROST_DOCS_CORS_ORIGINS=${ORIGIN}|" .env
+    sed -i "s|^SKRA_WEBAUTHN_RP_ID=.*|SKRA_WEBAUTHN_RP_ID=${DOMAIN}|" .env
+    sed -i "s|^SKRA_WEBAUTHN_ORIGIN=.*|SKRA_WEBAUTHN_ORIGIN=${ORIGIN}|" .env
+    sed -i "s|^SKRA_CORS_ORIGINS=.*|SKRA_CORS_ORIGINS=${ORIGIN}|" .env
 fi
 
 echo "✓ Configured WebAuthn for ${DOMAIN}"
@@ -100,9 +100,9 @@ read -p "Enter OpenAI API key (or press Enter to skip): " OPENAI_KEY
 
 if [ -n "$OPENAI_KEY" ]; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s|^BIFROST_DOCS_OPENAI_API_KEY=.*|BIFROST_DOCS_OPENAI_API_KEY=${OPENAI_KEY}|" .env
+        sed -i '' "s|^SKRA_OPENAI_API_KEY=.*|SKRA_OPENAI_API_KEY=${OPENAI_KEY}|" .env
     else
-        sed -i "s|^BIFROST_DOCS_OPENAI_API_KEY=.*|BIFROST_DOCS_OPENAI_API_KEY=${OPENAI_KEY}|" .env
+        sed -i "s|^SKRA_OPENAI_API_KEY=.*|SKRA_OPENAI_API_KEY=${OPENAI_KEY}|" .env
     fi
     echo "✓ Configured OpenAI API key"
 else

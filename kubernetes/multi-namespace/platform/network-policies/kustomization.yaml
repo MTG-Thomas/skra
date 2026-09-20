@@ -3,7 +3,7 @@
 
 resources:
   # Default deny policies (apply first)
-  - bifrost-docs-default-deny.yaml
+  - skra-default-deny.yaml
   - bifrost-default-deny.yaml
   # Allow ingress controller to reach apps
   - allow-ingress-to-docs.yaml

@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM Models for Bifrost Docs.
+"""SQLAlchemy ORM Models for Skra.
 
 Pure database models using SQLAlchemy 2.0 declarative style.
 These models define the database schema and relationships.

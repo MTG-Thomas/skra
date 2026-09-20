@@ -337,7 +337,7 @@ export function SetupPage() {
             </motion.div>
             <div className="space-y-1">
               <CardTitle className="text-2xl font-bold tracking-tight">
-                Welcome to Bifrost Docs
+                Welcome to Skra
               </CardTitle>
               <CardDescription className="text-base">
                 {mode === "choose" && "Create your admin account to get started"}

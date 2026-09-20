@@ -1,10 +1,10 @@
 # Development environment overlay
 # Uses smaller resource allocations and local/shared infrastructure
 
-namespace: bifrost-docs
+namespace: skra
 
 resources:
-  - ../bifrost-docs/
+  - ../skra/
   - ../platform/network-policies/
 
 # Development-specific patches
@@ -12,21 +12,21 @@ patches:
   # Reduce replica count
   - target:
       kind: Deployment
-      name: bifrost-docs-api
+      name: skra-api
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: Deployment
-      name: bifrost-docs-client
+      name: skra-client
     patch: |
       - op: replace
         path: /spec/replicas
         value: 1
   - target:
       kind: Deployment
-      name: bifrost-docs-worker
+      name: skra-worker
     patch: |
       - op: replace
         path: /spec/replicas
@@ -34,7 +34,7 @@ patches:
   # Relax resource limits for dev
   - target:
       kind: ResourceQuota
-      name: bifrost-docs-quota
+      name: skra-quota
     patch: |
       - op: replace
         path: /spec/hard/limits.cpu
@@ -44,9 +44,9 @@ patches:
         value: 4Gi
 
 configMapGenerator:
-  - name: bifrost-docs-config
+  - name: skra-config
     behavior: merge
     literals:
-      - BIFROST_DOCS_ENVIRONMENT=development
-      - BIFROST_DOCS_DEBUG=true
-      - BIFROST_API_URL=http://external-bifrost-api.bifrost-docs.svc.cluster.local:8000
+      - SKRA_ENVIRONMENT=development
+      - SKRA_DEBUG=true
+      - BIFROST_API_URL=http://external-bifrost-api.skra.svc.cluster.local:8000

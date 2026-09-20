@@ -1,15 +1,15 @@
 ---
-name: bifrost-docs-frontend-patterns
+name: skra-frontend-patterns
 description: |
-  React + TanStack Query patterns for Bifrost Docs frontend (bifrost-docs repo).
+  React + TanStack Query patterns for Skra frontend (skra repo).
   Use when adding new pages, hooks, DataTables, forms, or UI components.
   Triggers: "add hook", "create page", "DataTable", "inline edit",
   "add sidebar", "entity detail page", "form component", "React Query".
 ---
 
-# Bifrost Docs Frontend Patterns
+# Skra Frontend Patterns
 
-Reusable patterns for Bifrost Docs frontend (MTG-Thomas/bifrost-docs repo) using React, TypeScript, TanStack Query, and shadcn/ui.
+Reusable patterns for Skra frontend (MTG-Thomas/skra repo) using React, TypeScript, TanStack Query, and shadcn/ui.
 
 ## Quick Start: Add New Entity Page
 
@@ -609,5 +609,5 @@ import { ChecklistDetailPage } from "@/pages/checklists/ChecklistDetailPage";
 
 ## Related
 
-- Repo: `MTG-Thomas/bifrost-docs`
+- Repo: `MTG-Thomas/skra`
 - Stack: React, TypeScript, TanStack Query, shadcn/ui, TailwindCSS

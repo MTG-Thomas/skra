@@ -22,7 +22,7 @@ from src.core.pubsub import (
     WebSocketMessage,
     get_connection_manager,
 )
-from src.core.security import decode_token, hash_api_key
+from src.core.security import decode_token, hash_api_key, is_api_key_token
 from src.models.enums import UserRole
 
 logger = logging.getLogger(__name__)
@@ -93,8 +93,8 @@ async def authenticate_websocket(websocket: WebSocket) -> UserPrincipal | None:
         logger.warning("Rejected cookie-authenticated WebSocket with disallowed origin.")
         return None
 
-    # Check if it's an API key (starts with bifrost_docs)
-    if token.startswith("bifrost_docs"):
+    # API keys use the current 'skra_' prefix; pre-rename 'bifrost_docs' keys kept working
+    if is_api_key_token(token):
         async with get_db_context() as db:
             key_hash = hash_api_key(token)
             stmt = select(APIKey).where(APIKey.key_hash == key_hash)

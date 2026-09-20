@@ -1,7 +1,7 @@
-"""Entity importers for IT Glue to BifrostDocs migration.
+"""Entity importers for IT Glue to Skra migration.
 
 This module contains the logic to import entities from parsed CSV data
-into BifrostDocs via the API.
+into Skra via the API.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from itglue_migrate.api_client import APIError, BifrostDocsClient
+from itglue_migrate.api_client import APIError, SkraClient
 from itglue_migrate.csv_parser import slugify_to_display_name
 from itglue_migrate.document_processor import DocumentProcessor
 from itglue_migrate.progress import Phase, ProgressReporter, SimpleProgressReporter
@@ -159,7 +159,7 @@ def _build_document_folder_map(
 
 
 class EntityImporter:
-    """Imports entities from IT Glue export data into BifrostDocs.
+    """Imports entities from IT Glue export data into Skra.
 
     Handles all entity types: organizations, locations, configuration types,
     configurations, custom asset types, custom assets, documents, and passwords.
@@ -168,7 +168,7 @@ class EntityImporter:
     resume capability, and the ProgressReporter for displaying progress to users.
 
     Example:
-        >>> async with BifrostDocsClient(base_url, api_key) as client:
+        >>> async with SkraClient(base_url, api_key) as client:
         ...     state = MigrationState(export_path="/path/to/export")
         ...     reporter = ProgressReporter()
         ...     importer = EntityImporter(client, state, reporter)
@@ -177,14 +177,14 @@ class EntityImporter:
 
     def __init__(
         self,
-        client: BifrostDocsClient,
+        client: SkraClient,
         state: MigrationState,
         reporter: ProgressReporter | SimpleProgressReporter,
     ) -> None:
         """Initialize the entity importer.
 
         Args:
-            client: BifrostDocs API client instance.
+            client: Skra API client instance.
             state: Migration state for tracking progress.
             reporter: Progress reporter for displaying progress.
         """
@@ -202,13 +202,13 @@ class EntityImporter:
         self._custom_asset_type_cache: dict[str, str] = {}
 
     def _get_org_uuid(self, itglue_org_id: str) -> str | None:
-        """Get the BifrostDocs UUID for an IT Glue organization ID.
+        """Get the Skra UUID for an IT Glue organization ID.
 
         Args:
             itglue_org_id: The IT Glue organization ID.
 
         Returns:
-            The BifrostDocs UUID if found, None otherwise.
+            The Skra UUID if found, None otherwise.
         """
         return self.state.id_mapper.get("organization", itglue_org_id)
 
@@ -232,8 +232,8 @@ class EntityImporter:
                             "itglue_id": "123",
                             "itglue_name": "Acme Inc",
                             "status": "matched" | "create",
-                            "bifrost_id": "uuid-abc",  # if matched
-                            "bifrost_name": "Acme Inc"  # if matched
+                            "skra_id": "uuid-abc",  # if matched
+                            "skra_name": "Acme Inc"  # if matched
                         }
                     ]
                 }
@@ -276,25 +276,26 @@ class EntityImporter:
 
                 if status == "matched":
                     # Just add to ID map without creating
-                    bifrost_id = mapping.get("bifrost_id")
-                    if bifrost_id:
+                    # (accept legacy "bifrost_id" key from pre-rename plan files)
+                    skra_id = mapping.get("skra_id") or mapping.get("bifrost_id")
+                    if skra_id:
                         # Add both by IT Glue ID and by name (CSVs reference orgs by name)
-                        self.state.id_mapper.add("organization", itglue_id, bifrost_id)
-                        self.state.id_mapper.add("organization", org_name, bifrost_id)
+                        self.state.id_mapper.add("organization", itglue_id, skra_id)
+                        self.state.id_mapper.add("organization", org_name, skra_id)
                         self.state.mark_completed(Phase.ORGANIZATIONS, itglue_id)
                         self.reporter.update_progress(succeeded=1)
                         logger.debug(
-                            f"Matched organization '{org_name}' to existing BifrostDocs org {bifrost_id}"
+                            f"Matched organization '{org_name}' to existing Skra org {skra_id}"
                         )
                     else:
                         self.reporter.warning(
-                            f"Matched organization '{org_name}' has no bifrost_id"
+                            f"Matched organization '{org_name}' has no skra_id"
                         )
                         self.reporter.update_progress(failed=1)
                         self.state.mark_failed(
                             Phase.ORGANIZATIONS,
                             itglue_id,
-                            "Matched organization missing bifrost_id",
+                            "Matched organization missing skra_id",
                         )
                 else:
                     # Create new organization
@@ -328,15 +329,15 @@ class EntityImporter:
                         metadata=metadata,
                     )
 
-                    bifrost_id = result.get("id")
-                    if bifrost_id:
+                    skra_id = result.get("id")
+                    if skra_id:
                         # Add both by IT Glue ID and by name (CSVs reference orgs by name)
-                        self.state.id_mapper.add("organization", itglue_id, bifrost_id)
-                        self.state.id_mapper.add("organization", org_name, bifrost_id)
+                        self.state.id_mapper.add("organization", itglue_id, skra_id)
+                        self.state.id_mapper.add("organization", org_name, skra_id)
                         self.state.mark_completed(Phase.ORGANIZATIONS, itglue_id)
                         self.reporter.update_progress(succeeded=1)
                         created_count += 1
-                        logger.info(f"Created organization '{org_name}' -> {bifrost_id}")
+                        logger.info(f"Created organization '{org_name}' -> {skra_id}")
                     else:
                         raise APIError(
                             500, f"API response missing 'id' for organization '{org_name}'"
@@ -415,13 +416,13 @@ class EntityImporter:
                     metadata=metadata,
                 )
 
-                bifrost_id = result.get("id")
-                if bifrost_id:
-                    self.state.id_mapper.add("location", itglue_id, bifrost_id)
+                skra_id = result.get("id")
+                if skra_id:
+                    self.state.id_mapper.add("location", itglue_id, skra_id)
                     self.state.mark_completed(Phase.LOCATIONS, itglue_id)
                     self.reporter.update_progress(succeeded=1)
                     created_count += 1
-                    logger.debug(f"Created location '{location_name}' -> {bifrost_id}")
+                    logger.debug(f"Created location '{location_name}' -> {skra_id}")
                 else:
                     raise APIError(
                         500, f"API response missing 'id' for location '{location_name}'"
@@ -500,15 +501,15 @@ class EntityImporter:
 
                 # Create new configuration type
                 result = await self.client.create_configuration_type(name=type_name)
-                bifrost_id = result.get("id")
+                skra_id = result.get("id")
 
-                if bifrost_id:
-                    self._config_type_cache[type_name.lower()] = bifrost_id
-                    self.state.id_mapper.add("configuration_type", type_id, bifrost_id)
+                if skra_id:
+                    self._config_type_cache[type_name.lower()] = skra_id
+                    self.state.id_mapper.add("configuration_type", type_id, skra_id)
                     self.state.mark_completed(Phase.CONFIGURATION_TYPES, type_id)
                     self.reporter.update_progress(succeeded=1)
                     created_count += 1
-                    logger.info(f"Created configuration type '{type_name}' -> {bifrost_id}")
+                    logger.info(f"Created configuration type '{type_name}' -> {skra_id}")
                 else:
                     raise APIError(
                         500,
@@ -653,14 +654,14 @@ class EntityImporter:
                     is_enabled=is_enabled,
                 )
 
-                bifrost_id = result.get("id")
-                if bifrost_id:
-                    self.state.id_mapper.add("configuration", itglue_id, bifrost_id)
+                skra_id = result.get("id")
+                if skra_id:
+                    self.state.id_mapper.add("configuration", itglue_id, skra_id)
                     self.state.mark_completed(Phase.CONFIGURATIONS, itglue_id)
                     disabled_count = 1 if not is_enabled else 0
                     self.reporter.update_progress(succeeded=1, disabled=disabled_count)
                     created_count += 1
-                    logger.debug(f"Created configuration '{config_name}' -> {bifrost_id}")
+                    logger.debug(f"Created configuration '{config_name}' -> {skra_id}")
                 else:
                     raise APIError(
                         500,
@@ -749,7 +750,7 @@ class EntityImporter:
                     field_name = field_def.get("name", f"field_{idx}")
                     field_type = field_def.get("field_type", "text")
 
-                    # Map IT Glue field types to BifrostDocs field types
+                    # Map IT Glue field types to Skra field types
                     type_mapping = {
                         "text": "text",
                         "textbox": "textbox",
@@ -798,15 +799,15 @@ class EntityImporter:
                     display_field_key=display_field_key,
                 )
 
-                bifrost_id = result.get("id")
-                if bifrost_id:
-                    self._custom_asset_type_cache[type_slug] = bifrost_id
-                    self.state.id_mapper.add("custom_asset_type", type_id, bifrost_id)
+                skra_id = result.get("id")
+                if skra_id:
+                    self._custom_asset_type_cache[type_slug] = skra_id
+                    self.state.id_mapper.add("custom_asset_type", type_id, skra_id)
                     self.state.mark_completed(Phase.CUSTOM_ASSET_TYPES, type_id)
                     self.reporter.update_progress(succeeded=1)
                     created_count += 1
                     logger.info(
-                        f"Created custom asset type '{display_name}' -> {bifrost_id}"
+                        f"Created custom asset type '{display_name}' -> {skra_id}"
                     )
                 else:
                     raise APIError(
@@ -960,15 +961,15 @@ class EntityImporter:
                         is_enabled=is_enabled,
                     )
 
-                    bifrost_id = result.get("id")
-                    if bifrost_id:
-                        self.state.id_mapper.add("custom_asset", itglue_id, bifrost_id)
+                    skra_id = result.get("id")
+                    if skra_id:
+                        self.state.id_mapper.add("custom_asset", itglue_id, skra_id)
                         self.state.mark_completed(Phase.CUSTOM_ASSETS, itglue_id)
                         disabled_count = 1 if not is_enabled else 0
                         self.reporter.update_progress(succeeded=1, disabled=disabled_count)
                         created_count += 1
                         logger.debug(
-                            f"Created custom asset '{display_name}' -> {bifrost_id}"
+                            f"Created custom asset '{display_name}' -> {skra_id}"
                         )
                     else:
                         raise APIError(
@@ -1113,14 +1114,14 @@ class EntityImporter:
                     is_enabled=is_enabled,
                 )
 
-                bifrost_id = result.get("id")
-                if bifrost_id:
-                    self.state.id_mapper.add("document", itglue_id, bifrost_id)
+                skra_id = result.get("id")
+                if skra_id:
+                    self.state.id_mapper.add("document", itglue_id, skra_id)
                     self.state.mark_completed(Phase.DOCUMENTS, itglue_id)
                     disabled_count = 1 if not is_enabled else 0
                     self.reporter.update_progress(succeeded=1, disabled=disabled_count)
                     created_count += 1
-                    logger.debug(f"Created document '{doc_name}' -> {bifrost_id}")
+                    logger.debug(f"Created document '{doc_name}' -> {skra_id}")
                 else:
                     raise APIError(
                         500, f"API response missing 'id' for document '{doc_name}'"
@@ -1220,14 +1221,14 @@ class EntityImporter:
                     is_enabled=is_enabled,
                 )
 
-                bifrost_id = result.get("id")
-                if bifrost_id:
-                    self.state.id_mapper.add("password", itglue_id, bifrost_id)
+                skra_id = result.get("id")
+                if skra_id:
+                    self.state.id_mapper.add("password", itglue_id, skra_id)
                     self.state.mark_completed(Phase.PASSWORDS, itglue_id)
                     disabled_count = 1 if not is_enabled else 0
                     self.reporter.update_progress(succeeded=1, disabled=disabled_count)
                     created_count += 1
-                    logger.debug(f"Created password '{pwd_name}' -> {bifrost_id}")
+                    logger.debug(f"Created password '{pwd_name}' -> {skra_id}")
                 else:
                     raise APIError(
                         500, f"API response missing 'id' for password '{pwd_name}'"

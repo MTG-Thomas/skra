@@ -46,9 +46,9 @@ kubectl apply -k /tmp/bifrost/k8s/overlays/production/ -n bifrost
 
 ## Cross-Namespace Communication
 
-Bifrost API is reachable from `bifrost-docs` namespace at:
+Bifrost API is reachable from `skra` namespace at:
 ```
 bifrost-api.bifrost.svc.cluster.local:8000
 ```
 
-See `../bifrost-docs/external-service-bifrost.yaml` for the ExternalName service that simplifies this.
+See `../skra/external-service-bifrost.yaml` for the ExternalName service that simplifies this.

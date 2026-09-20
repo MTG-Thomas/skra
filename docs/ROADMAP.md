@@ -1,8 +1,8 @@
-# Bifrost Docs Roadmap
+# Skra Roadmap
 
 > Date: 2026-04-06
 > Scope: Product roadmap derived from `PLAN.md`, docs in `docs/plans/`, and the current GitHub remotes.
-> Goal: Make Bifrost Docs the documentation system of record for Midtown, replace IT Glue, reach Hudu-compatible coverage where it strengthens the product, and integrate natively with `MTG-Thomas/bifrost` for shared integration infrastructure.
+> Goal: Make Skra the documentation system of record for Midtown, replace IT Glue, reach Hudu-compatible coverage where it strengthens the product, and integrate natively with `MTG-Thomas/bifrost` for shared integration infrastructure.
 
 ---
 
@@ -42,7 +42,7 @@ The product is already beyond MVP.
 
 ### Objective
 
-Make Midtown able to migrate from IT Glue and run daily operations in Bifrost Docs with confidence.
+Make Midtown able to migrate from IT Glue and run daily operations in Skra with confidence.
 
 ### Priorities
 
@@ -103,7 +103,7 @@ Reach Hudu-compatible feature coverage for documentation-centric MSP workflows w
 
 ### Exit Criteria
 
-- A Hudu-familiar MSP can adopt Bifrost Docs without major documentation workflow regressions.
+- A Hudu-familiar MSP can adopt Skra without major documentation workflow regressions.
 - The parity story is strong enough for demos, pilots, and side-by-side comparisons.
 
 ---
@@ -112,7 +112,7 @@ Reach Hudu-compatible feature coverage for documentation-centric MSP workflows w
 
 ### Objective
 
-Make Bifrost Docs the documentation destination for data gathered and normalized by `MTG-Thomas/bifrost`.
+Make Skra the documentation destination for data gathered and normalized by `MTG-Thomas/bifrost`.
 
 ### Priorities
 
@@ -125,7 +125,7 @@ Make Bifrost Docs the documentation destination for data gathered and normalized
 ### Example Split of Responsibilities
 
 - **Bifrost Integrations**: connector code, auth flows, secret management, polling/webhooks, normalized integration outputs.
-- **Bifrost Docs**: schema mapping, entity matching, relationship creation, user review, surfacing sync state, and documentation-aware enrichment.
+- **Skra**: schema mapping, entity matching, relationship creation, user review, surfacing sync state, and documentation-aware enrichment.
 
 ### Exit Criteria
 
@@ -202,7 +202,7 @@ These should run alongside the phases rather than waiting for a single milestone
 
 ## Immediate Next Steps
 
-1. Turn this roadmap into GitHub epics and milestone labels in `MTG-Thomas/bifrost-docs`.
+1. Turn this roadmap into GitHub epics and milestone labels in `MTG-Thomas/skra`.
 2. Create a parallel architecture epic in `MTG-Thomas/bifrost` for the Docs integration contract.
 3. Sequence the first implementation tranche around Midtown migration hardening, test closure, and production readiness.
 4. Use the resulting epics as the planning source of truth instead of continuing to rely only on historical implementation plans.

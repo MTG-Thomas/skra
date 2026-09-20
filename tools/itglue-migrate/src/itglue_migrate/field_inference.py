@@ -1,6 +1,6 @@
 """Field type inference for custom asset type schema generation.
 
-This module analyzes CSV column data to infer the appropriate BifrostDocs
+This module analyzes CSV column data to infer the appropriate Skra
 field types for custom asset type schemas.
 """
 
@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Literal, TypedDict
 
-# Supported field types in BifrostDocs API
+# Supported field types in Skra API
 FieldType = Literal[
     "text",
     "textbox",
@@ -220,7 +220,7 @@ class FieldInferrer:
     """Infer field types from CSV column data.
 
     Analyzes values across all rows in a column to determine the best
-    BifrostDocs field type for custom asset type schemas.
+    Skra field type for custom asset type schemas.
 
     Example:
         >>> inferrer = FieldInferrer()

@@ -60,7 +60,7 @@ class FileStorageService:
         if not self.settings.s3_configured:
             raise RuntimeError(
                 "S3 storage not configured. "
-                "Set BIFROST_DOCS_S3_ACCESS_KEY and BIFROST_DOCS_S3_SECRET_KEY environment variables."
+                "Set SKRA_S3_ACCESS_KEY and SKRA_S3_SECRET_KEY environment variables."
             )
 
         from aiobotocore.config import AioConfig
@@ -80,8 +80,8 @@ class FileStorageService:
     def _require_azure_blob_configured(self) -> None:
         if not self.settings.azure_blob_configured:
             raise RuntimeError(
-                "Azure Blob storage not configured. Set BIFROST_DOCS_AZURE_STORAGE_CONNECTION_STRING "
-                "or BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_URL and BIFROST_DOCS_AZURE_STORAGE_ACCOUNT_KEY."
+                "Azure Blob storage not configured. Set SKRA_AZURE_STORAGE_CONNECTION_STRING "
+                "or SKRA_AZURE_STORAGE_ACCOUNT_URL and SKRA_AZURE_STORAGE_ACCOUNT_KEY."
             )
 
     def _get_blob_service_client(self) -> Any:

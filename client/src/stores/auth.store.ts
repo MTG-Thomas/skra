@@ -86,7 +86,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "bifrost-docs-auth",
+      name: "skra-auth",
       storage: createJSONStorage(() => localStorage),
       // Version 1 drops persisted Bearer tokens (issue #90). The migrate
       // step purges any pre-cookie state so stale tokens cannot linger.

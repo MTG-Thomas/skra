@@ -1,19 +1,19 @@
 #!/bin/bash
-# Build script for Bifrost Docs Docker images
-# Builds production images for bifrost-docs-api and bifrost-docs-client
+# Build script for Skra Docker images
+# Builds production images for skra-api and skra-client
 # Supports multi-architecture builds (AMD64 + ARM64)
 
 set -e
 
 # Defaults
 TAG="latest"
-REGISTRY="jackmusick"
+REGISTRY="ghcr.io/mtg-thomas"
 PUSH=false
 BUILD_API=true
 BUILD_CLIENT=true
 NO_CACHE=""
 PLATFORMS="linux/amd64,linux/arm64"
-BUILDER_NAME="bifrost-docs-builder"
+BUILDER_NAME="skra-builder"
 
 # Colors for output
 RED='\033[0;31m'
@@ -24,11 +24,11 @@ NC='\033[0m' # No Color
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Build production Docker images for Bifrost Docs"
+    echo "Build production Docker images for Skra"
     echo ""
     echo "Options:"
     echo "  -t, --tag TAG        Version tag (default: latest)"
-    echo "  -r, --registry REG   Docker registry/namespace (default: jackmusick)"
+    echo "  -r, --registry REG   Docker registry/namespace (default: ghcr.io/mtg-thomas)"
     echo "  -p, --push           Push images to registry after building"
     echo "  --api-only           Build only the API image"
     echo "  --client-only        Build only the client image"
@@ -100,7 +100,7 @@ done
 # Change to script directory (repository root)
 cd "$(dirname "$0")"
 
-echo -e "${GREEN}Bifrost Docs Docker Build${NC}"
+echo -e "${GREEN}Skra Docker Build${NC}"
 echo "Registry: $REGISTRY"
 echo "Tag: $TAG"
 echo "Platforms: $PLATFORMS"
@@ -146,7 +146,7 @@ fi
 
 # Build API image
 if [ "$BUILD_API" = true ]; then
-    API_IMAGE="$REGISTRY/bifrost-docs-api:$TAG"
+    API_IMAGE="$REGISTRY/skra-api:$TAG"
     echo -e "${YELLOW}Building API image: $API_IMAGE${NC}"
     echo "  Platforms: $PLATFORMS"
 
@@ -163,7 +163,7 @@ fi
 
 # Build Client image
 if [ "$BUILD_CLIENT" = true ]; then
-    CLIENT_IMAGE="$REGISTRY/bifrost-docs-client:$TAG"
+    CLIENT_IMAGE="$REGISTRY/skra-client:$TAG"
     echo -e "${YELLOW}Building Client image: $CLIENT_IMAGE${NC}"
     echo "  Platforms: $PLATFORMS"
 
@@ -183,10 +183,10 @@ echo ""
 echo -e "${GREEN}Build complete!${NC}"
 
 if [ "$BUILD_API" = true ]; then
-    echo "  API:    $REGISTRY/bifrost-docs-api:$TAG"
+    echo "  API:    $REGISTRY/skra-api:$TAG"
 fi
 if [ "$BUILD_CLIENT" = true ]; then
-    echo "  Client: $REGISTRY/bifrost-docs-client:$TAG"
+    echo "  Client: $REGISTRY/skra-client:$TAG"
 fi
 
 if [ "$PUSH" = true ]; then

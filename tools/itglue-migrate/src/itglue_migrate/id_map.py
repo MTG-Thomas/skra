@@ -1,4 +1,4 @@
-"""ID mapping storage for IT Glue to BifrostDocs migration.
+"""ID mapping storage for IT Glue to Skra migration.
 
 This module provides persistent storage for mapping IT Glue IDs to new UUIDs,
 supporting migration resume and relationship tracking across entity types.

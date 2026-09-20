@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Init container script for Bifrost Docs.
+Init container script for Skra.
 
 Runs database migrations before API starts.
 
@@ -86,7 +86,7 @@ def main() -> int:
         Exit code (0 for success, 1 for failure)
     """
     logger.info("=" * 60)
-    logger.info("Bifrost Docs Init Container Starting")
+    logger.info("Skra Init Container Starting")
     logger.info("=" * 60)
 
     logger.info("")

@@ -4,4 +4,4 @@
 resources:
   - bifrost-platform.yaml
   - bifrost.yaml
-  - bifrost-docs.yaml
+  - skra.yaml

@@ -1,1 +1,1 @@
-"""Bifrost Docs API."""
+"""Skra API."""

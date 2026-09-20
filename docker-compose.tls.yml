@@ -19,4 +19,4 @@ services:
       - ./config/nginx.production.conf:/etc/nginx/conf.d/default.conf:ro
     environment:
       # Force nginx to use production config
-      - NGINX_HOST=${BIFROST_DOCS_DOMAIN:-docs.example.com}
+      - NGINX_HOST=${SKRA_DOMAIN:-docs.example.com}

@@ -1,7 +1,7 @@
 """
-BifrostDocs API Client for IT Glue Migration.
+Skra API Client for IT Glue Migration.
 
-Async HTTP client for interacting with the BifrostDocs API.
+Async HTTP client for interacting with the Skra API.
 Uses httpx for async HTTP requests with bearer token authentication.
 """
 
@@ -47,9 +47,9 @@ class APIError(Exception):
         super().__init__(f"API Error {status_code}: {message}")
 
 
-class BifrostDocsClient:
+class SkraClient:
     """
-    Async client for the BifrostDocs API.
+    Async client for the Skra API.
 
     Provides methods for all entity types used in IT Glue migration:
     - Organizations
@@ -69,10 +69,10 @@ class BifrostDocsClient:
         timeout: float = 30.0,
     ):
         """
-        Initialize the BifrostDocs API client.
+        Initialize the Skra API client.
 
         Args:
-            base_url: Base URL of the BifrostDocs API (e.g., "https://api.bifrostdocs.com")
+            base_url: Base URL of the Skra API (e.g., "https://api.example.com")
             api_key: API key for authentication
             timeout: Request timeout in seconds (default: 30.0)
         """
@@ -81,7 +81,7 @@ class BifrostDocsClient:
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "BifrostDocsClient":
+    async def __aenter__(self) -> "SkraClient":
         """Enter async context manager."""
         await self._ensure_client()
         return self

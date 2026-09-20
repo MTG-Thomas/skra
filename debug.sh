@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bifrost Docs - Development Environment Launcher
+# Skra - Development Environment Launcher
 # Starts the full stack with hot reload enabled
 
 set -e
@@ -12,7 +12,7 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-echo "🚀 Starting Bifrost Docs development environment..."
+echo "🚀 Starting Skra development environment..."
 echo ""
 echo "Services:"
 echo "  • PostgreSQL (pgvector) - localhost:5433"

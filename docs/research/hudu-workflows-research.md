@@ -2,15 +2,15 @@
 
 > **Issue:** #18  
 > **Date:** 2026-04-06  
-> **Goal:** Identify high-value Hudu workflows for Bifrost Docs parity
+> **Goal:** Identify high-value Hudu workflows for Skra parity
 
 ---
 
 ## Executive Summary
 
-This research compares Bifrost Docs' current capabilities with Hudu MSP documentation workflows to identify **selective parity targets** - features that materially improve technician efficiency without cloning Hudu wholesale.
+This research compares Skra's current capabilities with Hudu MSP documentation workflows to identify **selective parity targets** - features that materially improve technician efficiency without cloning Hudu wholesale.
 
-**Key Finding:** Bifrost Docs has strong foundation parity (entities, relationships, custom assets, search) but gaps exist in **technician quality-of-life features** that make daily work faster.
+**Key Finding:** Skra has strong foundation parity (entities, relationships, custom assets, search) but gaps exist in **technician quality-of-life features** that make daily work faster.
 
 ---
 
@@ -80,7 +80,7 @@ This research compares Bifrost Docs' current capabilities with Hudu MSP document
 
 ---
 
-## 2. Bifrost Docs Current State
+## 2. Skra Current State
 
 ### 2.1 ✅ Strong Parity (Production Ready)
 
@@ -132,21 +132,21 @@ This research compares Bifrost Docs' current capabilities with Hudu MSP document
 
 #### 1. **Favorites/Pins** 
 **Hudu Pattern:** Star items, appear in quick-access sidebar  
-**Bifrost Docs Gap:** No personal bookmarking system  
+**Skra Gap:** No personal bookmarking system  
 **Implementation:** Add `favorites` table (user_id + entity_type + entity_id)  
 **Effort:** Small (2-4 hours)  
 **Value:** High - technicians save 5-10 clicks per frequent item
 
 #### 2. **SOPs / Checklists**
 **Hudu Pattern:** Step-by-step procedures with checkboxes  
-**Bifrost Docs Gap:** Documents are static, no interactive checklists  
+**Skra Gap:** Documents are static, no interactive checklists  
 **Implementation:** Add `Checklist` entity type or checklist field type for custom assets  
 **Effort:** Medium (6-10 hours)  
 **Value:** High - repeatable processes, onboarding consistency
 
 #### 3. **Quick Create**
 **Hudu Pattern:** "+" button in nav for instant record creation  
-**Bifrost Docs Gap:** Must navigate to entity page first  
+**Skra Gap:** Must navigate to entity page first  
 **Implementation:** Add quick-create modal to main nav  
 **Effort:** Small (2-4 hours)  
 **Value:** Medium - faster data entry
@@ -155,21 +155,21 @@ This research compares Bifrost Docs' current capabilities with Hudu MSP document
 
 #### 4. **Homepage Widgets**
 **Hudu Pattern:** Personalized dashboard with counts, alerts, recent  
-**Bifrost Docs Gap:** Global view exists but limited customization  
+**Skra Gap:** Global view exists but limited customization  
 **Implementation:** Expand GlobalPage with configurable widgets  
 **Effort:** Medium (4-8 hours)  
 **Value:** Medium - at-a-glance status for managers
 
 #### 5. **Expiration Alerts**
 **Hudu Pattern:** Track domains, SSL, warranties with email alerts  
-**Bifrost Docs Gap:** No date-based alerting system  
+**Skra Gap:** No date-based alerting system  
 **Implementation:** Add `expiration_date` field type + alert job  
 **Effort:** Medium (6-10 hours)  
 **Value:** Medium - prevent service lapses
 
 #### 6. **Related Items Enhancement**
 **Hudu Pattern:** Rich relationship browser with filtering  
-**Bifrost Docs Gap:** Relationships exist but navigation is basic  
+**Skra Gap:** Relationships exist but navigation is basic  
 **Implementation:** Add relationship explorer panel to entity views  
 **Effort:** Medium (4-8 hours)  
 **Value:** Medium - full context faster
@@ -295,7 +295,7 @@ cron(check_expiring_items, hour=8, minute=0)  # Daily at 8am
 
 ### Against Hudu
 
-| Differentiator | Bifrost Docs Advantage |
+| Differentiator | Skra Advantage |
 |----------------|----------------------|
 | **Open Source** | Self-hosted, no per-seat pricing |
 | **Bifrost Integration** | Native sync with integration platform |

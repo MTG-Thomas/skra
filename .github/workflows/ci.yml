@@ -18,14 +18,14 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
-  API_IMAGE_NAME: mtg-thomas/bifrost-docs-api
-  CLIENT_IMAGE_NAME: mtg-thomas/bifrost-docs-client
+  API_IMAGE_NAME: mtg-thomas/skra-api
+  CLIENT_IMAGE_NAME: mtg-thomas/skra-client
   AZURE_NEON_PROOF_CLIENT_ID: 8b0fa37b-e02c-425e-8db7-a8494fbbc6fd
   AZURE_NEON_PROOF_TENANT_ID: a3599b15-c39c-4b41-a219-7e24dd5b5190
   AZURE_NEON_PROOF_SUBSCRIPTION_ID: a1d63b24-1202-4bfa-9086-cf32d1d352fc
-  AZURE_NEON_PROOF_RESOURCE_GROUP: rg-bifrost-docs-neon-dev
-  AZURE_NEON_PROOF_CONTAINER_APP: ca-bifrost-docs-api-neon-dev
-  AZURE_NEON_PROOF_API_URL: https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
+  AZURE_NEON_PROOF_RESOURCE_GROUP: rg-skra-neon-dev
+  AZURE_NEON_PROOF_CONTAINER_APP: ca-skra-api-neon-dev
+  AZURE_NEON_PROOF_API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
 
 jobs:
   # =============================================================================
@@ -41,9 +41,9 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: bifrost_docs
+          POSTGRES_USER: skra
           POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: bifrost_docs_test
+          POSTGRES_DB: skra_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -88,11 +88,11 @@ jobs:
 
       - name: Run pytest (unit tests)
         env:
-          BIFROST_DOCS_SECRET_KEY: test-secret-key-must-be-at-least-32-characters-long
-          BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
-          BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
-          BIFROST_DOCS_REDIS_URL: redis://localhost:6379/0
-          BIFROST_DOCS_ENVIRONMENT: testing
+          SKRA_SECRET_KEY: test-secret-key-must-be-at-least-32-characters-long
+          SKRA_DATABASE_URL: postgresql+asyncpg://skra:testpassword@localhost:5432/skra_test
+          SKRA_DATABASE_URL_SYNC: postgresql://skra:testpassword@localhost:5432/skra_test
+          SKRA_REDIS_URL: redis://localhost:6379/0
+          SKRA_ENVIRONMENT: testing
         run: |
           pytest tests/unit -v --cov=src --cov-report=xml --cov-report=term
 
@@ -166,12 +166,12 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
-          VITE_API_URL: https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
+          VITE_API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_BIFROST_DOCS_NEON_DEV }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_SKRA_NEON_DEV }}
           action: upload
           app_location: client/dist
           skip_app_build: true
@@ -393,13 +393,13 @@ jobs:
       - name: Wait for client healthy
         run: |
           for i in $(seq 1 60); do
-            status=$(docker inspect bifrost-docs-test-client --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
+            status=$(docker inspect skra-test-client --format '{{.State.Health.Status}}' 2>/dev/null || echo missing)
             echo "attempt $i: $status"
             [ "$status" = healthy ] && exit 0
             sleep 10
           done
           echo "client never became healthy"
-          docker logs bifrost-docs-test-client 2>&1 | tail -n 20
+          docker logs skra-test-client 2>&1 | tail -n 20
           exit 1
 
       - name: Probe app and API proxy through Vite
@@ -473,7 +473,16 @@ jobs:
 
       - name: Run auth smoke suite (chromium)
         run: |
-          docker run --rm --network bifrost-docs-test_default \
+          # Derive the compose network name from the live project config so
+          # a project rename (e.g. bifrost-docs-test -> skra-test) cannot
+          # rot this step again; fail loudly if the network is absent.
+          TEST_NETWORK="$(docker compose -f docker-compose.test.yml config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"] + "_default")')"
+          if [ -z "$(docker network ls --filter "name=^${TEST_NETWORK}$" --format '{{.Name}}')" ]; then
+            echo "expected test network ${TEST_NETWORK} not found" >&2
+            docker network ls
+            exit 1
+          fi
+          docker run --rm --network "${TEST_NETWORK}" \
             -v "${{ github.workspace }}/client:/work" -w /work \
             -e E2E_BASE_URL=http://client:3000 \
             mcr.microsoft.com/playwright:v1.59.1-noble \

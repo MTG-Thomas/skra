@@ -41,7 +41,7 @@ export const useOrganizationStore = create<OrganizationState>()(
       },
     }),
     {
-      name: "bifrost-docs-organization",
+      name: "skra-organization",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         currentOrg: state.currentOrg,

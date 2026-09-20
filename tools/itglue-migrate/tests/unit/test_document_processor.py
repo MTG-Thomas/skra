@@ -36,7 +36,7 @@ def temp_dir() -> Generator[Path, None, None]:
 
 @pytest.fixture
 def mock_client() -> Any:
-    """Create a mock BifrostDocs client."""
+    """Create a mock Skra client."""
     client: Any = MagicMock()
     client.upload_document_image = AsyncMock(
         return_value={

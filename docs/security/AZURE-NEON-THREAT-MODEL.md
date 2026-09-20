@@ -2,14 +2,14 @@
 
 ## Summary
 
-This document captures the security model for the Bifrost Docs Azure + Neon proof deployment. It is proof/staging infrastructure, not a production cutover target.
+This document captures the security model for the Skra Azure + Neon proof deployment. It is proof/staging infrastructure, not a production cutover target.
 
 ## Architecture
 
 - Azure Static Web Apps serves the React client at `https://azure-docs.midtowntg.com`.
 - Entra sign-in is the outer access gate for the Static Web App and is restricted to the Midtown tenant.
 - Azure Container Apps runs the FastAPI API container.
-- Bifrost Docs application auth still enforces JWT, cookie, API-key, role, and object-level authorization behind the Entra gate.
+- Skra application auth still enforces JWT, cookie, API-key, role, and object-level authorization behind the Entra gate.
 - Neon hosts Postgres with application metadata, passwords, documents, search index records, and entity state.
 - Azure Blob Storage stores attachment/export binary content; binary data should not be stored in Neon.
 - GHCR stores API/client images built by GitHub Actions.
@@ -46,7 +46,7 @@ This document captures the security model for the Bifrost Docs Azure + Neon proo
 ## Current Controls
 
 - The frontend is tenant-gated by Entra before users reach the React app.
-- The API still requires Bifrost Docs auth for protected endpoints.
+- The API still requires Skra auth for protected endpoints.
 - Security headers include HSTS, CSP, X-Frame-Options, X-Content-Type-Options, no-store cache controls, and CORP.
 - ZAP baseline scanning is explicitly scoped to Midtown-owned proof endpoints.
 - Authenticated ZAP API scanning uses a low-privilege proof API key from the `azure-neon-proof` GitHub environment.

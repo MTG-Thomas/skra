@@ -14,10 +14,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Configuration
-SOURCE_BUCKET="${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}"
-SOURCE_ENDPOINT="${BIFROST_DOCS_S3_ENDPOINT:-http://localhost:3900}"
-BACKUP_BUCKET="${BIFROST_DOCS_BACKUP_BUCKET:-bifrost-docs-backup}"
-BACKUP_ENDPOINT="${BIFROST_DOCS_BACKUP_ENDPOINT:-$SOURCE_ENDPOINT}"
+SOURCE_BUCKET="${SKRA_S3_BUCKET:-skra}"
+SOURCE_ENDPOINT="${SKRA_S3_ENDPOINT:-http://localhost:3900}"
+BACKUP_BUCKET="${SKRA_BACKUP_BUCKET:-skra-backup}"
+BACKUP_ENDPOINT="${SKRA_BACKUP_ENDPOINT:-$SOURCE_ENDPOINT}"
 BACKUP_PREFIX="attachments/$(date +%Y-%m-%d)"
 
 # Colors
@@ -70,10 +70,10 @@ Options:
     --help, -h      Show this help message
 
 Environment Variables:
-    BIFROST_DOCS_S3_BUCKET         Source bucket (default: bifrost-docs)
-    BIFROST_DOCS_S3_ENDPOINT       Source S3 endpoint
-    BIFROST_DOCS_BACKUP_BUCKET     Backup bucket (default: bifrost-docs-backup)
-    BIFROST_DOCS_BACKUP_ENDPOINT   Backup S3 endpoint
+    SKRA_S3_BUCKET         Source bucket (default: skra)
+    SKRA_S3_ENDPOINT       Source S3 endpoint
+    SKRA_BACKUP_BUCKET     Backup bucket (default: skra-backup)
+    SKRA_BACKUP_ENDPOINT   Backup S3 endpoint
 
 Examples:
     # Full backup

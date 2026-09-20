@@ -6,8 +6,8 @@ This guide explains how to use the seeded migration fixture for testing and rehe
 
 ### Prerequisites
 
-1. Bifrost Docs API running locally or in a test environment
-2. Valid API token for the Bifrost Docs API
+1. Skra API running locally or in a test environment
+2. Valid API token for the Skra API
 3. Migration tool installed: `cd tools/itglue-migrate && pip install -e ".[dev]"`
 
 ### Run Rehearsal Migration
@@ -17,36 +17,36 @@ This guide explains how to use the seeded migration fixture for testing and rehe
 cd tools/itglue-migrate
 
 # Set your API credentials
-export BIFROST_API_URL="http://localhost:8080"
-export BIFROST_TOKEN="your-api-token-here"
+export SKRA_API_URL="http://localhost:8080"
+export SKRA_TOKEN="your-api-token-here"
 
 # 1. Preview the migration
 python -m itglue_migrate.cli preview \
     --export ../../tests/fixtures/minimal-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --output /tmp/test-migration-plan.json
 
 # 2. Run in dry-run mode first
 python -m itglue_migrate.cli run \
     --export ../../tests/fixtures/minimal-export \
     --plan /tmp/test-migration-plan.json \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --dry-run
 
 # 3. If dry-run looks good, run for real
 python -m itglue_migrate.cli run \
     --export ../../tests/fixtures/minimal-export \
     --plan /tmp/test-migration-plan.json \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN
 
 # 4. For API-state reconciliation rehearsals, run sync with a report artifact
 python -m itglue_migrate.cli sync \
     --export-path ../../tests/fixtures/minimal-export \
-    --api-url $BIFROST_API_URL \
-    --token $BIFROST_TOKEN \
+    --api-url $SKRA_API_URL \
+    --token $SKRA_TOKEN \
     --all \
     --dry-run \
     --reconciliation-output /tmp/test-reconciliation-report.json
@@ -96,7 +96,7 @@ python -m itglue_migrate.cli run --export ../../tests/fixtures/minimal-export --
 
 Before running a real customer migration, validate your setup:
 
-1. Deploy Bifrost Docs to a test environment
+1. Deploy Skra to a test environment
 2. Run the fixture migration against it
 3. Verify entities appear correctly in the UI
 4. Check logs for any errors
@@ -250,7 +250,7 @@ Check that `organizations.csv` exists and has valid data with `id` and `name` co
 
 Verify your API URL and token:
 ```bash
-curl -H "Authorization: Bearer $BIFROST_TOKEN" $BIFROST_API_URL/api/health
+curl -H "Authorization: Bearer $SKRA_TOKEN" $SKRA_API_URL/api/health
 ```
 
 ## Related Documentation

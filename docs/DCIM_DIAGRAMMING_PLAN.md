@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation adds comprehensive DCIM (Data Center Infrastructure Management) and diagramming capabilities to Bifrost Docs, enabling:
+This implementation adds comprehensive DCIM (Data Center Infrastructure Management) and diagramming capabilities to Skra, enabling:
 
 1. **Full rack/infrastructure tracking** - U-positions, power, cables
 2. **Network topology diagrams** - Auto-generated from live data
@@ -97,7 +97,7 @@ block-beta
 
 **Mapping:**
 ```
-NinjaOne              → Bifrost
+NinjaOne              → Skra
 ---------------------|------------------
 systemName           → Configuration.name
 deviceClass          → Configuration.configuration_type
@@ -122,7 +122,7 @@ siteName             → Location matching
 
 **Mapping:**
 ```
-Meraki                → Bifrost
+Meraki                → Skra
 ---------------------|------------------
 networks[]           → Location matching
 devices[].serial     → Configuration.external_id
@@ -372,7 +372,7 @@ flowchart LR
 
 ## Benefits over IT Glue
 
-| Feature | IT Glue | Bifrost DCIM |
+| Feature | IT Glue | Skra DCIM |
 |---------|---------|--------------|
 | Rack elevations | Image uploads | Interactive SVG |
 | Network diagrams | Draw.io embed | Auto-generated |

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/MTG-Thomas/bifrost-docs.git}"
+REPO_URL="${REPO_URL:-https://github.com/MTG-Thomas/skra.git}"
 BRANCH="${BRANCH:-main}"
 DEPLOY_SHA="${DEPLOY_SHA:?DEPLOY_SHA is required}"
 DEPLOY_SHA_SHORT="${DEPLOY_SHA_SHORT:-${DEPLOY_SHA:0:7}}"
-DEPLOY_ROOT="${DEPLOY_ROOT:-/home/thomas/deploy/bifrost-docs-main}"
-LEGACY_WORKTREE="${LEGACY_WORKTREE:-/home/thomas/workspace/bifrost-docs}"
+DEPLOY_ROOT="${DEPLOY_ROOT:-/home/thomas/deploy/skra-main}"
+LEGACY_WORKTREE="${LEGACY_WORKTREE:-/home/thomas/workspace/skra}"
 HEALTH_URL="${HEALTH_URL:-https://dev.docs.midtowntg.com/health}"
-COMPOSE_PROJECT="${COMPOSE_PROJECT:-bifrost-docs-dev}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-skra-dev}"
 COMPOSE_FILES=(
   -p "${COMPOSE_PROJECT}"
   -f docker-compose.yml
@@ -16,8 +16,8 @@ COMPOSE_FILES=(
   -f docker-compose.ssl.yml
 )
 
-API_IMAGE="${BIFROST_DOCS_API_IMAGE:-ghcr.io/mtg-thomas/bifrost-docs-api:${DEPLOY_SHA_SHORT}}"
-CLIENT_IMAGE="${BIFROST_DOCS_CLIENT_IMAGE:-ghcr.io/mtg-thomas/bifrost-docs-client:${DEPLOY_SHA_SHORT}}"
+API_IMAGE="${SKRA_API_IMAGE:-ghcr.io/mtg-thomas/skra-api:${DEPLOY_SHA_SHORT}}"
+CLIENT_IMAGE="${SKRA_CLIENT_IMAGE:-ghcr.io/mtg-thomas/skra-client:${DEPLOY_SHA_SHORT}}"
 
 mkdir -p "$(dirname "${DEPLOY_ROOT}")"
 
@@ -40,8 +40,8 @@ if [ -f "${LEGACY_WORKTREE}/config/garage.toml" ]; then
   cp "${LEGACY_WORKTREE}/config/garage.toml" config/garage.toml
 fi
 
-export BIFROST_DOCS_API_IMAGE="${API_IMAGE}"
-export BIFROST_DOCS_CLIENT_IMAGE="${CLIENT_IMAGE}"
+export SKRA_API_IMAGE="${API_IMAGE}"
+export SKRA_CLIENT_IMAGE="${CLIENT_IMAGE}"
 
 docker compose "${COMPOSE_FILES[@]}" pull init api worker client
 docker compose "${COMPOSE_FILES[@]}" up -d --remove-orphans

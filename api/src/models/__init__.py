@@ -1,4 +1,4 @@
-"""Bifrost Docs Models.
+"""Skra Models.
 
 ORM models (database tables):
     from src.models import Organization, User

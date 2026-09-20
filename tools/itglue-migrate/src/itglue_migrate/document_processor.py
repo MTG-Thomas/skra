@@ -1,7 +1,7 @@
 """Document processor for IT Glue migration.
 
 This module handles document HTML transformation and image uploads,
-converting IT Glue document HTML to use stable BifrostDocs image URLs.
+converting IT Glue document HTML to use stable Skra image URLs.
 
 Export structure expected:
     documents/
@@ -23,7 +23,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from itglue_migrate.api_client import APIError, BifrostDocsClient
+from itglue_migrate.api_client import APIError, SkraClient
 from itglue_migrate.attachments import DOC_FOLDER_PATTERN, AttachmentScanner
 from itglue_migrate.state import MigrationState
 
@@ -148,7 +148,7 @@ class DocumentProcessor:
     3. Transforming HTML to use new stable image URLs
 
     Example:
-        >>> async with BifrostDocsClient(base_url, api_key) as client:
+        >>> async with SkraClient(base_url, api_key) as client:
         ...     processor = DocumentProcessor(client, Path("/path/to/export"))
         ...     html, warnings = await processor.process_document(
         ...         {"id": "12345", "name": "Network Diagram"},
@@ -156,11 +156,11 @@ class DocumentProcessor:
         ...     )
     """
 
-    def __init__(self, client: BifrostDocsClient, export_path: Path) -> None:
+    def __init__(self, client: SkraClient, export_path: Path) -> None:
         """Initialize the document processor.
 
         Args:
-            client: BifrostDocs API client for uploading images.
+            client: Skra API client for uploading images.
             export_path: Path to the IT Glue export directory.
         """
         self.client = client
@@ -747,7 +747,7 @@ class DocumentProcessor:
         state: MigrationState | None = None,
         known_custom_asset_types: set[str] | None = None,
     ) -> int:
-        """Upload all attachments for an entity to BifrostDocs.
+        """Upload all attachments for an entity to Skra.
 
         Finds attachments in the export attachments/{entity_type}/{entity_id}/
         folder and uploads each one via the presigned URL flow.
@@ -762,7 +762,7 @@ class DocumentProcessor:
         Returns:
             Count of successfully uploaded attachments.
         """
-        # Map IT Glue entity types to BifrostDocs entity types
+        # Map IT Glue entity types to Skra entity types
         # Use three-tier mapping: standard types -> known custom assets -> unknown
         entity_type_mapping = {
             "configurations": "configuration",

@@ -26,4 +26,4 @@ api_bind_addr = "0.0.0.0:3900"
 api_bind_addr = "0.0.0.0:3903"
 # Development token — CHANGE IN PRODUCTION
 # Generate a real one with: openssl rand -hex 32
-admin_token = "bifrost-docs-dev-admin-token"
+admin_token = "skra-dev-admin-token"

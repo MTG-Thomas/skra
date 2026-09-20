@@ -36,15 +36,15 @@ async def prometheus_metrics(db: DbSession) -> str:
     metrics = []
 
     # Application info
-    metrics.append("# HELP bifrost_docs_info Application information")
-    metrics.append("# TYPE bifrost_docs_info gauge")
-    metrics.append('bifrost_docs_info{version="1.0.0"} 1')
+    metrics.append("# HELP skra_info Application information")
+    metrics.append("# TYPE skra_info gauge")
+    metrics.append('skra_info{version="1.0.0"} 1')
 
     # Uptime (simulated - in production track actual start time)
     metrics.append("")
-    metrics.append("# HELP bifrost_docs_uptime_seconds Application uptime")
-    metrics.append("# TYPE bifrost_docs_uptime_seconds counter")
-    metrics.append("bifrost_docs_uptime_seconds 1")
+    metrics.append("# HELP skra_uptime_seconds Application uptime")
+    metrics.append("# TYPE skra_uptime_seconds counter")
+    metrics.append("skra_uptime_seconds 1")
 
     # Database connection status
     db_healthy = True
@@ -54,9 +54,9 @@ async def prometheus_metrics(db: DbSession) -> str:
         db_healthy = False
 
     metrics.append("")
-    metrics.append("# HELP bifrost_docs_database_connected Database connection status")
-    metrics.append("# TYPE bifrost_docs_database_connected gauge")
-    metrics.append(f"bifrost_docs_database_connected {1 if db_healthy else 0}")
+    metrics.append("# HELP skra_database_connected Database connection status")
+    metrics.append("# TYPE skra_database_connected gauge")
+    metrics.append(f"skra_database_connected {1 if db_healthy else 0}")
 
     # User counts
     try:
@@ -66,17 +66,17 @@ async def prometheus_metrics(db: DbSession) -> str:
         user_count = 0
 
     metrics.append("")
-    metrics.append("# HELP bifrost_docs_users_total Total number of users")
-    metrics.append("# TYPE bifrost_docs_users_total gauge")
-    metrics.append(f"bifrost_docs_users_total {user_count}")
+    metrics.append("# HELP skra_users_total Total number of users")
+    metrics.append("# TYPE skra_users_total gauge")
+    metrics.append(f"skra_users_total {user_count}")
 
     # Request metrics (if tracking enabled)
     global _request_count, _request_duration_total
     if _request_count > 0:
         metrics.append("")
-        metrics.append("# HELP bifrost_docs_requests_total Total requests")
-        metrics.append("# TYPE bifrost_docs_requests_total counter")
-        metrics.append(f"bifrost_docs_requests_total {_request_count}")
+        metrics.append("# HELP skra_requests_total Total requests")
+        metrics.append("# TYPE skra_requests_total counter")
+        metrics.append(f"skra_requests_total {_request_count}")
 
     return "\n".join(metrics)
 

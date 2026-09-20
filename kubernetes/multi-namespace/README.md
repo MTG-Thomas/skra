@@ -1,6 +1,6 @@
 # Multi-Namespace Deployment Architecture
 
-This directory contains Kubernetes manifests for running **Bifrost** (integration platform) and **Bifrost Docs** (documentation platform) in separate namespaces within the same cluster.
+This directory contains Kubernetes manifests for running **Bifrost** (integration platform) and **Skra** (documentation platform) in separate namespaces within the same cluster.
 
 ## Architecture Overview
 
@@ -19,7 +19,7 @@ This directory contains Kubernetes manifests for running **Bifrost** (integratio
 │  └─────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌─────────────────────────┐  ┌─────────────────────────┐  │
-│  │ Namespace: bifrost      │  │ Namespace: bifrost-docs │  │
+│  │ Namespace: bifrost      │  │ Namespace: skra │  │
 │  │                          │  │                          │  │
 │  │ • API Deployment         │  │ • API Deployment         │  │
 │  │ • Worker Deployment      │  │ • Worker Deployment      │  │
@@ -51,7 +51,7 @@ kubernetes/
 │   ├── namespaces/                        # Namespace definitions
 │   │   ├── bifrost-platform.yaml
 │   │   ├── bifrost.yaml
-│   │   └── bifrost-docs.yaml
+│   │   └── skra.yaml
 │   ├── platform/                          # Shared infrastructure
 │   │   ├── ingress-controller/
 │   │   ├── cert-manager/
@@ -65,7 +65,7 @@ kubernetes/
 │   │   ├── postgres/
 │   │   ├── redis/
 │   │   └── rabbitmq/
-│   ├── bifrost-docs/                      # Bifrost Docs app
+│   ├── skra/                      # Skra app
 │   │   ├── kustomization.yaml
 │   │   ├── namespace.yaml
 │   │   ├── api/
@@ -98,8 +98,8 @@ kubectl apply -f multi-namespace/platform/
 ### 3. Deploy Applications (Independent Order)
 
 ```bash
-# Deploy Bifrost Docs
-kubectl apply -k multi-namespace/bifrost-docs/
+# Deploy Skra
+kubectl apply -k multi-namespace/skra/
 
 # Deploy Bifrost (separate, can be done in any order)
 kubectl apply -k multi-namespace/bifrost/
@@ -116,14 +116,14 @@ Services in different namespaces are accessible via:
 
 Example:
 - Bifrost API from Docs: `bifrost-api.bifrost.svc.cluster.local:8000`
-- Docs API from Bifrost: `bifrost-docs-api.bifrost-docs.svc.cluster.local:8000`
+- Skra API from Bifrost: `skra-api.skra.svc.cluster.local:8000`
 
 ### Network Policies
 
 By default, pods can communicate across namespaces. Network policies are included to:
 
 1. **Deny all cross-namespace traffic by default**
-2. **Allow specific egress from Docs to Bifrost API** (for integration features)
+2. **Allow specific egress from Skra to Bifrost API** (for integration features)
 3. **Allow ingress controller to reach both apps**
 4. **Block everything else**
 
@@ -144,7 +144,7 @@ Each namespace should have its own:
 Each namespace has resource quotas to prevent one app from starving the other:
 
 ```yaml
-# bifrost-docs namespace
+# skra namespace
 spec:
   hard:
     requests.cpu: "4"
@@ -161,22 +161,22 @@ spec:
 Both namespaces reference secrets from a central vault (Azure Key Vault, AWS Secrets Manager, HashiCorp Vault):
 
 ```yaml
-# bifrost-docs namespace
+# skra namespace
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: bifrost-docs-secrets
-  namespace: bifrost-docs
+  name: skra-secrets
+  namespace: skra
 spec:
   secretStoreRef:
     name: azure-keyvault-backend
     kind: ClusterSecretStore  # Shared across namespaces
   target:
-    name: bifrost-docs-secrets
+    name: skra-secrets
   data:
     - secretKey: DATABASE_URL
       remoteRef:
-        key: bifrost-docs-db-url
+        key: skra-db-url
 ```
 
 ### Option 2: Namespace-Scoped Secrets
@@ -216,12 +216,12 @@ spec:
         - bifrost.example.com
       secretName: bifrost-tls
 
-# bifrost-docs ingress  
+# skra ingress  
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: bifrost-docs
-  namespace: bifrost-docs
+  name: skra
+  namespace: skra
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
@@ -234,13 +234,13 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: bifrost-docs-client
+                name: skra-client
                 port:
                   number: 80
   tls:
     - hosts:
         - dev.docs.midtowntg.com
-      secretName: bifrost-docs-tls
+      secretName: skra-tls
 ```
 
 ## Monitoring and Observability
@@ -267,19 +267,19 @@ spec:
     - port: metrics
       path: /metrics
 
-# ServiceMonitor for bifrost-docs
+# ServiceMonitor for skra
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: bifrost-docs-metrics
+  name: skra-metrics
   namespace: bifrost-platform
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/part-of: bifrost-docs
+      app.kubernetes.io/part-of: skra
   namespaceSelector:
     matchNames:
-      - bifrost-docs
+      - skra
   endpoints:
     - port: metrics
       path: /metrics
@@ -290,12 +290,12 @@ spec:
 Each namespace has independent backup Jobs/CronJobs:
 
 ```yaml
-# bifrost-docs backup
+# skra backup
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: bifrost-docs-backup
-  namespace: bifrost-docs
+  name: skra-backup
+  namespace: skra
 spec:
   schedule: "0 2 * * *"
   jobTemplate:
@@ -308,10 +308,10 @@ spec:
               command:
                 - pg_dump
                 - -h
-                - bifrost-docs-postgres
+                - skra-postgres
                 - -U
-                - bifrost_docs
-                - bifrost_docs
+                - skra
+                - skra
           restartPolicy: OnFailure
 ```
 
@@ -320,8 +320,8 @@ spec:
 ### Check Cross-Namespace Connectivity
 
 ```bash
-# From a pod in bifrost-docs namespace, test Bifrost API
-kubectl run debug -n bifrost-docs --rm -it --image=curlimages/curl -- /bin/sh
+# From a pod in skra namespace, test Bifrost API
+kubectl run debug -n skra --rm -it --image=curlimages/curl -- /bin/sh
 curl http://bifrost-api.bifrost.svc.cluster.local:8000/health
 ```
 
@@ -329,7 +329,7 @@ curl http://bifrost-api.bifrost.svc.cluster.local:8000/health
 
 ```bash
 # Check if traffic is being blocked
-kubectl describe networkpolicy -n bifrost-docs
+kubectl describe networkpolicy -n skra
 kubectl describe networkpolicy -n bifrost
 ```
 
@@ -337,9 +337,9 @@ kubectl describe networkpolicy -n bifrost
 
 ```bash
 kubectl top pods -n bifrost
-kubectl top pods -n bifrost-docs
+kubectl top pods -n skra
 kubectl describe resourcequota -n bifrost
-kubectl describe resourcequota -n bifrost-docs
+kubectl describe resourcequota -n skra
 ```
 
 ## Migration Path from Single Namespace

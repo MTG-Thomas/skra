@@ -24,9 +24,9 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: bifrost_docs
+          POSTGRES_USER: skra
           POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: bifrost_docs_test
+          POSTGRES_DB: skra_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -76,11 +76,11 @@ jobs:
         if: env.SONAR_TOKEN != ''
         working-directory: ./api
         env:
-          BIFROST_DOCS_SECRET_KEY: test-secret-key-000000000000000000000000
-          BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
-          BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:testpassword@localhost:5432/bifrost_docs_test
-          BIFROST_DOCS_REDIS_URL: redis://localhost:6379/0
-          BIFROST_DOCS_ENVIRONMENT: testing
+          SKRA_SECRET_KEY: test-secret-key-must-be-at-least-32-characters-long
+          SKRA_DATABASE_URL: postgresql+asyncpg://skra:testpassword@localhost:5432/skra_test
+          SKRA_DATABASE_URL_SYNC: postgresql://skra:testpassword@localhost:5432/skra_test
+          SKRA_REDIS_URL: redis://localhost:6379/0
+          SKRA_ENVIRONMENT: testing
         run: |
           pip install --upgrade pip
           pip install -e ".[dev]"

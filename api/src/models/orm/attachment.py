@@ -1,7 +1,7 @@
 """
 Attachment ORM model.
 
-Represents file attachments linked to various entities in Bifrost Docs.
+Represents file attachments linked to various entities in Skra.
 """
 
 from datetime import UTC, datetime

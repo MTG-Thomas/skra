@@ -1,7 +1,7 @@
-# Bifrost Docs Docker Stack - Isolated Test Environment
+# Skra Docker Stack - Isolated Test Environment
 #
 # This compose file creates a completely isolated test environment with:
-# - Separate container names (bifrost-docs-test-*)
+# - Separate container names (skra-test-*)
 # - NO exposed ports (all communication via Docker network)
 # - Fresh database for each test run
 # - PgBouncer for connection pooling (matches production)
@@ -13,23 +13,23 @@
 #   ./test.sh                          # Run unit/integration tests
 #   ./test.sh tests/unit/ -v           # Run only unit tests
 
-name: bifrost-docs-test
+name: skra-test
 
 services:
   # PostgreSQL Database (Test) - with pgvector extension
   # Uses an isolated test volume so the production/dev database volume is never reused.
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: bifrost-docs-test-postgres
+    container_name: skra-test-postgres
     environment:
-      POSTGRES_DB: bifrost_docs_test
-      POSTGRES_USER: bifrost_docs
-      POSTGRES_PASSWORD: bifrost_docstest
+      POSTGRES_DB: skra_test
+      POSTGRES_USER: skra
+      POSTGRES_PASSWORD: skratest
     # No ports exposed - all access via Docker network
     volumes:
-      - bifrost_docstest_postgres_data:/var/lib/postgresql/data
+      - skratest_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bifrost_docs -d bifrost_docs_test"]
+      test: ["CMD-SHELL", "pg_isready -U skra -d skra_test"]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -38,13 +38,13 @@ services:
   # All services connect through PgBouncer, matching production architecture
   pgbouncer:
     image: edoburu/pgbouncer:latest
-    container_name: bifrost-docs-test-pgbouncer
+    container_name: skra-test-pgbouncer
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: bifrost_docs_test
-      DB_USER: bifrost_docs
-      DB_PASSWORD: bifrost_docstest
+      DB_NAME: skra_test
+      DB_USER: skra
+      DB_PASSWORD: skratest
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 500
       DEFAULT_POOL_SIZE: 10
@@ -56,7 +56,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "bifrost_docs"]
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "skra"]
       interval: 2s
       timeout: 5s
       retries: 10
@@ -64,7 +64,7 @@ services:
   # Redis (Test)
   redis:
     image: redis:7-alpine
-    container_name: bifrost-docs-test-redis
+    container_name: skra-test-redis
     command: redis-server
     # No ports exposed - all access via Docker network
     healthcheck:
@@ -78,13 +78,13 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.test
-    container_name: bifrost-docs-test-init
+    container_name: skra-test-init
     environment:
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_REDIS_URL: redis://redis:6379/0
-      BIFROST_DOCS_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
-      BIFROST_DOCS_ENVIRONMENT: testing
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_REDIS_URL: redis://redis:6379/0
+      SKRA_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
+      SKRA_ENVIRONMENT: testing
     volumes:
       - ./api/src:/app/src:ro
       - ./api/alembic:/app/alembic:ro
@@ -102,14 +102,14 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: bifrost-docs-test-api
+    container_name: skra-test-api
     environment:
       # Database via PgBouncer (matches production architecture)
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_REDIS_URL: redis://redis:6379/0
-      BIFROST_DOCS_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
-      BIFROST_DOCS_ENVIRONMENT: testing
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_REDIS_URL: redis://redis:6379/0
+      SKRA_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
+      SKRA_ENVIRONMENT: testing
     # No ports exposed - all access via Docker network (test-runner connects to api:8000)
     volumes:
       - ./api/src:/app/src:ro
@@ -136,14 +136,14 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.test
-    container_name: bifrost-docs-test-runner
+    container_name: skra-test-runner
     environment:
       # Database via PgBouncer (matches production architecture)
-      BIFROST_DOCS_DATABASE_URL: postgresql+asyncpg://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_DATABASE_URL_SYNC: postgresql://bifrost_docs:bifrost_docstest@pgbouncer:5432/bifrost_docs_test
-      BIFROST_DOCS_REDIS_URL: redis://redis:6379/0
-      BIFROST_DOCS_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
-      BIFROST_DOCS_ENVIRONMENT: testing
+      SKRA_DATABASE_URL: postgresql+asyncpg://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_DATABASE_URL_SYNC: postgresql://skra:skratest@pgbouncer:5432/skra_test
+      SKRA_REDIS_URL: redis://redis:6379/0
+      SKRA_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
+      SKRA_ENVIRONMENT: testing
       # For E2E tests, point to the API container
       TEST_API_URL: http://api:8000
       PYTHONPATH: /app
@@ -184,7 +184,7 @@ services:
       context: ./client
       dockerfile: Dockerfile
       target: development
-    container_name: bifrost-docs-test-client
+    container_name: skra-test-client
     environment:
       # API_URL and WS_URL are used by Vite's proxy config (server-side)
       API_URL: http://api:8000
@@ -217,4 +217,4 @@ services:
       - client  # Only start when --profile client is used
 
 volumes:
-  bifrost_docstest_postgres_data:
+  skratest_postgres_data:

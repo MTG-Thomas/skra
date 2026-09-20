@@ -1,7 +1,7 @@
 """
 Document ORM model.
 
-Represents documentation files in the Bifrost Docs platform.
+Represents documentation files in the Skra platform.
 Uses virtual paths (like S3) for folder structure - no separate folder table.
 """
 

@@ -4,7 +4,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: external-bifrost-api
-  namespace: bifrost-docs
+  namespace: skra
   labels:
     app.kubernetes.io/name: external-bifrost-api
     app.kubernetes.io/component: integration

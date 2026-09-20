@@ -14,11 +14,11 @@ set -e
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
-S3_BUCKET="${BIFROST_DOCS_S3_BUCKET:-bifrost-docs}"
-S3_ENDPOINT="${BIFROST_DOCS_S3_ENDPOINT:-http://localhost:3900}"
+S3_BUCKET="${SKRA_S3_BUCKET:-skra}"
+S3_ENDPOINT="${SKRA_S3_ENDPOINT:-http://localhost:3900}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
-DB_NAME="${POSTGRES_DB:-bifrost_docs}"
-DB_USER="${POSTGRES_USER:-bifrost_docs}"
+DB_NAME="${POSTGRES_DB:-skra}"
+DB_USER="${POSTGRES_USER:-skra}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5433}"
 DB_PASSWORD="${POSTGRES_PASSWORD:-}"
@@ -79,8 +79,8 @@ Options:
 
 Environment Variables:
     BACKUP_DIR              Local backup directory (default: ./backups)
-    BIFROST_DOCS_S3_BUCKET   S3 bucket name
-    BIFROST_DOCS_S3_ENDPOINT  S3 endpoint URL
+    SKRA_S3_BUCKET   S3 bucket name
+    SKRA_S3_ENDPOINT  S3 endpoint URL
     BACKUP_RETENTION_DAYS   Days to keep backups (default: 30)
     POSTGRES_PASSWORD        Database password
     POSTGRES_DB              Database name
@@ -94,7 +94,7 @@ Examples:
     $0 --daily
 
     # Restore from backup
-    $0 --restore s3://bifrost-docs/backups/daily/20260406_120000.sql.gz
+    $0 --restore s3://skra/backups/daily/20260406_120000.sql.gz
 EOF
 }
 
@@ -244,7 +244,7 @@ cleanup_old_backups() {
 # Main execution
 main() {
     echo -e "${YELLOW}========================================${NC}"
-    echo -e "${YELLOW}  Bifrost Docs Database Backup${NC}"
+    echo -e "${YELLOW}  Skra Database Backup${NC}"
     echo -e "${YELLOW}========================================${NC}"
     echo ""
     
