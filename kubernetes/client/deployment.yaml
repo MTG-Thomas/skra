@@ -19,6 +19,10 @@ spec:
         app.kubernetes.io/component: client
         app.kubernetes.io/part-of: skra
     spec:
+      # fsGroup lets uid 101 write the emptyDir scratch volumes below
+      # (kubelet chowns emptyDir mounts); the container still runs as 101:101.
+      securityContext:
+        fsGroup: 101
       containers:
         - name: client
           image: ghcr.io/mtg-thomas/skra-client:latest
@@ -29,6 +33,16 @@ spec:
             runAsNonRoot: true
             runAsUser: 101
             runAsGroup: 101
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            # nginx:alpine writes its pid to /tmp (baked in via the image's
+            # `pid /tmp/nginx.pid;`) and proxy/client temp files to
+            # /var/cache/nginx. Logs go to stdout/stderr (symlinked), and
+            # /usr/share/nginx/html + /etc/nginx stay read-only.
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
           resources:
             requests:
               cpu: "50m"
@@ -52,3 +66,8 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
