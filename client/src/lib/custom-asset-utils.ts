@@ -22,9 +22,12 @@ export function getDisplayFieldKey(assetType: CustomAssetType): string | null {
     }
   }
 
-  // Fall back to first non-header field
-  if (nonHeaderFields.length > 0) {
-    return nonHeaderFields[0].key;
+  // Fall back to first scalar field (checklist and other structured values
+  // don't render as names)
+  for (const field of nonHeaderFields) {
+    if (field.type !== "checklist") {
+      return field.key;
+    }
   }
 
   return null;
@@ -40,5 +43,7 @@ export function getDisplayValue(
   if (!displayFieldKey) return "Unnamed";
   const value = asset.values[displayFieldKey];
   if (value === undefined || value === null || value === "") return "Unnamed";
+  // Structured values (e.g. checklist state objects) never render as names.
+  if (typeof value === "object") return asset.id;
   return String(value);
 }

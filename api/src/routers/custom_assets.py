@@ -94,8 +94,9 @@ def _get_display_field_key(asset_type: CustomAssetType) -> str | None:
     Priority:
     1. Use explicit display_field_key if set
     2. Fall back to first text/textbox field
-    3. Fall back to first non-header field
-    4. Return None if no fields
+    3. Fall back to first non-header, non-checklist field (checklist and
+       other structured values don't render as names)
+    4. Return None if no suitable field
 
     Args:
         asset_type: CustomAssetType entity
@@ -114,9 +115,10 @@ def _get_display_field_key(asset_type: CustomAssetType) -> str | None:
         if field.type in ("text", "textbox"):
             return field.key
 
-    # Fall back to first non-header field
-    if non_header_fields:
-        return non_header_fields[0].key
+    # Fall back to first scalar field (skip structured values)
+    for field in non_header_fields:
+        if field.type != "checklist":
+            return field.key
 
     return None
 
@@ -143,9 +145,13 @@ def _get_display_name(
     if not display_field_key:
         return str(asset.id)
 
-    # Transform values to key-based to get the display field
+    # Transform values to key-based to get the display field. Only plain
+    # strings render as names; anything else falls back to the asset ID.
     key_values = values_id_to_key(type_fields, asset.values, filter_secrets=True)
-    return key_values.get(display_field_key) or str(asset.id)
+    display_value = key_values.get(display_field_key)
+    if isinstance(display_value, str) and display_value:
+        return display_value
+    return str(asset.id)
 
 
 def _to_public(

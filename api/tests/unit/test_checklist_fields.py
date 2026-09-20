@@ -355,6 +355,72 @@ class TestChecklistMerge:
         )
 
 
+class TestChecklistDisplayFallback:
+    """Checklist values must never become the asset display name."""
+
+    def _type(self, fields):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(display_field_key=None, fields=fields)
+
+    def test_checklist_skipped_as_display_field(self):
+        from src.routers.custom_assets import _get_display_field_key
+
+        asset_type = self._type(
+            [
+                {
+                    "id": "f1",
+                    "key": "steps",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "checklist_items": [{"id": "s1", "label": "One"}],
+                }
+            ]
+        )
+        assert _get_display_field_key(asset_type) is None
+
+    def test_scalar_field_preferred_over_checklist(self):
+        from src.routers.custom_assets import _get_display_field_key
+
+        asset_type = self._type(
+            [
+                {
+                    "id": "f1",
+                    "key": "steps",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "checklist_items": [{"id": "s1", "label": "One"}],
+                },
+                {"id": "f2", "key": "title", "name": "Title", "type": "text"},
+            ]
+        )
+        assert _get_display_field_key(asset_type) == "title"
+
+    def test_display_name_falls_back_to_id_for_structured_value(self):
+        from types import SimpleNamespace
+        from uuid import uuid4
+
+        from src.routers.custom_assets import _get_display_name
+
+        asset_id = uuid4()
+        asset = SimpleNamespace(id=asset_id, values={"fid1": {"items": []}})
+        asset_type = self._type(
+            [
+                {
+                    "id": "fid1",
+                    "key": "steps",
+                    "name": "Procedure",
+                    "type": "checklist",
+                    "checklist_items": [{"id": "s1", "label": "One"}],
+                }
+            ]
+        )
+        # Same field id as the stored value so the lookup resolves to the
+        # structured dict, exercising the non-string fallback.
+        fields = [_checklist_field(id="fid1")]
+        assert _get_display_name(asset, asset_type, fields) == str(asset_id)
+
+
 class TestChecklistInitialization:
     def test_missing_key_initialized_empty(self):
         result = initialize_checklist_values([_checklist_field()], {"other": 1})

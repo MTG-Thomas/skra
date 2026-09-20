@@ -55,7 +55,7 @@ export function ChecklistField({ field, value, onToggle, onReset, disabled }: Ch
       <div className="flex items-center gap-3">
         <Progress value={percent} className="flex-1" aria-label={`Checklist progress ${percent}%`} />
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {done}/{total} · {percent}%
+          {percent}% ({done}/{total})
         </span>
         {interactive && onReset && (
           <Button
