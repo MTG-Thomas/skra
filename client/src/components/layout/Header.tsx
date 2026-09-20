@@ -3,6 +3,7 @@ import { Menu, Search, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { OrgSelector } from "./OrgSelector";
+import { MobileMoreMenu } from "./MobileMoreMenu";
 import { UserMenu } from "./UserMenu";
 import { RecentDropdown } from "./RecentDropdown";
 import { QuickCreateButton } from "./QuickCreateButton";
@@ -34,8 +35,8 @@ export function Header({
   ];
 
   return (
-    <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 lg:px-6">
-      <div className="flex items-center gap-4">
+    <header className="h-16 border-b border-border bg-background flex items-center justify-between gap-2 px-3 sm:px-4 lg:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
         {/* Only show mobile menu toggle when an org is selected (sidebar visible) */}
         {orgId && (
           <Button
@@ -71,7 +72,7 @@ export function Header({
         </nav>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <QuickCreateButton />
         <Button
           variant="outline"
@@ -90,19 +91,23 @@ export function Header({
           size="icon"
           className="sm:hidden"
           onClick={onSearchClick}
+          aria-label="Search"
         >
           <Search className="h-5 w-5" />
         </Button>
-        <RecentDropdown />
+        <div className="hidden sm:block">
+          <RecentDropdown />
+        </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={() => onChatClick?.()}
-          className="h-9 w-9"
+          className="hidden h-9 w-9 sm:inline-flex"
           title="Open Chat"
         >
           <MessageSquare className="h-5 w-5" />
         </Button>
+        <MobileMoreMenu onChatClick={onChatClick} />
         <UserMenu />
       </div>
     </header>
