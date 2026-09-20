@@ -194,4 +194,72 @@ describe("useDashboardLayout save flow", () => {
     });
     expect(hook.result.current.layout).toEqual(layoutB);
   });
+
+  it("flushes a debounced change on unmount instead of losing it", async () => {
+    const hook = await renderReadyHook();
+    const layout = hidden("favorites");
+
+    // Hide, then navigate away before the debounce fires.
+    act(() => {
+      hook.result.current.setWidgetVisible("favorites", false);
+    });
+    act(() => {
+      hook.unmount();
+    });
+
+    expect(putMock).toHaveBeenCalledTimes(1);
+    expect(putWidgets(0)).toEqual(layout);
+
+    // The cleared debounce timer must not send a duplicate.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(putMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the queued latest layout after unmount when a PUT is in flight", async () => {
+    const hook = await renderReadyHook();
+    const layoutA = hidden("favorites");
+    const layoutB = hidden("favorites", "quick-stats");
+
+    act(() => {
+      hook.result.current.setWidgetVisible("favorites", false);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(putMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      hook.result.current.setWidgetVisible("quick-stats", false);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // Navigate away with PUT #1 in flight and the newer layout queued.
+    act(() => {
+      hook.unmount();
+    });
+
+    await act(async () => {
+      gates[0]?.resolve({ data: echo(layoutA) });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(putMock).toHaveBeenCalledTimes(2);
+    expect(putWidgets(1)).toEqual(layoutB);
+  });
+
+  it("sends nothing on unmount when there is nothing pending", async () => {
+    const hook = await renderReadyHook();
+
+    act(() => {
+      hook.unmount();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(putMock).not.toHaveBeenCalled();
+  });
 });

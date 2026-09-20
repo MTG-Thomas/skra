@@ -56,6 +56,7 @@ export function useDashboardLayout() {
   // queued layout (if any) is sent next, so the server always converges to
   // the newest state and can never persist a stale order. A failed request
   // rolls back the optimistic cache only when nothing newer is queued.
+  // Unmount flushes a debounced-but-unsent layout instead of dropping it.
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingWidgetsRef = useRef<DashboardWidgetItem[] | null>(null);
   const saveInFlightRef = useRef(false);
@@ -106,10 +107,11 @@ export function useDashboardLayout() {
     flushSaveRef.current = flushSave;
   });
 
-  // Unsent debounced changes are dropped on unmount. An in-flight PUT still
-  // completes on the server, but its cache update is skipped after unmount
-  // (see onSuccess/onError) so a stale response can never overwrite newer
-  // optimistic state.
+  // A debounced-but-unsent layout is flushed on unmount with a fire-and-
+  // forget PUT so navigating right after a Hide/Move never loses the action.
+  // When a PUT is already in flight, the queued latest layout stays queued
+  // and the onSettled chain sends it; either way no cache writes happen
+  // after unmount (see onSuccess/onError).
   useEffect(() => {
     return () => {
       unmountedRef.current = true;
@@ -117,7 +119,19 @@ export function useDashboardLayout() {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
+      if (saveInFlightRef.current) return;
+      const pending = pendingWidgetsRef.current;
       pendingWidgetsRef.current = null;
+      if (pending !== null) {
+        // Fire-and-forget: the request outlives the component. Rejections
+        // are ignored; the layout stays visible and resyncs on next visit.
+        void api
+          .put<DashboardPreferencesResponse>(
+            `/api/preferences/${PERSONAL_DASHBOARD_LAYOUT_KEY}`,
+            { preferences: { widgets: pending } },
+          )
+          .catch(() => undefined);
+      }
     };
   }, []);
 
