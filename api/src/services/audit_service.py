@@ -68,9 +68,10 @@ class AuditService:
             )
             result = await self.db.execute(stmt)
             if result.scalar_one_or_none() is not None:
+                # Static event only: entity IDs trace to sensitive records.
                 logger.debug(
                     f"Audit dedupe: skipping duplicate {action.value} "
-                    f"{entity_type}/{entity_id} (within {dedupe_seconds}s)"
+                    f"{entity_type} (within {dedupe_seconds}s)"
                 )
                 return  # Skip duplicate
         # Determine actor type and IDs
@@ -108,15 +109,14 @@ class AuditService:
         # Don't await flush - let it commit with the transaction
         # This ensures audit logs are atomic with the operation
 
+        # Static event with non-sensitive context only: record IDs trace to
+        # sensitive records, so the full identifiers stay in the audit row.
         logger.debug(
-            f"Audit: {action.value} {entity_type}/{entity_id}",
+            f"Audit: {action.value} {entity_type}",
             extra={
                 "action": action.value,
                 "entity_type": entity_type,
-                "entity_id": str(entity_id),
                 "actor_type": actor_type.value,
-                "actor_user_id": str(actor_user_id) if actor_user_id else None,
-                "organization_id": str(organization_id) if organization_id else None,
             },
         )
 

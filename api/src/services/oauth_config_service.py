@@ -92,8 +92,10 @@ class OAuthConfigService:
         if encrypted:
             try:
                 return decrypt_secret(encrypted)
-            except Exception as e:
-                logger.error(f"Failed to decrypt secret {key}: {e}")
+            except Exception:
+                # Static event only: the key name, exception text, and any
+                # traceback can each leak secret material, so none is logged.
+                logger.error("OAuth secret decrypt failed")
                 return None
         return None
 
