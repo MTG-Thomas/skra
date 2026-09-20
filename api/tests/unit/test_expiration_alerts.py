@@ -247,9 +247,7 @@ def test_notifier_failure_logs_no_exception_detail(caplog):
         elif isinstance(value, dict):
             for key, item_value in value.items():
                 assert sentinel not in str(key), f"sentinel leaked in record.{attr} key"
-                assert sentinel not in str(item_value), (
-                    f"sentinel leaked in record.{attr}[{key!r}]"
-                )
+                assert sentinel not in str(item_value), f"sentinel leaked in record.{attr}[{key!r}]"
     assert sentinel not in caplog.text
     assert "Traceback" not in caplog.text
 
