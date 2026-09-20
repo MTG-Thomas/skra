@@ -5,12 +5,15 @@ Uses pydantic-settings for environment variable loading with validation.
 All configuration is centralized here for easy management.
 """
 
+import hashlib
+import hmac
 import os
 import warnings
 from functools import lru_cache
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -22,6 +25,14 @@ from pydantic_settings import (
 #: Previous env prefix, honored as a one-release fallback (see _LegacyEnvSource).
 #: Remove after all operators have migrated to SKRA_*.
 LEGACY_ENV_PREFIX = "BIFROST_DOCS_"
+
+#: PBKDF2-HMAC-SHA256 reference for the retired development database
+#: credential (fixed domain-separation salt, 600k iterations). No password
+#: material appears in source; only this verification digest is stored.
+#: Verification runs only at production startup (two URLs, ~0.5s total).
+_RETIRED_DEV_DB_SALT = b"skra.retired-dev-db.v1"
+_RETIRED_DEV_DB_ITERATIONS = 600_000
+_RETIRED_DEV_DB_DIGEST = "343b59372d156dd8c0ca716c17069826c31d7491e09ba6bbcc6d5b1c92bc1445"
 
 _warned_legacy_keys: set[str] = set()
 
@@ -425,6 +436,41 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production mode."""
         return self.environment == "production"
+
+    @model_validator(mode="after")
+    def _reject_retired_dev_database_credential(self) -> "Settings":
+        """Refuse to boot production on the retired development credential.
+
+        Database URLs have no code defaults: every runtime (compose files,
+        CI, test fixtures) provides explicit values, and a missing value
+        fails fast at startup instead of silently using the wrong database.
+        As a second layer, production refuses any configured URL whose
+        password verifies against the stored PBKDF2-HMAC reference digest
+        of the retired development credential. The password itself never
+        appears in source. Unparseable URLs are left for the database
+        driver to reject loudly at connect time.
+        """
+        if self.environment == "production":
+            for field_name in ("database_url", "database_url_sync"):
+                url = getattr(self, field_name, "") or ""
+                try:
+                    password = urlsplit(url).password or ""
+                except ValueError:
+                    continue
+                if not password:
+                    continue
+                candidate = hashlib.pbkdf2_hmac(
+                    "sha256",
+                    password.encode(),
+                    _RETIRED_DEV_DB_SALT,
+                    _RETIRED_DEV_DB_ITERATIONS,
+                ).hex()
+                if hmac.compare_digest(candidate, _RETIRED_DEV_DB_DIGEST):
+                    raise ValueError(
+                        f"{field_name} still uses the retired development "
+                        f"credential; set SKRA_{field_name.upper()} in production"
+                    )
+        return self
 
 
 @lru_cache
