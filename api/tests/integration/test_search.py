@@ -134,7 +134,7 @@ class TestEmbeddingsServiceIndexing:
         text = "Test content for indexing"
         content_hash = service.compute_content_hash(text)
 
-        assert len(content_hash) == 32
+        assert len(content_hash) == 64
         assert all(c in "0123456789abcdef" for c in content_hash)
 
     @pytest.mark.asyncio

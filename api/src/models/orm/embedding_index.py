@@ -39,9 +39,9 @@ class EmbeddingIndex(Base):
     )
     entity_id: Mapped[UUID] = mapped_column(nullable=False)
     content_hash: Mapped[str] = mapped_column(
-        String(32),
+        String(64),
         nullable=False,
-        comment="MD5 hash of searchable_text to detect changes",
+        comment="SHA-256 hash of searchable_text to detect changes",
     )
     embedding: Mapped[list[float]] = mapped_column(
         Vector(EMBEDDING_DIMENSIONS),
