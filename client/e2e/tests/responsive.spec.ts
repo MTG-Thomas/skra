@@ -69,6 +69,23 @@ test.describe('Responsive Design', () => {
     }
   });
   
+  test('global header does not overflow on 390px viewport', async ({ page }) => {
+    // Regression for #135: the shared header right controls pushed the
+    // document 53px past a 390px viewport.
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await navigateToOrg(page, 'test-org');
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    // Core header actions stay reachable on mobile.
+    await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
+    await expect(page.getByTestId('user-menu-trigger')).toBeVisible();
+  });
+
   test('forms should be usable on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     

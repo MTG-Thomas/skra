@@ -175,19 +175,19 @@ export function OrgSelector() {
     };
 
     if (isLoading) {
-        return <Skeleton className="h-9 w-[200px]" />;
+        return <Skeleton className="h-9 w-[160px] shrink-0 sm:w-[200px] lg:w-[280px]" />;
     }
 
     return (
         <>
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                 <Popover open={open} onOpenChange={handleOpenChange}>
                     <PopoverTrigger asChild>
                         <Button
                             variant="outline"
                             role="combobox"
                             aria-expanded={open}
-                            className="w-[280px] justify-between"
+                            className="w-full min-w-0 max-w-[160px] justify-between sm:w-[200px] sm:max-w-none lg:w-[280px]"
                         >
                             <span className="flex items-center gap-2 truncate">
                                 {isGlobalView || !selectedOrg ? (
@@ -204,7 +204,7 @@ export function OrgSelector() {
                             <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[280px] p-0" align="start">
+                    <PopoverContent className="w-[calc(100vw-2rem)] max-w-[280px] p-0" align="start">
                         <Command>
                             <CommandInput
                                 placeholder="Search organizations..."
@@ -345,13 +345,13 @@ export function OrgSelector() {
                     </PopoverContent>
                 </Popover>
 
-                {/* Quick nav button - always show, navigates to selected org or global */}
+                {/* Quick nav button - hidden on small screens (same destination reachable via sidebar Home links) */}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9"
+                            className="hidden h-9 w-9 sm:inline-flex"
                             onClick={() =>
                                 navigate(
                                     selectedOrg
