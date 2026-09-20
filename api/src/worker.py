@@ -9,6 +9,7 @@ Run the worker with:
     arq src.worker.WorkerSettings
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
@@ -461,7 +462,10 @@ async def check_expirations_task(
                     if not await alert_service.maybe_record(item):
                         continue
                     try:
-                        delivered = notifier.notify(item, org_name=org.name)
+                        # Blocking SMTP must not stall the arq event loop.
+                        delivered = await asyncio.to_thread(
+                            notifier.notify, item, org_name=org.name
+                        )
                     except Exception:
                         logger.exception(
                             "Expiration alert delivery failed",

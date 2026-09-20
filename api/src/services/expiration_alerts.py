@@ -72,15 +72,9 @@ class ExpirationNotifier:
     # only when STARTTLS is explicitly unrequested.
     use_starttls: bool = True
     use_ssl: bool = False
-    verify_certs: bool = True
     username: str = ""
     password: str = ""
     timeout: float = 10.0
-
-    def _tls_context(self) -> ssl.SSLContext:
-        if self.verify_certs:
-            return ssl.create_default_context()
-        return ssl._create_unverified_context()
 
     def notify(self, item: UpcomingExpiration, org_name: str) -> bool:
         """
@@ -131,14 +125,14 @@ class ExpirationNotifier:
                 server = smtplib.SMTP_SSL(
                     self.smtp_host,
                     self.smtp_port,
-                    context=self._tls_context(),
+                    context=ssl.create_default_context(),
                     timeout=self.timeout,
                 )
             else:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=self.timeout)
             with server as smtp:
                 if not self.use_ssl and self.use_starttls:
-                    smtp.starttls(context=self._tls_context())
+                    smtp.starttls(context=ssl.create_default_context())
                 if self.username:
                     smtp.login(self.username, self.password)
                 smtp.send_message(message)
@@ -182,7 +176,6 @@ def build_expiration_notifier(settings: Any = None) -> ExpirationNotifier:
         recipients=recipients,
         use_starttls=bool(config.smtp_use_starttls),
         use_ssl=bool(config.smtp_use_ssl),
-        verify_certs=bool(config.smtp_verify_certs),
         username=config.smtp_username or "",
         password=config.smtp_password or "",
         timeout=float(config.smtp_timeout),

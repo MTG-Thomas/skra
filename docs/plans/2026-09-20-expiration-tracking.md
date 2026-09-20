@@ -37,11 +37,12 @@ equivalent.
   daily job exits before scanning, so nothing is ever recorded that could
   suppress alerts after later enablement.
 - **SMTP transport fails closed.** STARTTLS with certificate verification
-  is the default; `smtp_use_ssl` selects implicit TLS (port 465) and
-  `smtp_username`/`smtp_password` add optional auth. Remote hosts refuse
-  plaintext (only loopback may send without TLS, and only when STARTTLS
-  is explicitly unrequested); a failed handshake never falls back to
-  plaintext. `smtp_verify_certs` (default true) controls verification.
+  is the default and cannot be downgraded; `smtp_use_ssl` selects implicit
+  TLS (port 465) and `smtp_username`/`smtp_password` add optional auth.
+  Remote hosts refuse plaintext (only loopback may send without TLS, and
+  only when STARTTLS is explicitly unrequested); a failed handshake never
+  falls back to plaintext. Delivery runs in `asyncio.to_thread` so blocking
+  SMTP never stalls the arq event loop.
 - **Read-only surfacing, no view audit.** The upcoming endpoint logs no
   audit entries (dashboard polling would drown access history).
 - **Frontend follows existing patterns**: React Query hook, shadcn

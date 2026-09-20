@@ -249,10 +249,6 @@ class Settings(BaseSettings):
         default=False, description="Use implicit TLS for SMTP alerts (typically port 465)"
     )
 
-    smtp_verify_certs: bool = Field(
-        default=True, description="Verify the SMTP server certificate during TLS"
-    )
-
     smtp_username: str = Field(default="", description="SMTP username for alert emails")
 
     smtp_password: str = Field(default="", description="SMTP password for alert emails")

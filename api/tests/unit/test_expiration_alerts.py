@@ -315,6 +315,53 @@ async def test_task_continues_when_smtp_send_fails():
 
 
 @pytest.mark.asyncio
+async def test_task_delivers_off_event_loop():
+    """Blocking SMTP runs in a worker thread, never on the arq loop."""
+    import asyncio
+    import threading
+
+    from src.worker import check_expirations_task
+
+    org = MagicMock()
+    org.id = ORG_ID
+    org.name = "Acme"
+    org_repo = AsyncMock()
+    org_repo.get_all = AsyncMock(side_effect=[[org], []])
+    items = [_item()]
+    caller = threading.current_thread()
+    delivery_threads = []
+
+    def blocking_notify(item, org_name):
+        delivery_threads.append(threading.current_thread())
+        return True
+
+    with (
+        patch("src.worker.OrganizationRepository", return_value=org_repo),
+        patch(
+            "src.worker.find_upcoming_expirations",
+            new=AsyncMock(return_value=items),
+        ),
+        patch("src.worker.ExpirationAlertService") as alert_cls,
+        patch("src.worker.build_expiration_notifier") as build_notifier,
+        patch("src.worker.get_db_context") as db_context,
+    ):
+        alert_service = AsyncMock()
+        alert_service.maybe_record = AsyncMock(return_value=True)
+        alert_cls.return_value = alert_service
+        notifier = build_notifier.return_value
+        notifier.enabled = True
+        notifier.notify = blocking_notify
+        db_session = AsyncMock()
+        db_context.return_value.__aenter__ = AsyncMock(return_value=db_session)
+        db_context.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        await asyncio.wait_for(check_expirations_task({}), timeout=30)
+
+    assert len(delivery_threads) == 1
+    assert all(t is not caller for t in delivery_threads)
+
+
+@pytest.mark.asyncio
 async def test_check_expirations_task_notifies_new_thresholds():
     """The daily job records, notifies, and counts per organization."""
     from src.worker import check_expirations_task
