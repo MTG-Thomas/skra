@@ -24,3 +24,17 @@ def sync_metadata_to_storage(metadata: SyncMetadata | None) -> dict | None:
     if metadata is None:
         return None
     return metadata.model_dump(mode="json")
+
+
+def sync_metadata_to_response(value: object) -> SyncMetadata | None:
+    """Validate stored sync metadata for API responses.
+
+    Returns a validated model when the stored value is a non-empty dict
+    (passing through values that are already validated), else None so
+    absent provenance serializes as null.
+    """
+    if isinstance(value, SyncMetadata):
+        return value
+    if isinstance(value, dict) and value:
+        return SyncMetadata.model_validate(value)
+    return None

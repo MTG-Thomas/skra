@@ -22,7 +22,10 @@ from src.models.contracts.document import (
     FolderCount,
     FolderList,
 )
-from src.models.contracts.sync import sync_metadata_to_storage
+from src.models.contracts.sync import (
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 from src.models.enums import AuditAction
 from src.models.orm.document import Document
 from src.repositories.document import DocumentRepository
@@ -78,9 +81,7 @@ def _to_public(doc: Document) -> DocumentPublic:
         "name": doc.name,
         "content": doc.content,
         "metadata": doc.metadata_ if isinstance(doc.metadata_, dict) else {},
-        "sync_metadata": doc.sync_metadata
-        if isinstance(doc.sync_metadata, dict) and doc.sync_metadata
-        else None,
+        "sync_metadata": sync_metadata_to_response(doc.sync_metadata),
         "is_enabled": doc.is_enabled,
         "created_at": doc.created_at,
         "updated_at": doc.updated_at,

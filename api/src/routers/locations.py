@@ -19,7 +19,10 @@ from src.models.contracts.location import (
     LocationPublic,
     LocationUpdate,
 )
-from src.models.contracts.sync import sync_metadata_to_storage
+from src.models.contracts.sync import (
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 from src.models.enums import AuditAction
 from src.models.orm.location import Location
 from src.repositories.location import LocationRepository
@@ -47,12 +50,7 @@ def _to_public(location: Location) -> LocationPublic:
     # (handles both real ORM objects and test mocks)
     metadata_value = getattr(location, "metadata_", None)
     metadata = metadata_value if isinstance(metadata_value, dict) else {}
-    sync_metadata_value = getattr(location, "sync_metadata", None)
-    sync_metadata = (
-        sync_metadata_value
-        if isinstance(sync_metadata_value, dict) and sync_metadata_value
-        else None
-    )
+    sync_metadata = sync_metadata_to_response(getattr(location, "sync_metadata", None))
 
     updated_by_user = getattr(location, "updated_by_user", None)
     data = {

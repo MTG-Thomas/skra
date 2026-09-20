@@ -21,7 +21,10 @@ from src.models.contracts.password import (
     PasswordReveal,
     PasswordUpdate,
 )
-from src.models.contracts.sync import sync_metadata_to_storage
+from src.models.contracts.sync import (
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 from src.models.enums import AuditAction
 from src.models.orm.password import Password
 from src.repositories.password import PasswordRepository
@@ -54,9 +57,7 @@ def _to_public(password: Password) -> PasswordPublic:
         "notes": password.notes,
         "_totp_secret_encrypted": password.totp_secret_encrypted,  # For computed has_totp
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
-        "sync_metadata": password.sync_metadata
-        if isinstance(password.sync_metadata, dict) and password.sync_metadata
-        else None,
+        "sync_metadata": sync_metadata_to_response(password.sync_metadata),
         "is_enabled": password.is_enabled,
         "created_at": password.created_at,
         "updated_at": password.updated_at,
@@ -359,9 +360,7 @@ async def reveal_password(
         "notes": password.notes,
         "_totp_secret_encrypted": password.totp_secret_encrypted,
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
-        "sync_metadata": password.sync_metadata
-        if isinstance(password.sync_metadata, dict) and password.sync_metadata
-        else None,
+        "sync_metadata": sync_metadata_to_response(password.sync_metadata),
         "is_enabled": password.is_enabled,
         "created_at": password.created_at,
         "updated_at": password.updated_at,

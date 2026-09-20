@@ -30,7 +30,11 @@ from src.models.contracts.password import (
     PasswordPublic,
     PasswordUpdate,
 )
-from src.models.contracts.sync import SyncMetadata, sync_metadata_to_storage
+from src.models.contracts.sync import (
+    SyncMetadata,
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 
 
 def test_sync_metadata_accepts_plan_fields() -> None:
@@ -244,6 +248,28 @@ def test_password_public_exposes_sync_metadata_without_secrets() -> None:
     assert public.sync_metadata is not None
     assert public.sync_metadata.external_id == "ext-001"
     assert not hasattr(public, "password")
+
+
+def test_sync_metadata_to_response_validates_raw_dicts() -> None:
+    """Response helper validates storage dicts into models (issue #34)."""
+    result = sync_metadata_to_response(dict(SYNC_ATTRS))
+
+    assert isinstance(result, SyncMetadata)
+    assert result.external_id == "ext-001"
+
+
+def test_sync_metadata_to_response_passes_through_models() -> None:
+    """Already-validated provenance is returned unchanged."""
+    model = SyncMetadata(**SYNC_ATTRS)
+
+    assert sync_metadata_to_response(model) is model
+
+
+def test_sync_metadata_to_response_returns_none_when_absent() -> None:
+    """Missing or empty provenance serializes as null."""
+    assert sync_metadata_to_response(None) is None
+    assert sync_metadata_to_response({}) is None
+    assert sync_metadata_to_response("ext-001") is None
 
 
 def test_organization_with_frequent_coerces_raw_sync_metadata() -> None:

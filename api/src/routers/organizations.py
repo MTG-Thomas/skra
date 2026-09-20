@@ -19,7 +19,10 @@ from src.models.contracts.organization import (
     SidebarData,
     SidebarItemCount,
 )
-from src.models.contracts.sync import SyncMetadata, sync_metadata_to_storage
+from src.models.contracts.sync import (
+    sync_metadata_to_response,
+    sync_metadata_to_storage,
+)
 from src.models.enums import AuditAction
 from src.models.orm.organization import Organization
 from src.repositories.access_tracking import AccessTrackingRepository
@@ -44,9 +47,7 @@ def _to_public(org: Organization) -> OrganizationPublic:
         "id": org.id,
         "name": org.name,
         "metadata": org.metadata_ if isinstance(org.metadata_, dict) else {},
-        "sync_metadata": org.sync_metadata
-        if isinstance(org.sync_metadata, dict) and org.sync_metadata
-        else None,
+        "sync_metadata": sync_metadata_to_response(org.sync_metadata),
         "is_enabled": org.is_enabled,
         "created_at": org.created_at,
         "updated_at": org.updated_at,
@@ -197,9 +198,7 @@ async def get_organization(
         id=org.id,
         name=org.name,
         metadata=org.metadata_ if isinstance(org.metadata_, dict) else {},
-        sync_metadata=SyncMetadata.model_validate(org.sync_metadata)
-        if isinstance(org.sync_metadata, dict) and org.sync_metadata
-        else None,
+        sync_metadata=sync_metadata_to_response(org.sync_metadata),
         is_enabled=org.is_enabled,
         created_at=org.created_at,
         updated_at=org.updated_at,
