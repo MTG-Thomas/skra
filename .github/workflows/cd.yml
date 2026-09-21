@@ -160,10 +160,19 @@ jobs:
               echo "Overlay TCP/22 reachable (attempt ${attempt})"
               break
             fi
-            echo "Overlay TCP/22 not reachable (attempt ${attempt}); overlay interfaces:"
+            echo "Overlay TCP/22 not reachable (attempt ${attempt})"
+            if ping -c 2 -W 4 "${TEST_VM_HOST}" >/dev/null 2>&1; then
+              echo "Overlay ICMP works; TCP/22 filtered or sshd down"
+            else
+              echo "Overlay ICMP also failing; tunnel/handshake not up"
+            fi
             ip -brief addr show | grep -E 'defined|nebula' || echo '(no overlay interface yet)'
             if [ "$attempt" -eq 12 ]; then
               echo "Overlay path to ${TEST_VM_HOST}:22 never came up" >&2
+              echo "--- routes ---"
+              ip route show | head -n 15 || true
+              echo "--- dnclient journal ---"
+              journalctl --no-pager -u 'dnclient*' -n 40 || true
               exit 1
             fi
             sleep 10
