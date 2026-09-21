@@ -1,4 +1,4 @@
-title = "bifrost-gitleaks"
+title = "skra-gitleaks"
 
 [extend]
 useDefault = true
@@ -22,8 +22,8 @@ paths = [
 ]
 regexes = [
   '''^dev-secret-key-change-in-production-must-be-32-chars$''',
-  '''^bifrost_dev$''',
-  '''^bifrost123$''',
+  '''^skra_dev$''',
+  '''^skra123$''',
   '''^s3_key$''',
   '''^REPLACE_WITH_32_CHAR_SECRET_KEY$''',
   '''^test-secret-key-must-be-at-least-32-characters-long$''',
