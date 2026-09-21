@@ -24,8 +24,8 @@ env:
   # bifrost-docs-dev (ciuser thomas) over the Defined Networking overlay
   # (NetBird retired estate-wide; its 100.103.235.51 is gone). Set to the
   # VM's Nebula IP once dnclient is enrolled there (see #100).
-  # TODO(#100): replace placeholder with the enrolled Nebula IP.
-  TEST_VM_HOST: 192.0.2.1
+  # bifrost-docs-dev overlay address (static, enrolled 2026-09-21).
+  TEST_VM_HOST: 100.100.0.50
   TEST_VM_USER: thomas
   HEALTH_URL: https://dev.docs.midtowntg.com/health
   # Ephemeral runner hostname; must be unique per run (Defined.net
