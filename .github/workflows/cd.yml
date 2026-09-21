@@ -156,6 +156,19 @@ jobs:
           chmod 600 /tmp/skra-deploy.env
 
           for attempt in $(seq 1 12); do
+            if timeout 10 bash -c "</dev/tcp/${TEST_VM_HOST}/22" 2>/dev/null; then
+              echo "Overlay TCP/22 reachable (attempt ${attempt})"
+              break
+            fi
+            echo "Overlay TCP/22 not reachable (attempt ${attempt}); overlay interfaces:"
+            ip -brief addr show | grep -E 'defined|nebula' || echo '(no overlay interface yet)'
+            if [ "$attempt" -eq 12 ]; then
+              echo "Overlay path to ${TEST_VM_HOST}:22 never came up" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          for attempt in $(seq 1 12); do
             if ssh -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "${TEST_VM_USER}@${TEST_VM_HOST}" "true"; then
               break
             fi
