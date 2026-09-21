@@ -1,6 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- Provisioned-file preservation ---
+# config/garage.toml is TRACKED in git (dev defaults committed) while .env
+# is git-ignored. A `git checkout --force` therefore restores the dev admin
+# token over a provisioned one, which breaks garage-init auth (403) and
+# wedges every service gated on garage-init completion. These helpers stash
+# a modified tracked file aside before checkout and restore it afterwards,
+# falling back to legacy pre-rename trees on a fresh box.
+preserve_provisioned_file() {
+  # $1 = repo root, $2 = tracked path (relative). Prints the backup path,
+  # or nothing when the working copy is unmodified or missing.
+  local root="$1" rel="$2"
+  [ -f "${root}/${rel}" ] || return 0
+  if ( cd "${root}" && git diff --quiet -- "${rel}" 2>/dev/null ); then
+    return 0
+  fi
+  local backup_dir; backup_dir="$(mktemp -d)"
+  cp "${root}/${rel}" "${backup_dir}/$(basename "${rel}")"
+  printf '%s\n' "${backup_dir}/$(basename "${rel}")"
+}
+
+restore_provisioned_file() {
+  # $1 = repo root, $2 = tracked path (relative), $3 = backup path (maybe
+  # empty). Restores the backup; otherwise seeds from the first legacy tree
+  # holding the file; otherwise leaves the checkout version in place.
+  local root="$1" rel="$2" backup="${3:-}" candidate
+  if [ -n "${backup}" ] && [ -f "${backup}" ]; then
+    cp "${backup}" "${root}/${rel}"
+    rm -rf "$(dirname "${backup}")"
+    return 0
+  fi
+  for candidate in "${LEGACY_WORKTREE:-}" \
+      /home/thomas/deploy/bifrost-docs-main \
+      /home/thomas/workspace/bifrost-docs; do
+    [ -n "${candidate}" ] || continue
+    if [ -f "${candidate}/${rel}" ]; then
+      mkdir -p "${root}/$(dirname "${rel}")"
+      cp "${candidate}/${rel}" "${root}/${rel}"
+      return 0
+    fi
+  done
+  return 0
+}
+
+# Harness seam: sourcing with SKRA_DEPLOY_LIB_ONLY=1 loads the helpers above
+# without running a deployment (see scripts/tests/test_deploy_test_vm.sh).
+if [ "${SKRA_DEPLOY_LIB_ONLY:-}" = "1" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 REPO_URL="${REPO_URL:-https://github.com/MTG-Thomas/skra.git}"
 BRANCH="${BRANCH:-main}"
 DEPLOY_SHA="${DEPLOY_SHA:?DEPLOY_SHA is required}"
@@ -25,6 +74,10 @@ if [ ! -d "${DEPLOY_ROOT}/.git" ]; then
   git clone "${REPO_URL}" "${DEPLOY_ROOT}"
 fi
 
+# Stash a provisioned config/garage.toml before checkout clobbers it with
+# the tracked dev defaults (see helpers above). No-op on fresh clones.
+GARAGE_BACKUP="$(preserve_provisioned_file "${DEPLOY_ROOT}" config/garage.toml)"
+
 cd "${DEPLOY_ROOT}"
 git fetch origin "${BRANCH}" --tags
 git checkout --force "${DEPLOY_SHA}"
@@ -32,12 +85,11 @@ git clean -fd \
   -e .env \
   -e config/garage.toml
 
+# Restore the provisioned copy, else seed from a legacy pre-rename tree.
+restore_provisioned_file "${DEPLOY_ROOT}" config/garage.toml "${GARAGE_BACKUP}"
+
 if [ ! -f .env ] && [ -f "${LEGACY_WORKTREE}/.env" ]; then
   cp "${LEGACY_WORKTREE}/.env" .env
-fi
-
-if [ -f "${LEGACY_WORKTREE}/config/garage.toml" ]; then
-  cp "${LEGACY_WORKTREE}/config/garage.toml" config/garage.toml
 fi
 
 export SKRA_API_IMAGE="${API_IMAGE}"
