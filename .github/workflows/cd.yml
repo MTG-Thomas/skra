@@ -114,7 +114,7 @@ jobs:
         # Our fork (pinned SHA): nested deps SHA-pinned, enrolls this
         # ephemeral runner under DN_RUNNER_NAME. Teardown step below
         # removes it (composite actions cannot declare post steps).
-        uses: MTG-Thomas/action-dnclient@ac52bddbd81f9d6e071c5b38f48812a7ec5aadf4
+        uses: MTG-Thomas/action-dnclient@48a0f93a3fafe842dca73d3bb09a1515f7986745
         with:
           dn-api-key: ${{ secrets.DN_API_KEY }}
           dn-network-id: ${{ secrets.DN_NETWORK_ID }}
