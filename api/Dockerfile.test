@@ -23,9 +23,11 @@ RUN pip install --upgrade pip && \
 # Production stage
 FROM python:3.11-slim
 
-# Install runtime dependencies
+# Install runtime dependencies (wget: garage-init.sh talks to the Garage
+# admin API with wget; without it the readiness wait loop never succeeds)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (mirrors production Dockerfile)

@@ -147,6 +147,9 @@ services:
       # For E2E tests, point to the API container
       TEST_API_URL: http://api:8000
       PYTHONPATH: /app
+      # Repo root for wiring tests that parse compose files (see REPO_ROOT
+      # in tests/unit/test_compose_wiring.py); the /app tree is API-only.
+      REPO_ROOT: /repo
     volumes:
       - ./api/src:/app/src:ro
       - ./api/scripts:/app/scripts:ro
@@ -154,6 +157,7 @@ services:
       - ./api/alembic:/app/alembic:ro
       - ./api/alembic.ini:/app/alembic.ini:ro
       - ./api/pyproject.toml:/app/pyproject.toml:ro
+      - ./:/repo:ro
     working_dir: /app
     depends_on:
       pgbouncer:

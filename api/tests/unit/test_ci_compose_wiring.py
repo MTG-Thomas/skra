@@ -7,9 +7,13 @@ project network literal may reappear, and the step must derive the
 network from the live compose project config.
 """
 
+import os
 from pathlib import Path
 
-CI_YML = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "ci.yml"
+# REPO_ROOT is set for the containerized test-runner (see REPO_ROOT in
+# tests/unit/test_compose_wiring.py); local runs resolve from this file.
+_REPO = os.environ.get("REPO_ROOT") or str(Path(__file__).resolve().parents[3])
+CI_YML = Path(_REPO) / ".github" / "workflows" / "ci.yml"
 
 
 def _auth_smoke_block() -> str:
