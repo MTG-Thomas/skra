@@ -787,4 +787,18 @@ async def batch_toggle_custom_assets(
     for asset_id in asset_ids:
         await index_entity_for_search(db, "custom_asset", asset_id, org_id)
 
+    # Projection refresh (issue #136): is_enabled flips are stored on the
+    # rows, so re-project each toggled asset in the request transaction.
+    projection_repo = ExpirationProjectionRepository(db)
+    asset_repo = CustomAssetRepository(db)
+    type_repo = CustomAssetTypeRepository(db)
+    for asset_id in asset_ids:
+        asset = await asset_repo.get_by_id_type_and_org(asset_id, type_id, org_id)
+        if asset is None:
+            continue
+        asset_type = await type_repo.get_by_id(type_id)
+        if asset_type is None:
+            continue
+        await refresh_asset_projection(projection_repo, asset, asset_type)
+
     return BatchToggleResponse(updated_count=result.rowcount)  # type: ignore[attr-defined]

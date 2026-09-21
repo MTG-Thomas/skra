@@ -8,12 +8,14 @@ converge; deletes prune rows for removed assets, cleared dates, and
 retired fields.
 """
 
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.models.orm.custom_asset_type import CustomAssetType
 from src.models.orm.expiration_projection import ExpirationProjection
 from src.repositories.base import BaseRepository
 
@@ -115,3 +117,38 @@ class ExpirationProjectionRepository(BaseRepository[ExpirationProjection]):
             delete(ExpirationProjection).where(ExpirationProjection.asset_type_id == asset_type_id)
         )
         return result.rowcount or 0  # type: ignore[attr-defined]
+
+    async def query_upcoming(
+        self,
+        organization_ids: list[UUID],
+        cutoff: date,
+    ) -> list[ExpirationProjection]:
+        """
+        All projected rows expiring at or before ``cutoff`` for visible orgs.
+
+        Active asset types only (deactivated types are hidden from expiry
+        reads, mirroring the scanner's ``get_all_active``). No lower date
+        bound: already-expired rows are included, like the scanner.
+        Ordered by expiration date for urgency reads; callers apply
+        search/sort/pagination on the bounded in-window set.
+        """
+        if not organization_ids:
+            return []
+        stmt = (
+            select(ExpirationProjection)
+            .join(
+                CustomAssetType,
+                CustomAssetType.id == ExpirationProjection.asset_type_id,
+            )
+            .where(
+                ExpirationProjection.organization_id.in_(organization_ids),
+                ExpirationProjection.expires_on <= cutoff,
+                CustomAssetType.is_active.is_(True),
+            )
+            .order_by(
+                ExpirationProjection.expires_on,
+                ExpirationProjection.asset_id,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

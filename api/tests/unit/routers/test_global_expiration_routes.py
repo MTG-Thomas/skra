@@ -67,7 +67,7 @@ async def test_global_expirations_merge_orgs_with_names_and_limit():
     ]
 
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=merged),
     ):
         result = await global_view.list_global_upcoming_expirations(
@@ -99,7 +99,7 @@ async def test_global_expirations_offset_preserves_total():
     merged = [_item(org_a, days_until=d, window_days=7) for d in (1, 7, 14)]
 
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=merged),
     ):
         result = await global_view.list_global_upcoming_expirations(
@@ -125,7 +125,7 @@ async def test_global_expirations_hide_disabled_by_default():
     db = _mock_db([(org_a, "Org A")])
 
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=[]),
     ):
         result = await global_view.list_global_upcoming_expirations(
@@ -154,7 +154,7 @@ async def test_global_expirations_show_disabled_includes_all():
     merged = [_item(org_b, days_until=1, window_days=1)]
 
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=merged),
     ):
         result = await global_view.list_global_upcoming_expirations(
@@ -182,7 +182,7 @@ async def test_global_expirations_scans_only_visible_orgs():
     db = _mock_db([(org_a, "Org A"), (org_b, "Org B")])
     scan = AsyncMock(return_value=[])
 
-    with patch("src.routers.global_view.find_global_upcoming_expirations", new=scan):
+    with patch("src.routers.global_view.find_global_upcoming_expirations_projected", new=scan):
         await global_view.list_global_upcoming_expirations(
             _user(),
             db,
@@ -223,7 +223,7 @@ async def test_global_expirations_search_filters_across_fields():
 
     async def call(search):
         with patch(
-            "src.routers.global_view.find_global_upcoming_expirations",
+            "src.routers.global_view.find_global_upcoming_expirations_projected",
             new=AsyncMock(return_value=list(merged)),
         ):
             return await global_view.list_global_upcoming_expirations(
@@ -270,7 +270,7 @@ async def test_global_expirations_sort_applies_before_pagination():
     ]
 
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=merged),
     ):
         result = await global_view.list_global_upcoming_expirations(
@@ -303,7 +303,7 @@ async def test_global_expirations_sort_desc_and_id_tie_break():
 
     async def call(sort_dir):
         with patch(
-            "src.routers.global_view.find_global_upcoming_expirations",
+            "src.routers.global_view.find_global_upcoming_expirations_projected",
             new=AsyncMock(return_value=list(merged)),
         ):
             return await global_view.list_global_upcoming_expirations(
@@ -326,7 +326,7 @@ async def test_global_expirations_sort_desc_and_id_tie_break():
         _item(org_a, asset_id=low_id, days_until=7, window_days=7),
     ]
     with patch(
-        "src.routers.global_view.find_global_upcoming_expirations",
+        "src.routers.global_view.find_global_upcoming_expirations_projected",
         new=AsyncMock(return_value=tied),
     ):
         for direction in ("asc", "desc"):

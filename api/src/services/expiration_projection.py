@@ -153,3 +153,80 @@ async def refresh_asset_projection(repository: Any, asset: Any, asset_type: Any)
             is_asset_enabled=row.is_asset_enabled,
         )
     return len(rows)
+
+
+async def rederive_type_projection(db: Any, asset_type_id: UUID, *, page_size: int = 500) -> int:
+    """
+    Re-derive projection rows for every asset of one type.
+
+    Used after type edits (field flag/key/name changes, renames) and by
+    the backfill job. Assets are paged per organization; each asset is
+    refreshed in the current transaction. Commits nothing; the caller
+    (request transaction or backfill job) owns the commit. Returns the
+    number of assets refreshed. Unknown types prune nothing and return 0.
+    """
+    from src.repositories.custom_asset import CustomAssetRepository
+    from src.repositories.custom_asset_type import CustomAssetTypeRepository
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+    from src.repositories.organization import OrganizationRepository
+
+    asset_type = await CustomAssetTypeRepository(db).get_by_id(asset_type_id)
+    if asset_type is None:
+        return 0
+    asset_repo = CustomAssetRepository(db)
+    projection_repo = ExpirationProjectionRepository(db)
+    org_repo = OrganizationRepository(db)
+
+    refreshed = 0
+    org_offset = 0
+    while True:
+        orgs = await org_repo.get_all(limit=page_size, offset=org_offset)
+        if not orgs:
+            break
+        for org in orgs:
+            asset_offset = 0
+            while True:
+                assets = await asset_repo.list_by_type_and_organization(
+                    asset_type_id, org.id, limit=page_size, offset=asset_offset
+                )
+                for asset in assets:
+                    await refresh_asset_projection(projection_repo, asset, asset_type)
+                    refreshed += 1
+                if len(assets) < page_size:
+                    break
+                asset_offset += page_size
+        if len(orgs) < page_size:
+            break
+        org_offset += page_size
+    return refreshed
+
+
+async def backfill_all_projections(db: Any, *, page_size: int = 500) -> dict[str, int]:
+    """
+    Rerunnable backfill for the expiration projection (issue #136).
+
+    Re-derives every asset type (active and inactive; reads filter
+    inactive types at query time) and commits after each type so a
+    rerun converges instead of restarting. Upserts are idempotent and
+    per-asset refresh prunes stale rows, so reruns are safe.
+
+    Returns {"types": ..., "assets": ...}.
+    """
+    from src.repositories.custom_asset_type import CustomAssetTypeRepository
+
+    type_repo = CustomAssetTypeRepository(db)
+    types_total = 0
+    assets_total = 0
+    type_offset = 0
+    while True:
+        asset_types = await type_repo.get_all_with_inactive(limit=page_size, offset=type_offset)
+        if not asset_types:
+            break
+        for asset_type in asset_types:
+            assets_total += await rederive_type_projection(db, asset_type.id, page_size=page_size)
+            types_total += 1
+            await db.commit()
+        if len(asset_types) < page_size:
+            break
+        type_offset += page_size
+    return {"types": types_total, "assets": assets_total}
