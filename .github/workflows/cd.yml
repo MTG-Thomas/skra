@@ -111,9 +111,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Join Defined Networking overlay
-        # Third-party action (QuickVM, MIT; pinned to v1 SHA). Enrolls this
-        # ephemeral runner under DN_RUNNER_NAME; torn down in the last step.
-        uses: quickvm/action-dnclient@b7756d785491796078999ef5d7747010a06c95c62 # v1
+        # Our fork (pinned SHA): nested deps SHA-pinned, enrolls this
+        # ephemeral runner under DN_RUNNER_NAME, deletes it post-job.
+        uses: MTG-Thomas/action-dnclient@fdc4ff6c391b5854424d637f934583ba4878961e
         with:
           dn-api-key: ${{ secrets.DN_API_KEY }}
           dn-network-id: ${{ secrets.DN_NETWORK_ID }}
@@ -189,24 +189,3 @@ jobs:
 
       - name: Verify public health
         run: curl -fsS "${HEALTH_URL}"
-
-      - name: Remove ephemeral overlay host
-        # The dnclient host exists only for this run; delete it so stale
-        # runners never accumulate (API key needs hosts:delete scope).
-        if: always()
-        env:
-          DN_API_KEY: ${{ secrets.DN_API_KEY }}
-        run: |
-          set -u
-          host_id="$(curl -fsSL -H "Authorization: Bearer ${DN_API_KEY}" \
-            'https://api.defined.net/v1/hosts' \
-            | jq -r --arg name "${DN_RUNNER_NAME}" \
-              '.data[]? // empty | select(.name == $name or .hostname == $name) | .id // empty' \
-            | head -n 1)"
-          if [ -z "${host_id}" ]; then
-            echo "No overlay host named ${DN_RUNNER_NAME}; nothing to remove"
-            exit 0
-          fi
-          curl -fsSL -X DELETE -H "Authorization: Bearer ${DN_API_KEY}" \
-            "https://api.defined.net/v1/hosts/${host_id}"
-          echo "Removed overlay host ${DN_RUNNER_NAME} (${host_id})"
