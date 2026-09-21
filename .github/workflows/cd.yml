@@ -199,14 +199,14 @@ jobs:
         run: |
           set -u
           host_id="$(curl -fsSL -H "Authorization: Bearer ${DN_API_KEY}" \
-            'https://api.defined.net/v2/hosts' \
+            'https://api.defined.net/v1/hosts' \
             | jq -r --arg name "${DN_RUNNER_NAME}" \
-              '.hosts[]? // empty | select(.name == $name or .hostname == $name) | .id // empty' \
+              '.data[]? // empty | select(.name == $name or .hostname == $name) | .id // empty' \
             | head -n 1)"
           if [ -z "${host_id}" ]; then
             echo "No overlay host named ${DN_RUNNER_NAME}; nothing to remove"
             exit 0
           fi
           curl -fsSL -X DELETE -H "Authorization: Bearer ${DN_API_KEY}" \
-            "https://api.defined.net/v2/hosts/${host_id}"
+            "https://api.defined.net/v1/hosts/${host_id}"
           echo "Removed overlay host ${DN_RUNNER_NAME} (${host_id})"
