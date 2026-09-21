@@ -21,12 +21,16 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # bifrost-docs-dev (laptop PVE VM101, ciuser thomas) at its LAN address.
-  # The NetBird 100.103.235.51 address died with the estate-wide NetBird
-  # retirement; the runner still needs a route to this subnet (see #100).
-  TEST_VM_HOST: 10.1.23.24
+  # bifrost-docs-dev (ciuser thomas) over the Defined Networking overlay
+  # (NetBird retired estate-wide; its 100.103.235.51 is gone). Set to the
+  # VM's Nebula IP once dnclient is enrolled there (see #100).
+  # TODO(#100): replace placeholder with the enrolled Nebula IP.
+  TEST_VM_HOST: 192.0.2.1
   TEST_VM_USER: thomas
   HEALTH_URL: https://dev.docs.midtowntg.com/health
+  # Ephemeral runner hostname; must be unique per run (Defined.net
+  # rejects duplicate host names). Torn down by the last step.
+  DN_RUNNER_NAME: skra-cd-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   deploy-test-vm:
@@ -39,15 +43,25 @@ jobs:
       name: skra-dev
       url: https://dev.docs.midtowntg.com
     env:
-      NETBIRD_SETUP_KEY_PRESENT: ${{ secrets.NETBIRD_SETUP_KEY != '' }}
+      DN_API_KEY_PRESENT: ${{ secrets.DN_API_KEY != '' }}
+      DN_NETWORK_ID_PRESENT: ${{ secrets.DN_NETWORK_ID != '' }}
+      DN_ROLE_ID_PRESENT: ${{ secrets.DN_ROLE_ID != '' }}
       TEST_VM_SSH_KEY_PRESENT: ${{ secrets.TEST_VM_SSH_KEY != '' }}
       TEST_VM_SSH_HOST_KEY_PRESENT: ${{ secrets.TEST_VM_SSH_HOST_KEY != '' }}
 
     steps:
       - name: Validate deployment secrets
         run: |
-          test "${NETBIRD_SETUP_KEY_PRESENT}" = "true" || {
-            echo "Missing required secret: NETBIRD_SETUP_KEY" >&2
+          test "${DN_API_KEY_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_API_KEY" >&2
+            exit 1
+          }
+          test "${DN_NETWORK_ID_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_NETWORK_ID" >&2
+            exit 1
+          }
+          test "${DN_ROLE_ID_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_ROLE_ID" >&2
             exit 1
           }
           test "${TEST_VM_SSH_KEY_PRESENT}" = "true" || {
@@ -58,6 +72,12 @@ jobs:
             echo "Missing required secret: TEST_VM_SSH_HOST_KEY" >&2
             exit 1
           }
+          case "${TEST_VM_HOST}" in
+            192.0.2.1)
+              echo "TEST_VM_HOST is still the placeholder (see #100)" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Resolve deployment ref
         id: ref
@@ -90,15 +110,15 @@ jobs:
             echo "client_image=ghcr.io/mtg-thomas/skra-client:${DEPLOY_SHA_SHORT}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Connect runner to NetBird
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-          sudo netbird service install || true
-          sudo netbird service start || true
-          sudo netbird up --setup-key "${NETBIRD_SETUP_KEY}"
-          netbird status
+      - name: Join Defined Networking overlay
+        # Third-party action (QuickVM, MIT; pinned to v1 SHA). Enrolls this
+        # ephemeral runner under DN_RUNNER_NAME; torn down in the last step.
+        uses: quickvm/action-dnclient@b7756d785491796078999ef5d7747010a06c95c62 # v1
+        with:
+          dn-api-key: ${{ secrets.DN_API_KEY }}
+          dn-network-id: ${{ secrets.DN_NETWORK_ID }}
+          dn-role-id: ${{ secrets.DN_ROLE_ID }}
+          dn-hostname: ${{ env.DN_RUNNER_NAME }}
 
       - name: Configure SSH key
         run: |
@@ -169,3 +189,24 @@ jobs:
 
       - name: Verify public health
         run: curl -fsS "${HEALTH_URL}"
+
+      - name: Remove ephemeral overlay host
+        # The dnclient host exists only for this run; delete it so stale
+        # runners never accumulate (API key needs hosts:delete scope).
+        if: always()
+        env:
+          DN_API_KEY: ${{ secrets.DN_API_KEY }}
+        run: |
+          set -u
+          host_id="$(curl -fsSL -H "Authorization: Bearer ${DN_API_KEY}" \
+            'https://api.defined.net/v2/hosts' \
+            | jq -r --arg name "${DN_RUNNER_NAME}" \
+              '.hosts[]? // empty | select(.name == $name or .hostname == $name) | .id // empty' \
+            | head -n 1)"
+          if [ -z "${host_id}" ]; then
+            echo "No overlay host named ${DN_RUNNER_NAME}; nothing to remove"
+            exit 0
+          fi
+          curl -fsSL -X DELETE -H "Authorization: Bearer ${DN_API_KEY}" \
+            "https://api.defined.net/v2/hosts/${host_id}"
+          echo "Removed overlay host ${DN_RUNNER_NAME} (${host_id})"
