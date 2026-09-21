@@ -21,7 +21,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TEST_VM_HOST: 100.103.235.51
+  # bifrost-docs-dev (laptop PVE VM101, ciuser thomas) at its LAN address.
+  # The NetBird 100.103.235.51 address died with the estate-wide NetBird
+  # retirement; the runner still needs a route to this subnet (see #100).
+  TEST_VM_HOST: 10.1.23.24
   TEST_VM_USER: thomas
   HEALTH_URL: https://dev.docs.midtowntg.com/health
 
@@ -136,7 +139,7 @@ jobs:
               break
             fi
             if [ "$attempt" -eq 12 ]; then
-              echo "SSH did not become ready over NetBird" >&2
+              echo "SSH to ${TEST_VM_HOST} did not become ready" >&2
               exit 1
             fi
             sleep 5
