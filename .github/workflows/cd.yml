@@ -21,9 +21,20 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TEST_VM_HOST: 100.103.235.51
+  # skra-cd-target (CT117 on pve-t340, user thomas) over the Defined
+  # Networking overlay (see #100). Replaces bifrost-docs-dev (VM101 on
+  # the laptop, 100.100.0.50) as the validation target.
+  # skra-cd-target overlay address (static, enrolled 2026-09-23).
+  TEST_VM_HOST: 100.100.0.51
   TEST_VM_USER: thomas
-  HEALTH_URL: https://dev.docs.midtowntg.com/health
+  # No public DNS / TLS on the LXC target: verify the client directly
+  # over the overlay (plain HTTP on its published port).
+  HEALTH_URL: http://100.100.0.51:8080/health
+  # The LXC target has no /etc/letsencrypt: skip the ssl compose file.
+  SKRA_TARGET_SSL: "0"
+  # Ephemeral runner hostname; must be unique per run (Defined.net
+  # rejects duplicate host names). Torn down by the last step.
+  DN_RUNNER_NAME: skra-cd-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   deploy-test-vm:
@@ -36,15 +47,25 @@ jobs:
       name: skra-dev
       url: https://dev.docs.midtowntg.com
     env:
-      NETBIRD_SETUP_KEY_PRESENT: ${{ secrets.NETBIRD_SETUP_KEY != '' }}
+      DN_API_KEY_PRESENT: ${{ secrets.DN_API_KEY != '' }}
+      DN_NETWORK_ID_PRESENT: ${{ secrets.DN_NETWORK_ID != '' }}
+      DN_ROLE_ID_PRESENT: ${{ secrets.DN_ROLE_ID != '' }}
       TEST_VM_SSH_KEY_PRESENT: ${{ secrets.TEST_VM_SSH_KEY != '' }}
       TEST_VM_SSH_HOST_KEY_PRESENT: ${{ secrets.TEST_VM_SSH_HOST_KEY != '' }}
 
     steps:
       - name: Validate deployment secrets
         run: |
-          test "${NETBIRD_SETUP_KEY_PRESENT}" = "true" || {
-            echo "Missing required secret: NETBIRD_SETUP_KEY" >&2
+          test "${DN_API_KEY_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_API_KEY" >&2
+            exit 1
+          }
+          test "${DN_NETWORK_ID_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_NETWORK_ID" >&2
+            exit 1
+          }
+          test "${DN_ROLE_ID_PRESENT}" = "true" || {
+            echo "Missing required secret: DN_ROLE_ID" >&2
             exit 1
           }
           test "${TEST_VM_SSH_KEY_PRESENT}" = "true" || {
@@ -55,6 +76,12 @@ jobs:
             echo "Missing required secret: TEST_VM_SSH_HOST_KEY" >&2
             exit 1
           }
+          case "${TEST_VM_HOST}" in
+            192.0.2.1)
+              echo "TEST_VM_HOST is still the placeholder (see #100)" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Resolve deployment ref
         id: ref
@@ -87,15 +114,16 @@ jobs:
             echo "client_image=ghcr.io/mtg-thomas/skra-client:${DEPLOY_SHA_SHORT}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Connect runner to NetBird
-        env:
-          NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
-        run: |
-          curl -fsSL https://pkgs.netbird.io/install.sh | sh
-          sudo netbird service install || true
-          sudo netbird service start || true
-          sudo netbird up --setup-key "${NETBIRD_SETUP_KEY}"
-          netbird status
+      - name: Join Defined Networking overlay
+        # Our fork (pinned SHA): nested deps SHA-pinned, enrolls this
+        # ephemeral runner under DN_RUNNER_NAME. Teardown step below
+        # removes it (composite actions cannot declare post steps).
+        uses: MTG-Thomas/action-dnclient@d5cd263bae02eba7ede57a1adc1d6d4bb4ab861e
+        with:
+          dn-api-key: ${{ secrets.DN_API_KEY }}
+          dn-network-id: ${{ secrets.DN_NETWORK_ID }}
+          dn-role-id: ${{ secrets.DN_ROLE_ID }}
+          dn-hostname: ${{ env.DN_RUNNER_NAME }}
 
       - name: Configure SSH key
         run: |
@@ -128,15 +156,38 @@ jobs:
             printf 'SKRA_CLIENT_IMAGE=%q\n' "${SKRA_CLIENT_IMAGE}"
             printf 'GHCR_READ_USER=%q\n' "${GHCR_READ_USER}"
             printf 'HEALTH_URL=%q\n' "${HEALTH_URL}"
+            printf 'SKRA_TARGET_SSL=%q\n' "${SKRA_TARGET_SSL:-1}"
           } > /tmp/skra-deploy.env
           chmod 600 /tmp/skra-deploy.env
 
+          for attempt in $(seq 1 12); do
+            if timeout 10 bash -c "</dev/tcp/${TEST_VM_HOST}/22" 2>/dev/null; then
+              echo "Overlay TCP/22 reachable (attempt ${attempt})"
+              break
+            fi
+            echo "Overlay TCP/22 not reachable (attempt ${attempt})"
+            if ping -c 2 -W 4 "${TEST_VM_HOST}" >/dev/null 2>&1; then
+              echo "Overlay ICMP works; TCP/22 filtered or sshd down"
+            else
+              echo "Overlay ICMP also failing; tunnel/handshake not up"
+            fi
+            ip -brief addr show | grep -E 'defined|nebula' || echo '(no overlay interface yet)'
+            if [ "$attempt" -eq 12 ]; then
+              echo "Overlay path to ${TEST_VM_HOST}:22 never came up" >&2
+              echo "--- routes ---"
+              ip route show | head -n 15 || true
+              echo "--- dnclient journal ---"
+              journalctl --no-pager -u 'dnclient*' -n 40 || true
+              exit 1
+            fi
+            sleep 10
+          done
           for attempt in $(seq 1 12); do
             if ssh -i ~/.ssh/test_vm_key -o StrictHostKeyChecking=yes -o ConnectTimeout=10 "${TEST_VM_USER}@${TEST_VM_HOST}" "true"; then
               break
             fi
             if [ "$attempt" -eq 12 ]; then
-              echo "SSH did not become ready over NetBird" >&2
+              echo "SSH to ${TEST_VM_HOST} did not become ready" >&2
               exit 1
             fi
             sleep 5
@@ -164,5 +215,29 @@ jobs:
               unset ghcr_token
               bash /tmp/skra-deploy/scripts/deploy-test-vm.sh'
 
-      - name: Verify public health
+      - name: Verify overlay health
+        # HEALTH_URL already points at the target over the overlay
+        # (direct IP literal, no DNS involved).
         run: curl -fsS "${HEALTH_URL}"
+
+      - name: Remove ephemeral overlay host
+        # Composite actions cannot declare post steps, so the caller owns
+        # teardown: delete the host we enrolled so runners never linger
+        # (API key needs hosts:delete scope).
+        if: always()
+        env:
+          DN_API_KEY: ${{ secrets.DN_API_KEY }}
+        run: |
+          set -u
+          host_id="$(curl -fsSL -H "Authorization: Bearer ${DN_API_KEY}" \
+            'https://api.defined.net/v1/hosts' \
+            | jq -r --arg name "${DN_RUNNER_NAME}" \
+              '.data[]? // empty | select(.name == $name or .hostname == $name) | .id // empty' \
+            | head -n 1)"
+          if [ -z "${host_id}" ]; then
+            echo "No overlay host named ${DN_RUNNER_NAME}; nothing to remove"
+            exit 0
+          fi
+          curl -fsSL -X DELETE -H "Authorization: Bearer ${DN_API_KEY}" \
+            "https://api.defined.net/v1/hosts/${host_id}"
+          echo "Removed overlay host ${DN_RUNNER_NAME} (${host_id})"
