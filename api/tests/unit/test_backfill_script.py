@@ -25,7 +25,7 @@ def load_module(monkeypatch: pytest.MonkeyPatch) -> Any:
     calls: dict[str, Any] = {}
 
     class StubSession:
-        async def __aenter__(self) -> "StubSession":
+        async def __aenter__(self) -> StubSession:
             return self
 
         async def __aexit__(self, *args: object) -> None:
@@ -107,6 +107,7 @@ def test_main_reraise_on_backfill_failure(
 def test_backfill_service_is_coroutine() -> None:
     """Guard: the CLI awaits backfill_all_projections, so it must stay async."""
     import asyncio
+
     import src.services.expiration_projection as service
 
     assert asyncio.iscoroutinefunction(service.backfill_all_projections)

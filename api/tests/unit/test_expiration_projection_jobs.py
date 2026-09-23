@@ -112,8 +112,6 @@ async def test_rederive_pages_orgs_and_assets(
     monkeypatch.setattr(
         projection_service, "refresh_asset_projection", fake_refresh
     )
-    assets_by_org: dict[object, list] = {}
-
     async def fake_list(type_id, org_id, limit: int, offset: int):
         if offset == 0:
             return [_asset(), _asset()]
