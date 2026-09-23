@@ -210,8 +210,12 @@ jobs:
               unset ghcr_token
               bash /tmp/skra-deploy/scripts/deploy-test-vm.sh'
 
-      - name: Verify public health
-        run: curl -fsS "${HEALTH_URL}"
+      - name: Verify overlay health
+        # Public DNS for dev.docs.midtowntg.com is gone (see #100), so
+        # verify over the overlay instead: --resolve pins the public
+        # name to the VM's Nebula IP, keeping full certificate
+        # validation without needing a public A record.
+        run: curl -fsS --resolve "dev.docs.midtowntg.com:443:${TEST_VM_HOST}" "${HEALTH_URL}"
 
       - name: Remove ephemeral overlay host
         # Composite actions cannot declare post steps, so the caller owns
