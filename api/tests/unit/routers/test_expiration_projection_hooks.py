@@ -16,6 +16,7 @@ from uuid import uuid4
 import pytest
 
 from src.core.auth import UserPrincipal
+from src.models.contracts.common import BatchToggleRequest
 from src.models.contracts.custom_asset import CustomAssetCreate
 from src.models.enums import UserRole
 from src.routers import custom_assets
@@ -124,3 +125,102 @@ async def test_create_refreshes_projection_in_request_session():
     proj_repo.delete_stale_for_asset.assert_awaited_once_with(ASSET_ID, {FIELD_ID})
     # Response contract unchanged.
     assert str(public.id) == str(ASSET_ID)
+
+
+@pytest.mark.asyncio
+async def test_batch_toggle_reprojects_present_assets_and_skips_missing():
+    """Batch toggle re-projects found assets; missing ones are skipped."""
+    from uuid import uuid4 as _uuid4
+
+    missing_id = _uuid4()
+    present = _stored_asset()
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=SimpleNamespace(rowcount=2))
+    db.commit = AsyncMock()
+
+    asset_repo = AsyncMock()
+    asset_repo.get_by_id_type_and_org = AsyncMock(
+        side_effect=lambda aid, tid, oid: present if aid == ASSET_ID else None
+    )
+    type_repo = AsyncMock()
+    type_repo.get_by_id = AsyncMock(return_value=_asset_type())
+    proj_repo = AsyncMock()
+    proj_repo.upsert_row = AsyncMock()
+    proj_repo.delete_stale_for_asset = AsyncMock(return_value=0)
+
+    with (
+        patch.object(
+            custom_assets, "_verify_org_access", new=AsyncMock()
+        ),
+        patch.object(
+            custom_assets, "_get_asset_type", new=AsyncMock()
+        ),
+        patch.object(
+            custom_assets, "CustomAssetRepository", return_value=asset_repo
+        ),
+        patch.object(
+            custom_assets, "CustomAssetTypeRepository", return_value=type_repo
+        ),
+        patch.object(
+            custom_assets, "ExpirationProjectionRepository", return_value=proj_repo
+        ),
+        patch.object(custom_assets, "index_entity_for_search", new=AsyncMock()),
+    ):
+        response = await custom_assets.batch_toggle_custom_assets(
+            ORG_ID,
+            TYPE_ID,
+            BatchToggleRequest(ids=[str(ASSET_ID), str(missing_id)], is_enabled=False),
+            _user(),
+            db,
+        )
+
+    assert response.updated_count == 2
+    # Only the present asset re-projects; the missing one is skipped.
+    proj_repo.upsert_row.assert_awaited_once()
+    proj_repo.delete_stale_for_asset.assert_awaited_once_with(ASSET_ID, {FIELD_ID})
+
+
+@pytest.mark.asyncio
+async def test_batch_toggle_skips_when_type_missing():
+    """A missing type skips re-projection for every asset."""
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
+    db.commit = AsyncMock()
+
+    asset_repo = AsyncMock()
+    asset_repo.get_by_id_type_and_org = AsyncMock(return_value=_stored_asset())
+    type_repo = AsyncMock()
+    type_repo.get_by_id = AsyncMock(return_value=None)
+    proj_repo = AsyncMock()
+    proj_repo.upsert_row = AsyncMock()
+    proj_repo.delete_stale_for_asset = AsyncMock(return_value=0)
+
+    with (
+        patch.object(
+            custom_assets, "_verify_org_access", new=AsyncMock()
+        ),
+        patch.object(
+            custom_assets, "_get_asset_type", new=AsyncMock()
+        ),
+        patch.object(
+            custom_assets, "CustomAssetRepository", return_value=asset_repo
+        ),
+        patch.object(
+            custom_assets, "CustomAssetTypeRepository", return_value=type_repo
+        ),
+        patch.object(
+            custom_assets, "ExpirationProjectionRepository", return_value=proj_repo
+        ),
+        patch.object(custom_assets, "index_entity_for_search", new=AsyncMock()),
+    ):
+        response = await custom_assets.batch_toggle_custom_assets(
+            ORG_ID,
+            TYPE_ID,
+            BatchToggleRequest(ids=[str(ASSET_ID)], is_enabled=True),
+            _user(),
+            db,
+        )
+
+    assert response.updated_count == 1
+    proj_repo.upsert_row.assert_not_awaited()
+    proj_repo.delete_stale_for_asset.assert_not_awaited()
