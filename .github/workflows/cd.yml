@@ -21,13 +21,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # bifrost-docs-dev (ciuser thomas) over the Defined Networking overlay
-  # (NetBird retired estate-wide; its 100.103.235.51 is gone). Set to the
-  # VM's Nebula IP once dnclient is enrolled there (see #100).
-  # bifrost-docs-dev overlay address (static, enrolled 2026-09-21).
-  TEST_VM_HOST: 100.100.0.50
+  # skra-cd-target (CT117 on pve-t340, user thomas) over the Defined
+  # Networking overlay (see #100). Replaces bifrost-docs-dev (VM101 on
+  # the laptop, 100.100.0.50) as the validation target.
+  # skra-cd-target overlay address (static, enrolled 2026-09-23).
+  TEST_VM_HOST: 100.100.0.51
   TEST_VM_USER: thomas
-  HEALTH_URL: https://dev.docs.midtowntg.com/health
+  # No public DNS / TLS on the LXC target: verify the client directly
+  # over the overlay (plain HTTP on its published port).
+  HEALTH_URL: http://100.100.0.51:8080/health
+  # The LXC target has no /etc/letsencrypt: skip the ssl compose file.
+  SKRA_TARGET_SSL: "0"
   # Ephemeral runner hostname; must be unique per run (Defined.net
   # rejects duplicate host names). Torn down by the last step.
   DN_RUNNER_NAME: skra-cd-${{ github.run_id }}-${{ github.run_attempt }}
@@ -152,6 +156,7 @@ jobs:
             printf 'SKRA_CLIENT_IMAGE=%q\n' "${SKRA_CLIENT_IMAGE}"
             printf 'GHCR_READ_USER=%q\n' "${GHCR_READ_USER}"
             printf 'HEALTH_URL=%q\n' "${HEALTH_URL}"
+            printf 'SKRA_TARGET_SSL=%q\n' "${SKRA_TARGET_SSL:-1}"
           } > /tmp/skra-deploy.env
           chmod 600 /tmp/skra-deploy.env
 
@@ -211,11 +216,9 @@ jobs:
               bash /tmp/skra-deploy/scripts/deploy-test-vm.sh'
 
       - name: Verify overlay health
-        # Public DNS for dev.docs.midtowntg.com is gone (see #100), so
-        # verify over the overlay instead: --resolve pins the public
-        # name to the VM's Nebula IP, keeping full certificate
-        # validation without needing a public A record.
-        run: curl -fsS --resolve "dev.docs.midtowntg.com:443:${TEST_VM_HOST}" "${HEALTH_URL}"
+        # HEALTH_URL already points at the target over the overlay
+        # (direct IP literal, no DNS involved).
+        run: curl -fsS "${HEALTH_URL}"
 
       - name: Remove ephemeral overlay host
         # Composite actions cannot declare post steps, so the caller owns

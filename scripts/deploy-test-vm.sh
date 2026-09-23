@@ -62,8 +62,12 @@ COMPOSE_FILES=(
   -p "${COMPOSE_PROJECT}"
   -f docker-compose.yml
   -f docker-compose.test-vm.yml
-  -f docker-compose.ssl.yml
 )
+# Targets without TLS termination (no /etc/letsencrypt, e.g. the LXC
+# validation host) set SKRA_TARGET_SSL=0 to skip the ssl compose file.
+if [ "${SKRA_TARGET_SSL:-1}" != "0" ]; then
+  COMPOSE_FILES+=(-f docker-compose.ssl.yml)
+fi
 
 API_IMAGE="${SKRA_API_IMAGE:-ghcr.io/mtg-thomas/skra-api:${DEPLOY_SHA_SHORT}}"
 CLIENT_IMAGE="${SKRA_CLIENT_IMAGE:-ghcr.io/mtg-thomas/skra-client:${DEPLOY_SHA_SHORT}}"
@@ -109,6 +113,10 @@ for attempt in {1..30}; do
 done
 
 docker compose "${COMPOSE_FILES[@]}" ps
-docker compose "${COMPOSE_FILES[@]}" logs --tail=120 api client ssl-proxy
+if [ "${SKRA_TARGET_SSL:-1}" != "0" ]; then
+  docker compose "${COMPOSE_FILES[@]}" logs --tail=120 api client ssl-proxy
+else
+  docker compose "${COMPOSE_FILES[@]}" logs --tail=120 api client
+fi
 echo "Deployment did not become healthy: ${HEALTH_URL}" >&2
 exit 1
