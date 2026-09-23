@@ -36,7 +36,7 @@ from src.repositories.document import DocumentRepository
 from src.repositories.location import LocationRepository
 from src.repositories.password import PasswordRepository
 from src.services.custom_asset_validation import values_id_to_key
-from src.services.expiration import find_global_upcoming_expirations
+from src.services.expiration import find_global_upcoming_expirations_projected
 
 logger = logging.getLogger(__name__)
 
@@ -659,11 +659,10 @@ async def list_global_upcoming_expirations(
     V1 access model (ADR-001): every authenticated user reads every
     organization, so readability is the standard global visibility rule —
     enabled organizations by default, archived ones opted in with
-    show_disabled=true. One server-side aggregation reuses the org-scoped
-    expiration scan per visible organization (no client N+1); search and
-    sort apply to the merged list before limit/offset cap the response.
-    limit/offset bound only the response: the scan itself pages through
-    every flagged asset in every visible organization.
+    show_disabled=true. One bounded indexed query over the expiration
+    projection serves all visible organizations (no client N+1 and no
+    per-asset scan); search and sort apply to the merged list before
+    limit/offset cap the response.
 
     No view audit is logged: dashboard widgets poll this endpoint and
     audit entries would drown real access history.
@@ -675,7 +674,7 @@ async def list_global_upcoming_expirations(
     org_ids = [row[0] for row in org_rows]
     org_names = {row[0]: row[1] for row in org_rows}
 
-    merged = await find_global_upcoming_expirations(db, org_ids, within_days=within_days)
+    merged = await find_global_upcoming_expirations_projected(db, org_ids, within_days=within_days)
 
     if search:
         needle = search.casefold()

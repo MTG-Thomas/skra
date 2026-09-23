@@ -7,7 +7,7 @@ Pure helpers stay free of I/O so alerting, API, and UI share semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -156,15 +156,15 @@ async def find_global_upcoming_expirations(
 ) -> list[UpcomingExpiration]:
     """Find flagged expirations across organizations inside the horizon.
 
-    Reuses the org-scoped scan per organization (single server-side
-    aggregation, no client N+1) and merges the results ordered by urgency
-    (days until expiration, then asset id for determinism). Callers slice
-    the merged list to enforce limit/offset caps.
+    Legacy full-scan path, kept for rollback and scanner-vs-projection
+    comparison (see the integration test): reuses the org-scoped scan
+    per organization and merges ordered by urgency (days until
+    expiration, then asset id for determinism).
 
     Cost note: every page of every flagged type in every listed
     organization is scanned, so work scales with total assets, not with
     the caller's limit — limit/offset bound only the response, not the
-    scan.
+    scan. Prefer find_global_upcoming_expirations_projected.
     """
     merged: list[UpcomingExpiration] = []
     for organization_id in organization_ids:
@@ -175,3 +175,74 @@ async def find_global_upcoming_expirations(
         )
     merged.sort(key=lambda i: (i.days_until, str(i.organization_id), str(i.asset_id)))
     return merged
+
+
+def _row_to_upcoming(row: Any, current: date) -> UpcomingExpiration | None:
+    """Map one projection row to the shared upcoming-expiration contract.
+
+    Returns None for out-of-horizon rows (the scanner skips those too);
+    unreachable when callers bound expires_on <= today + within_days.
+    """
+    days_until = (row.expires_on - current).days
+    window = expiration_window(days_until)
+    if window is None:
+        return None
+    return UpcomingExpiration(
+        organization_id=row.organization_id,
+        asset_id=row.asset_id,
+        asset_display=row.display_label,
+        asset_type_id=row.asset_type_id,
+        asset_type_name=row.asset_type_name,
+        field_key=row.field_key,
+        field_name=row.field_name,
+        expires_on=row.expires_on,
+        days_until=days_until,
+        window_days=window,
+    )
+
+
+async def find_upcoming_expirations_projected(
+    db: Any,
+    organization_id: UUID,
+    *,
+    within_days: int = DEFAULT_WITHIN_DAYS,
+    today: date | None = None,
+) -> list[UpcomingExpiration]:
+    """Projection-backed replacement for :func:`find_upcoming_expirations`.
+
+    Same contract and ordering ((days_until, asset_id)); reads the
+    normalized rows through the (organization_id, expires_on) index
+    instead of paging every asset. Expired rows are included, matching
+    the scanner.
+    """
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+
+    current = today or datetime.now(UTC).date()
+    cutoff = current + timedelta(days=within_days)
+    rows = await ExpirationProjectionRepository(db).query_upcoming([organization_id], cutoff)
+    items = [item for row in rows if (item := _row_to_upcoming(row, current)) is not None]
+    items.sort(key=lambda i: (i.days_until, str(i.asset_id)))
+    return items
+
+
+async def find_global_upcoming_expirations_projected(
+    db: Any,
+    organization_ids: list[UUID],
+    *,
+    within_days: int = DEFAULT_WITHIN_DAYS,
+    today: date | None = None,
+) -> list[UpcomingExpiration]:
+    """Projection-backed replacement for :func:`find_global_upcoming_expirations`.
+
+    Single bounded indexed query across the visible organizations, merged
+    ordered by urgency ((days_until, organization_id, asset_id)) exactly
+    like the scanner merge.
+    """
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+
+    current = today or datetime.now(UTC).date()
+    cutoff = current + timedelta(days=within_days)
+    rows = await ExpirationProjectionRepository(db).query_upcoming(organization_ids, cutoff)
+    items = [item for row in rows if (item := _row_to_upcoming(row, current)) is not None]
+    items.sort(key=lambda i: (i.days_until, str(i.organization_id), str(i.asset_id)))
+    return items

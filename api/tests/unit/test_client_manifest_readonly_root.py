@@ -11,9 +11,13 @@ stdout/stderr), and /usr/share/nginx/html + /etc/nginx stay read-only.
 uid 101, port 8080, and the probes must be preserved.
 """
 
+import os
 from pathlib import Path
 
-DEPLOYMENT = Path(__file__).resolve().parents[3] / "kubernetes" / "client" / "deployment.yaml"
+# REPO_ROOT is set for the containerized test-runner (see REPO_ROOT in
+# tests/unit/test_compose_wiring.py); local runs resolve from this file.
+_REPO = os.environ.get("REPO_ROOT") or str(Path(__file__).resolve().parents[3])
+DEPLOYMENT = Path(_REPO) / "kubernetes" / "client" / "deployment.yaml"
 
 
 def _text() -> str:

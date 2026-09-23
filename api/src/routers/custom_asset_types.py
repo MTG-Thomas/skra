@@ -26,6 +26,7 @@ from src.services.custom_asset_validation import (
     CustomAssetValidationError,
     validate_field_definitions,
 )
+from src.services.expiration_projection import rederive_type_projection
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +319,12 @@ async def update_custom_asset_type(
 
     asset_type = await repo.update(asset_type)
     asset_count = await repo.get_asset_count(type_id)
+
+    # Projection re-derive (issue #136): field flag/key/name edits change
+    # projection membership and snapshots for every asset of this type.
+    # Runs in the request transaction. Deactivate/activate need no data
+    # change: reads exclude inactive types at query time.
+    await rederive_type_projection(db, type_id)
 
     logger.info(
         f"Custom asset type updated: {asset_type.name}",

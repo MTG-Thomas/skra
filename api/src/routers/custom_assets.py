@@ -27,6 +27,7 @@ from src.models.orm.custom_asset import CustomAsset
 from src.models.orm.custom_asset_type import CustomAssetType
 from src.repositories.custom_asset import CustomAssetRepository
 from src.repositories.custom_asset_type import CustomAssetTypeRepository
+from src.repositories.expiration_projection import ExpirationProjectionRepository
 from src.services.audit_service import get_audit_service
 from src.services.custom_asset_validation import (
     CustomAssetValidationError,
@@ -37,6 +38,7 @@ from src.services.custom_asset_validation import (
     values_id_to_key,
     values_key_to_id,
 )
+from src.services.expiration_projection import refresh_asset_projection
 from src.services.search_indexing import index_entity_for_search, remove_entity_from_search
 
 
@@ -327,6 +329,11 @@ async def create_custom_asset(
         is_enabled=data.is_enabled if data.is_enabled is not None else True,
     )
     asset = await repo.create(asset)
+
+    # Refresh the expiration projection in the same session/transaction
+    # (issue #136): get_db commits at request end, so reads never observe
+    # the asset without its expiration rows.
+    await refresh_asset_projection(ExpirationProjectionRepository(db), asset, asset_type)
 
     # Audit log
     audit_service = get_audit_service(db)
@@ -630,6 +637,10 @@ async def update_custom_asset(
 
     asset = await repo.update(asset)
 
+    # Same-transaction projection refresh (issue #136): updated dates,
+    # cleared values, and enable toggles converge before request commit.
+    await refresh_asset_projection(ExpirationProjectionRepository(db), asset, asset_type)
+
     # Audit log
     audit_service = get_audit_service(db)
     await audit_service.log(
@@ -706,6 +717,10 @@ async def delete_custom_asset(
 
     await repo.delete(asset)
 
+    # Same-transaction projection cleanup (issue #136); the asset_id FK
+    # cascade is a backstop, the explicit delete is the contract.
+    await ExpirationProjectionRepository(db).delete_for_asset(asset_id)
+
     # Remove from search index (async, non-blocking on failure)
     await remove_entity_from_search(db, "custom_asset", asset_id)
 
@@ -771,5 +786,19 @@ async def batch_toggle_custom_assets(
     # The worker will index if enabled, remove from index if disabled
     for asset_id in asset_ids:
         await index_entity_for_search(db, "custom_asset", asset_id, org_id)
+
+    # Projection refresh (issue #136): is_enabled flips are stored on the
+    # rows, so re-project each toggled asset in the request transaction.
+    projection_repo = ExpirationProjectionRepository(db)
+    asset_repo = CustomAssetRepository(db)
+    type_repo = CustomAssetTypeRepository(db)
+    for asset_id in asset_ids:
+        asset = await asset_repo.get_by_id_type_and_org(asset_id, type_id, org_id)
+        if asset is None:
+            continue
+        asset_type = await type_repo.get_by_id(type_id)
+        if asset_type is None:
+            continue
+        await refresh_asset_projection(projection_repo, asset, asset_type)
 
     return BatchToggleResponse(updated_count=result.rowcount)  # type: ignore[attr-defined]

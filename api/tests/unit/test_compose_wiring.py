@@ -7,10 +7,27 @@ exited on validation), and the dev client healthcheck shelled out to
 compose files as text (no yaml dependency) and pin both contracts.
 """
 
+import os
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+
+def _repo_root() -> Path:
+    """Locate the repository root (compose files live there).
+
+    Prefers REPO_ROOT (set for the containerized test-runner, where only
+    /app is the API tree), else walks up from this file (local runs).
+    """
+    env_root = os.environ.get("REPO_ROOT")
+    if env_root and (Path(env_root) / "docker-compose.yml").is_file():
+        return Path(env_root)
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "docker-compose.yml").is_file():
+            return candidate
+    raise FileNotFoundError("docker-compose.yml not found above test file")
+
+
+ROOT = _repo_root()
 BASE = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 DEV = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
 TEST = (ROOT / "docker-compose.test.yml").read_text(encoding="utf-8")

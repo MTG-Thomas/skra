@@ -614,11 +614,16 @@ class TestChecklistEndpointLogic:
         type_repo = AsyncMock()
         type_repo.get_by_id.return_value = asset_type
         asset_repo = AsyncMock()
+        projection_repo = AsyncMock()
         audit = MagicMock()
         audit.log = AsyncMock()
         patches = [
             patch("src.routers.custom_assets.CustomAssetTypeRepository", return_value=type_repo),
             patch("src.routers.custom_assets.CustomAssetRepository", return_value=asset_repo),
+            patch(
+                "src.routers.custom_assets.ExpirationProjectionRepository",
+                return_value=projection_repo,
+            ),
             patch("src.routers.custom_assets.get_audit_service", return_value=audit),
             patch("src.routers.custom_assets.index_entity_for_search", new=AsyncMock()),
         ]

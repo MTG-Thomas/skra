@@ -54,7 +54,7 @@ async def test_get_upcoming_expirations_returns_items():
             return_value=org_repo,
         ),
         patch(
-            "src.routers.organizations.find_upcoming_expirations",
+            "src.routers.organizations.find_upcoming_expirations_projected",
             new=AsyncMock(return_value=items),
         ),
     ):

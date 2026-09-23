@@ -18,7 +18,10 @@ from typing import Any
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "garage-init.sh"
+# REPO_ROOT is set for the containerized test-runner (see REPO_ROOT in
+# tests/unit/test_compose_wiring.py); local runs resolve from this file.
+_REPO = os.environ.get("REPO_ROOT") or str(Path(__file__).resolve().parents[3])
+SCRIPT = Path(_REPO) / "scripts" / "garage-init.sh"
 NODE_ID = "8a9d31ecd543f98562fe74583782ef4bd5492a7abfe3e8e0f2ae63fac158700d"
 BUCKET_ID = "4110a5b90612fc800f3277b37ece51c149a0a6abd1348cf4d3cb50cb68a099b4"
 VALID_KEY_ID = "GK731dc147d0c5b0fcb188d4d8"
