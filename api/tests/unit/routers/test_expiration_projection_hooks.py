@@ -149,21 +149,11 @@ async def test_batch_toggle_reprojects_present_assets_and_skips_missing():
     proj_repo.delete_stale_for_asset = AsyncMock(return_value=0)
 
     with (
-        patch.object(
-            custom_assets, "_verify_org_access", new=AsyncMock()
-        ),
-        patch.object(
-            custom_assets, "_get_asset_type", new=AsyncMock()
-        ),
-        patch.object(
-            custom_assets, "CustomAssetRepository", return_value=asset_repo
-        ),
-        patch.object(
-            custom_assets, "CustomAssetTypeRepository", return_value=type_repo
-        ),
-        patch.object(
-            custom_assets, "ExpirationProjectionRepository", return_value=proj_repo
-        ),
+        patch.object(custom_assets, "_verify_org_access", new=AsyncMock()),
+        patch.object(custom_assets, "_get_asset_type", new=AsyncMock()),
+        patch.object(custom_assets, "CustomAssetRepository", return_value=asset_repo),
+        patch.object(custom_assets, "CustomAssetTypeRepository", return_value=type_repo),
+        patch.object(custom_assets, "ExpirationProjectionRepository", return_value=proj_repo),
         patch.object(custom_assets, "index_entity_for_search", new=AsyncMock()),
     ):
         response = await custom_assets.batch_toggle_custom_assets(
@@ -196,21 +186,11 @@ async def test_batch_toggle_skips_when_type_missing():
     proj_repo.delete_stale_for_asset = AsyncMock(return_value=0)
 
     with (
-        patch.object(
-            custom_assets, "_verify_org_access", new=AsyncMock()
-        ),
-        patch.object(
-            custom_assets, "_get_asset_type", new=AsyncMock()
-        ),
-        patch.object(
-            custom_assets, "CustomAssetRepository", return_value=asset_repo
-        ),
-        patch.object(
-            custom_assets, "CustomAssetTypeRepository", return_value=type_repo
-        ),
-        patch.object(
-            custom_assets, "ExpirationProjectionRepository", return_value=proj_repo
-        ),
+        patch.object(custom_assets, "_verify_org_access", new=AsyncMock()),
+        patch.object(custom_assets, "_get_asset_type", new=AsyncMock()),
+        patch.object(custom_assets, "CustomAssetRepository", return_value=asset_repo),
+        patch.object(custom_assets, "CustomAssetTypeRepository", return_value=type_repo),
+        patch.object(custom_assets, "ExpirationProjectionRepository", return_value=proj_repo),
         patch.object(custom_assets, "index_entity_for_search", new=AsyncMock()),
     ):
         response = await custom_assets.batch_toggle_custom_assets(

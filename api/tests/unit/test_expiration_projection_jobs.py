@@ -109,9 +109,8 @@ async def test_rederive_pages_orgs_and_assets(
         refreshed.append(1)
         return 1
 
-    monkeypatch.setattr(
-        projection_service, "refresh_asset_projection", fake_refresh
-    )
+    monkeypatch.setattr(projection_service, "refresh_asset_projection", fake_refresh)
+
     async def fake_list(type_id, org_id, limit: int, offset: int):
         if offset == 0:
             return [_asset(), _asset()]
@@ -128,12 +127,7 @@ async def test_rederive_pages_orgs_and_assets(
         lambda db: SimpleNamespace(),
     )
 
-    assert (
-        await projection_service.rederive_type_projection(
-            object(), TYPE_ID, page_size=2
-        )
-        == 6
-    )
+    assert await projection_service.rederive_type_projection(object(), TYPE_ID, page_size=2) == 6
     assert org_calls == [(2, 0), (2, 2)]
     assert len(refreshed) == 6
 
@@ -162,9 +156,7 @@ async def test_backfill_paginates_types_and_commits_each(
         rederived.append(type_id)
         return 3
 
-    monkeypatch.setattr(
-        projection_service, "rederive_type_projection", fake_rederive
-    )
+    monkeypatch.setattr(projection_service, "rederive_type_projection", fake_rederive)
     commits: list[int] = []
     db = SimpleNamespace(commit=AsyncMock(side_effect=lambda: commits.append(1)))
 
@@ -205,10 +197,7 @@ async def test_refresh_prunes_even_when_nothing_projects() -> None:
         upsert_row=AsyncMock(),
     )
     asset = _asset(values={})
-    assert (
-        await projection_service.refresh_asset_projection(repo, asset, _asset_type())
-        == 0
-    )
+    assert await projection_service.refresh_asset_projection(repo, asset, _asset_type()) == 0
     repo.delete_stale_for_asset.assert_awaited_once_with(asset.id, set())
     repo.upsert_row.assert_not_awaited()
 
@@ -216,9 +205,7 @@ async def test_refresh_prunes_even_when_nothing_projects() -> None:
 def test_row_to_upcoming_returns_none_out_of_horizon() -> None:
     """Rows past every alert window map to None, like the scanner skip."""
     row = _row(date(2027, 6, 1))
-    assert (
-        expiration_service._row_to_upcoming(row, date(2026, 9, 20)) is None
-    )
+    assert expiration_service._row_to_upcoming(row, date(2026, 9, 20)) is None
 
 
 def test_row_to_upcoming_maps_valid_row() -> None:
@@ -280,9 +267,7 @@ async def test_find_global_projected_merges_orgs_by_urgency(
     monkeypatch.setattr(
         projection_repo_module,
         "ExpirationProjectionRepository",
-        lambda db: SimpleNamespace(
-            query_upcoming=AsyncMock(return_value=rows)
-        ),
+        lambda db: SimpleNamespace(query_upcoming=AsyncMock(return_value=rows)),
     )
 
     items = await expiration_service.find_global_upcoming_expirations_projected(

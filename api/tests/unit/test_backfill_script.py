@@ -76,9 +76,7 @@ def test_main_accepts_custom_page_size(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"types": 1, "assets": 1}
 
     monkeypatch.setattr(module, "backfill_all_projections", fake_backfill)
-    monkeypatch.setattr(
-        "sys.argv", ["backfill_expiration_projections.py", "--page-size", "50"]
-    )
+    monkeypatch.setattr("sys.argv", ["backfill_expiration_projections.py", "--page-size", "50"])
 
     import asyncio
 
