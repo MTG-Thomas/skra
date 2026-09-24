@@ -132,7 +132,11 @@ class ReconciliationReport:
         field in the serialized report.
         """
         return cls(
-            generated_at=generated_at or datetime.now(UTC).isoformat(),
+            generated_at=(
+                generated_at
+                if generated_at is not None
+                else datetime.now(UTC).isoformat()
+            ),
             export_path=str(export_path),
             target=target,
             dry_run=dry_run,
