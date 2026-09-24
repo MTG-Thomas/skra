@@ -14,6 +14,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
@@ -24,6 +26,7 @@ router = APIRouter(tags=["monitoring"])
 _request_count = 0
 _request_duration_total = 0.0
 _last_request_time = None
+_START_MONOTONIC = time.monotonic()
 
 
 @router.get("/metrics", response_class=PlainTextResponse)
@@ -40,11 +43,11 @@ async def prometheus_metrics(db: DbSession) -> str:
     metrics.append("# TYPE skra_info gauge")
     metrics.append('skra_info{version="1.0.0"} 1')
 
-    # Uptime (simulated - in production track actual start time)
+    # Uptime since process start (monotonic clock, not wall time)
     metrics.append("")
-    metrics.append("# HELP skra_uptime_seconds Application uptime")
-    metrics.append("# TYPE skra_uptime_seconds counter")
-    metrics.append("skra_uptime_seconds 1")
+    metrics.append("# HELP skra_uptime_seconds Application uptime in seconds")
+    metrics.append("# TYPE skra_uptime_seconds gauge")
+    metrics.append(f"skra_uptime_seconds {time.monotonic() - _START_MONOTONIC:.3f}")
 
     # Database connection status
     db_healthy = True
@@ -206,8 +209,19 @@ async def status_dashboard(
 
 # Request tracking middleware helper
 def track_request(duration: float):
-    """Track request metrics (call this from middleware)."""
+    """Track request metrics (called by RequestMetricsMiddleware)."""
     global _request_count, _request_duration_total, _last_request_time
     _request_count += 1
     _request_duration_total += duration
     _last_request_time = time.time()
+
+
+class RequestMetricsMiddleware(BaseHTTPMiddleware):
+    """Feed every served request into the in-memory request metrics."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        start = time.perf_counter()
+        try:
+            return await call_next(request)
+        finally:
+            track_request(time.perf_counter() - start)

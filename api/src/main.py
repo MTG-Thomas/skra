@@ -196,6 +196,14 @@ def create_app() -> FastAPI:
     logger.info("Security headers middleware enabled")
 
     # ==========================================================================
+    # Request Metrics Middleware
+    # ==========================================================================
+    from src.routers.monitoring import RequestMetricsMiddleware
+
+    app.add_middleware(RequestMetricsMiddleware)
+    logger.info("Request metrics middleware enabled")
+
+    # ==========================================================================
     # Global Exception Handlers
     # ==========================================================================
 

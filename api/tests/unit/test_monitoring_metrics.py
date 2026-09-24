@@ -8,6 +8,8 @@ and without a working database.
 from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.requests import Request
+from starlette.responses import Response
 
 from src.routers import monitoring
 from src.routers.monitoring import prometheus_metrics
@@ -57,6 +59,31 @@ async def test_metrics_include_request_count_when_nonzero(monkeypatch):
     body = await prometheus_metrics(_db_healthy())
 
     assert "skra_requests_total 42" in body
+
+
+async def test_metrics_report_real_uptime_as_gauge():
+    """Uptime is process age in seconds, not a hardcoded placeholder."""
+    body = await prometheus_metrics(_db_healthy())
+
+    assert "# TYPE skra_uptime_seconds gauge" in body
+    line = next(line for line in body.splitlines() if line.startswith("skra_uptime_seconds "))
+    assert float(line.split(" ")[1]) >= 0.0
+
+
+async def test_request_metrics_middleware_tracks_requests(monkeypatch):
+    """Dispatched requests feed the request counter series."""
+    monkeypatch.setattr(monitoring, "_request_count", 0)
+    middleware = monitoring.RequestMetricsMiddleware(app=MagicMock())
+
+    async def call_next(request):
+        return Response(status_code=200)
+
+    request = Request(scope={"type": "http", "method": "GET", "path": "/", "headers": []})
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 200
+    body = await prometheus_metrics(_db_healthy())
+    assert "skra_requests_total 1" in body
 
 
 async def test_metrics_degrade_gracefully_without_database():
