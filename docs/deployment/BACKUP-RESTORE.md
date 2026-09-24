@@ -164,6 +164,23 @@ The daily backup job includes basic verification (gzip integrity check). For ful
 ./scripts/verify-backup.sh --latest --daily --full
 ```
 
+#### Scheduled verification (CI)
+
+The `Backup Verification` workflow (`.github/workflows/backup-verification.yml`)
+runs weekly (Sundays 04:00 UTC, plus manual `workflow_dispatch` runs). It
+provisions an ephemeral Postgres service container, seeds probe data, takes a
+real backup with `scripts/backup.sh` (`SKIP_S3_UPLOAD=true`, so no S3 bucket
+or credentials are needed), and test-restores it with
+`scripts/verify-backup.sh --full`. A restore failure fails the workflow
+loudly (red check plus GitHub's scheduled-workflow failure notification), and
+the offending backup file is kept as a 7-day artifact for diagnosis.
+
+Scope note: the scheduled run exercises the backup/restore *tooling* against
+a throwaway database. Verifying an actual production S3 backup still requires
+human-provisioned S3 access — run `./scripts/verify-backup.sh --latest
+--daily --full` with `SKRA_S3_ENDPOINT` / AWS credentials pointed at the
+production bucket (see Manual Verification Steps below).
+
 ### Manual Verification Steps
 
 1. **Check backup exists:**

@@ -10,7 +10,7 @@
 #   ./scripts/backup.sh --weekly   # Weekly backup (keeps 4 weeks)
 #   ./scripts/backup.sh --restore <backup-file>  # Restore from backup
 
-set -e
+set -eo pipefail
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
@@ -82,6 +82,9 @@ Environment Variables:
     SKRA_S3_BUCKET   S3 bucket name
     SKRA_S3_ENDPOINT  S3 endpoint URL
     BACKUP_RETENTION_DAYS   Days to keep backups (default: 30)
+    SKIP_S3_UPLOAD           Set to 'true' to keep the local backup file
+                             and skip the S3 upload (used by automated
+                             backup verification)
     POSTGRES_PASSWORD        Database password
     POSTGRES_DB              Database name
     POSTGRES_USER            Database user
@@ -106,7 +109,8 @@ check_dependencies() {
         missing+=("postgresql-client (pg_dump)")
     fi
     
-    if ! command -v aws &> /dev/null && ! command -v s3cmd &> /dev/null; then
+    # No S3 CLI needed when the upload step is skipped (automated verification).
+    if [[ "${SKIP_S3_UPLOAD:-false}" != "true" ]] && ! command -v aws &> /dev/null && ! command -v s3cmd &> /dev/null; then
         missing+=("aws-cli or s3cmd")
     fi
     
@@ -144,7 +148,15 @@ create_backup() {
     
     local size=$(du -h "$local_path" | cut -f1)
     echo -e "${GREEN}✓ Backup created: $filename ($size)${NC}"
-    
+
+    # Automated verification (CI / scheduled workflow) has no S3 target:
+    # keep the local file so it can be test-restored immediately.
+    if [[ "${SKIP_S3_UPLOAD:-false}" == "true" ]]; then
+        echo -e "${YELLOW}SKIP_S3_UPLOAD=true: keeping local backup, no S3 upload${NC}"
+        echo "$local_path"
+        return 0
+    fi
+
     # Upload to S3
     echo "Uploading to S3..."
     if command -v aws &> /dev/null; then
@@ -219,7 +231,14 @@ restore_backup() {
 cleanup_old_backups() {
     local backup_type=$1
     local keep_count=$2
-    
+
+    # Nothing uploaded to S3 in skip-upload mode, so no S3 rotation to do.
+    # (Also avoids failing when no S3 endpoint is reachable.)
+    if [[ "${SKIP_S3_UPLOAD:-false}" == "true" ]]; then
+        echo -e "${YELLOW}SKIP_S3_UPLOAD=true: skipping S3 cleanup${NC}"
+        return 0
+    fi
+
     echo -e "${YELLOW}Cleaning up old $backup_type backups (keeping $keep_count)...${NC}"
     
     # List backups and remove old ones

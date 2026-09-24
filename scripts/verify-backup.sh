@@ -229,8 +229,10 @@ test_restore() {
         return 1
     }
     
-    # Restore
+    # Restore (capture verbose log so failures are diagnosable in CI output)
     echo "Restoring backup..."
+    local restore_log
+    restore_log=$(mktemp)
     if gunzip -c "$file" | pg_restore \
         -h "$DB_HOST" \
         -p "$DB_PORT" \
@@ -239,10 +241,13 @@ test_restore() {
         --verbose \
         --no-owner \
         --no-privileges \
-        2>/dev/null; then
+        2>"$restore_log"; then
         echo -e "${GREEN}✓ Restore successful${NC}"
+        rm -f "$restore_log"
     else
-        echo -e "${RED}✗ Restore failed${NC}"
+        echo -e "${RED}✗ Restore failed (pg_restore log tail):${NC}"
+        tail -n 30 "$restore_log" || true
+        rm -f "$restore_log"
         cleanup_temp_db
         return 1
     fi

@@ -1,0 +1,102 @@
+# Backup Verification - scheduled test-restore of database backups
+#
+# Closes the backup-verification gap: scripts/backup.sh and
+# scripts/verify-backup.sh existed, but nothing ever executed the
+# test-restore path. This workflow provisions a throwaway Postgres
+# service container, takes a real backup with backup.sh, and
+# test-restores it with verify-backup.sh --full. A restore failure
+# fails the job loudly (red check + scheduled-workflow notification).
+#
+# No secrets required: the database is an ephemeral CI service with a
+# non-sensitive test password, following the existing CI pattern.
+
+name: Backup Verification
+
+on:
+  schedule:
+    # Weekly on Sundays at 04:00 UTC (off-peak vs CodeQL/ZAP Monday runs).
+    - cron: "0 4 * * 0"
+  workflow_dispatch: # Allow manual verification runs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-verification
+  cancel-in-progress: false
+
+jobs:
+  verify-backup-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: skra
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: skra
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      POSTGRES_USER: skra
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: skra
+      PGPASSWORD: testpassword
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install PostgreSQL client tools
+        run: |
+          command -v pg_dump pg_restore psql >/dev/null || {
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          }
+          pg_dump --version
+          pg_restore --version
+
+      - name: Seed probe data
+        # A backup of an empty database proves little: write recognizable
+        # rows so the test-restore has content to recover and count.
+        run: |
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            -c "CREATE TABLE IF NOT EXISTS backup_verify_probe (id serial PRIMARY KEY, payload text NOT NULL);"
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            -c "INSERT INTO backup_verify_probe (payload) SELECT 'probe-' || g FROM generate_series(1, 100) g;"
+          psql -h "$DB_HOST" -p "$DB_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            -t -c "SELECT COUNT(*) FROM backup_verify_probe;"
+
+      - name: Take backup with backup.sh
+        run: |
+          mkdir -p /tmp/skra-backup-verify
+          SKIP_S3_UPLOAD=true BACKUP_DIR=/tmp/skra-backup-verify \
+            ./scripts/backup.sh --daily
+          echo "BACKUP_FILE=$(ls -t /tmp/skra-backup-verify/*.sql.gz | head -1)" >> "$GITHUB_ENV"
+          ls -lh /tmp/skra-backup-verify/
+
+      - name: Test-restore backup with verify-backup.sh
+        # --full restores into a temp database and fails loudly
+        # (non-zero exit) when the backup cannot be restored.
+        run: |
+          test -n "$BACKUP_FILE"
+          BACKUP_DIR=/tmp/skra-backup-verify \
+            ./scripts/verify-backup.sh "$BACKUP_FILE" --full
+
+      - name: Upload failed backup artifact
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: failed-backup-verification
+          path: /tmp/skra-backup-verify/*.sql.gz
+          retention-days: 7
