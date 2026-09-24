@@ -110,6 +110,12 @@ services:
       SKRA_REDIS_URL: redis://redis:6379/0
       SKRA_SECRET_KEY: test-secret-key-for-e2e-testing-must-be-32-chars
       SKRA_ENVIRONMENT: testing
+      # Blocking E2E suites log in ~15 times in ~2 minutes from a single
+      # egress IP; the prod login limiter (10/min) 429s those logins and
+      # the specs fail on login instead of app behavior. Rate limiting is
+      # covered by unit tests; the E2E stack disables it via the supported
+      # deployment flag.
+      SKRA_RATE_LIMITING_ENABLED: "false"
     # No ports exposed - all access via Docker network (test-runner connects to api:8000)
     volumes:
       - ./api/src:/app/src:ro

@@ -98,6 +98,19 @@ def test_dev_client_probes_vite_health_proxy():
     assert "http://127.0.0.1:8080/health" in code
 
 
+def test_e2e_api_disables_rate_limiting():
+    """The E2E-serving API disables the login rate limiter (refs #16).
+
+    Blocking E2E suites log in ~15 times in ~2 minutes from a single
+    egress IP; the prod login limit (10/min) would 429 those logins and
+    fail the suites on login instead of app behavior. Rate limiting
+    itself is covered by unit tests (test_storage_and_rate_config.py).
+    """
+    code = _uncommented(_service_block(TEST, "api"))
+
+    assert 'SKRA_RATE_LIMITING_ENABLED: "false"' in code
+
+
 def test_client_port_mapping_is_single_and_unprivileged():
     """One published client mapping; dev adds none (Compose merges lists)."""
     base_code = _uncommented(_service_block(BASE, "client"))
