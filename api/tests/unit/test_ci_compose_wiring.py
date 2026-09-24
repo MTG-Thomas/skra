@@ -1,10 +1,11 @@
 """Guards for CI compose wiring (test-client-profile Playwright step).
 
-The auth-smoke step once hardcoded the pre-rename compose network
+The Playwright step once hardcoded the pre-rename compose network
 (bifrost-docs-test_default), failing with "network not found" after the
 project was renamed to skra-test. These tests pin the fix: no stale
 project network literal may reappear, and the step must derive the
-network from the live compose project config.
+network from the live compose project config. The step runs the blocking
+E2E suites (refs #16), so the guards also pin that suite inventory.
 """
 
 import os
@@ -16,10 +17,13 @@ _REPO = os.environ.get("REPO_ROOT") or str(Path(__file__).resolve().parents[3])
 CI_YML = Path(_REPO) / ".github" / "workflows" / "ci.yml"
 
 
-def _auth_smoke_block() -> str:
+def _e2e_run_block() -> str:
     text = CI_YML.read_text(encoding="utf-8")
-    start = text.index("Run auth smoke suite")
-    return text[start:]
+    start = text.index("Run blocking E2E suites")
+    tail = text[start:]
+    # Bound the block to this step so later steps cannot satisfy the asserts.
+    nxt = tail.index("\n      - name:", 1)
+    return tail[:nxt]
 
 
 def test_no_stale_compose_network_literal():
@@ -35,7 +39,22 @@ def test_no_stale_compose_network_literal():
 
 def test_auth_smoke_derives_network_from_compose_config():
     """The Playwright container joins the compose-resolved network."""
-    block = _auth_smoke_block()
+    block = _e2e_run_block()
 
     assert "docker compose -f docker-compose.test.yml config --format json" in block
     assert '--network "${TEST_NETWORK}"' in block
+
+
+def test_blocking_e2e_suite_inventory():
+    """The blocking Playwright step runs every high-value suite (refs #16)."""
+    block = _e2e_run_block()
+
+    for spec in (
+        "e2e/tests/auth.smoke.spec.ts",
+        "e2e/tests/critical-workflows.spec.ts",
+        "e2e/tests/passwords.smoke.spec.ts",
+        "e2e/tests/navigation.smoke.spec.ts",
+        "e2e/tests/checklist.spec.ts",
+    ):
+        assert spec in block
+    assert 'E2E_TEST_ORG_ID' in block
