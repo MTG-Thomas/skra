@@ -376,12 +376,14 @@ jobs:
   # =============================================================================
   test-client-profile:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     # Guards the --profile client stack wiring (Vite dev stage on 3000 +
-    # node health probe + /health API proxy) and runs the auth smoke suite
-    # against it. Blocking: this profile was silently broken (issue #104),
-    # so failure must surface. (Deliberately not continue-on-error; required
-    # branch status is configured separately on main.)
+    # node health probe + /health API proxy) and runs the blocking E2E
+    # suites (auth, critical-workflows, passwords, navigation, checklist)
+    # against the seeded stack. Blocking: this profile was silently broken
+    # (issue #104), so failure must surface. (Deliberately not
+    # continue-on-error; required branch status is configured separately
+    # on main.)
 
     steps:
       - name: Checkout code
@@ -409,7 +411,8 @@ jobs:
 
       - name: Seed E2E user and organization
         run: |
-          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T api python - <<'PYEOF'
+          set -o pipefail
+          docker compose -f docker-compose.test.yml --profile client --profile e2e exec -T api python - <<'PYEOF' 2>&1 | tee /tmp/e2e-seed.log
           import json
           import sys
           import urllib.error
@@ -440,6 +443,17 @@ jobs:
               if status not in ok:
                   sys.exit(f"seed failed at {what}: {status} {body[:500]}")
 
+          def get(path, headers=None):
+              req = Request(
+                  BASE + path,
+                  headers={"X-CSRF-Token": csrf, **(headers or {})},
+              )
+              try:
+                  with opener.open(req) as res:
+                      return res.status, (res.read().decode() or "{}")
+              except urllib.error.HTTPError as e:
+                  return e.code, (e.read().decode() or "{}")
+
           status, body = post(
               "/auth/register",
               {"email": "test@example.com", "password": "TestPassword123!", "name": "E2E Smoke"},
@@ -458,9 +472,28 @@ jobs:
           status, body = post(
               "/api/organizations", {"name": "E2E Smoke Org"}, {"X-CSRF-Token": csrf}
           )
-          check("org", status, body, (200, 201))
+          if status == 409:
+              # Org already exists on a reused volume: find it by name.
+              status, body = get("/api/organizations?limit=100")
+              check("org-list", status, body, (200,))
+              matches = [
+                  o
+                  for o in json.loads(body).get("items", [])
+                  if o.get("name") == "E2E Smoke Org"
+              ]
+              if not matches:
+                  sys.exit("seed failed: E2E Smoke Org missing after 409")
+              org_id = matches[0]["id"]
+          else:
+              check("org", status, body, (200, 201))
+              org_id = json.loads(body)["id"]
+          print(f"E2E_ORG_ID={org_id}")
           print("seeded E2E Smoke user + org")
           PYEOF
+          E2E_ORG_ID=$(grep '^E2E_ORG_ID=' /tmp/e2e-seed.log | cut -d= -f2 | tail -1)
+          test -n "$E2E_ORG_ID" || { echo "seed failed: no org id captured" >&2; exit 1; }
+          echo "E2E_ORG_ID=$E2E_ORG_ID" >> "$GITHUB_ENV"
+          echo "seeded org id captured"
 
       - name: Dump API logs on seed failure
         if: failure()
@@ -471,8 +504,12 @@ jobs:
           docker run --rm -v "${{ github.workspace }}/client:/work" -w /work \
             mcr.microsoft.com/playwright:v1.59.1-noble npm ci --no-audit --no-fund
 
-      - name: Run auth smoke suite (chromium)
+      - name: Run blocking E2E suites (chromium)
         run: |
+          # Auth, critical technician workflows, passwords, navigation, and
+          # checklist suites run blocking against the seeded stack (refs #16).
+          # checklist.spec and the TEST_ORG specs require the seeded org id.
+          test -n "${E2E_ORG_ID:-}" || { echo "E2E_ORG_ID missing from seed step" >&2; exit 1; }
           # Derive the compose network name from the live project config so
           # a project rename (e.g. bifrost-docs-test -> skra-test) cannot
           # rot this step again; fail loudly if the network is absent.
@@ -485,8 +522,24 @@ jobs:
           docker run --rm --network "${TEST_NETWORK}" \
             -v "${{ github.workspace }}/client:/work" -w /work \
             -e E2E_BASE_URL=http://client:3000 \
+            -e E2E_TEST_ORG_ID="${E2E_ORG_ID}" \
             mcr.microsoft.com/playwright:v1.59.1-noble \
-            npx playwright test --project=chromium e2e/tests/auth.smoke.spec.ts
+            npx playwright test --project=chromium \
+              e2e/tests/auth.smoke.spec.ts \
+              e2e/tests/critical-workflows.spec.ts \
+              e2e/tests/passwords.smoke.spec.ts \
+              e2e/tests/navigation.smoke.spec.ts \
+              e2e/tests/checklist.spec.ts
+
+      - name: Upload E2E results on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: e2e-client-profile-results
+          path: |
+            client/test-results/
+            client/playwright-report/
+          retention-days: 30
 
       - name: Tear down test stack
         if: always()

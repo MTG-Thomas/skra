@@ -1,4 +1,4 @@
-import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount } from './test-utils';
+import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount, TEST_ORG } from './test-utils';
 
 /**
  * Smoke Test Suite: Passwords CRUD
@@ -8,7 +8,7 @@ import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount } fr
 test.describe('Passwords', () => {
   
   test('should display passwords list page', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Should see page heading
     await expect(page.getByRole('heading', { name: 'Passwords' })).toBeVisible();
@@ -25,16 +25,19 @@ test.describe('Passwords', () => {
   });
   
   test('should create a new password', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Click add button
     await page.getByRole('button', { name: 'Add Password' }).first().click();
     
-    // Fill in form
+    // Fill in form. Labels carry " *" markers and 'Name' substring-matches
+    // 'Username', so target the stable input names (same approach as the
+    // critical-workflows suite).
     const testName = `Test Password ${Date.now()}`;
-    await page.getByLabel('Name').fill(testName);
-    await page.getByLabel('Username').fill('testuser');
-    await page.getByLabel('Password', { exact: true }).fill('TestPassword123!');
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('input[name="name"]').fill(testName);
+    await dialog.locator('input[name="username"]').fill('testuser');
+    await dialog.locator('input[name="password"]').fill('TestPassword123!');
     
     // Submit form
     await page.getByRole('button', { name: 'Create' }).click();
@@ -47,7 +50,7 @@ test.describe('Passwords', () => {
   });
   
   test('should search passwords', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Wait for table to load
     await waitForDataTable(page);
@@ -67,7 +70,7 @@ test.describe('Passwords', () => {
   });
   
   test('should show disabled passwords when toggled', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Find and click Show Disabled toggle
     const showDisabledToggle = page.locator('label').filter({ hasText: 'Show Disabled' });

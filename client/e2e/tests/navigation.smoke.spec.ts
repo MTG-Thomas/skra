@@ -1,4 +1,4 @@
-import { test, expect, navigateToOrg } from './test-utils';
+import { test, expect, navigateToOrg, TEST_ORG } from './test-utils';
 
 /**
  * Smoke Test Suite: Navigation & Layout
@@ -9,26 +9,28 @@ test.describe('Navigation and Layout', () => {
   
   test('should display organization selector', async ({ page }) => {
     await page.goto('/organizations');
-    
-    // Verify page elements
-    await expect(page.getByRole('heading', { name: 'Select Organization' })).toBeVisible();
+
+    // Verify page elements (heading is 'Organizations', see
+    // OrganizationsListPage; the critical suite pins the same).
+    await expect(page.getByRole('heading', { name: 'Organizations' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create Organization' })).toBeVisible();
   });
-  
+
   test('should navigate to org dashboard', async ({ page }) => {
     // Navigate to a test org
-    await navigateToOrg(page, 'test-org');
-    
-    // Should see the sidebar navigation
-    await expect(page.locator('nav')).toBeVisible();
-    
+    await navigateToOrg(page, TEST_ORG);
+
+    // Should see the sidebar navigation (the page renders two <nav>
+    // landmarks, so target the first).
+    await expect(page.locator('nav').first()).toBeVisible();
+
     // Should see dashboard content
     await expect(page.getByText('Frequently Accessed')).toBeVisible();
   });
   
   test('should navigate between entity sections', async ({ page }) => {
     // Start at dashboard
-    await page.goto('/org/test-org');
+    await page.goto(`/org/${TEST_ORG}`);
     
     // Click on Passwords in sidebar
     await page.getByRole('link', { name: 'Passwords' }).click();
@@ -51,19 +53,20 @@ test.describe('Navigation and Layout', () => {
   });
   
   test('should display command palette', async ({ page }) => {
-    await page.goto('/org/test-org');
-    
-    // Open command palette with keyboard shortcut
-    await page.keyboard.press('Meta+k'); // Cmd+K on Mac
-    
+    await page.goto(`/org/${TEST_ORG}`);
+
+    // Open command palette with keyboard shortcut (Ctrl+K works on all
+    // platforms; the placeholder is scope-dependent, so match loosely).
+    await page.keyboard.press('Control+k');
+
     // Should see command palette dialog
-    await expect(page.getByPlaceholder('Search...')).toBeVisible();
-    
+    await expect(page.getByPlaceholder(/Search/)).toBeVisible();
+
     // Close with escape
     await page.keyboard.press('Escape');
-    
+
     // Command palette should be hidden
-    await expect(page.getByPlaceholder('Search...')).not.toBeVisible();
+    await expect(page.getByPlaceholder(/Search/)).not.toBeVisible();
   });
   
 });
