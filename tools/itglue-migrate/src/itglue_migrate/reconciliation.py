@@ -122,10 +122,17 @@ class ReconciliationReport:
         export_path: Path,
         target: str,
         dry_run: bool,
+        generated_at: str | None = None,
     ) -> ReconciliationReport:
-        """Create a report with generated metadata."""
+        """Create a report with generated metadata.
+
+        Pass ``generated_at`` to pin the timestamp (tests, byte-stable
+        fixtures, and report-to-report comparisons). When omitted the
+        current UTC time is used, which is the only nondeterministic
+        field in the serialized report.
+        """
         return cls(
-            generated_at=datetime.now(UTC).isoformat(),
+            generated_at=generated_at or datetime.now(UTC).isoformat(),
             export_path=str(export_path),
             target=target,
             dry_run=dry_run,
