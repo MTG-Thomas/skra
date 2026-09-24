@@ -40,13 +40,15 @@ test.describe('Navigation and Layout', () => {
     // Click on Configurations in sidebar
     await page.getByRole('link', { name: 'Configurations' }).click();
     await expect(page).toHaveURL(/\/org\/[^/]+\/configurations/);
-    await expect(page.getByRole('heading', { name: 'Configurations' })).toBeVisible();
-    
+    // Pages render more than one matching heading (page header plus
+    // section titles); the first is the page header.
+    await expect(page.getByRole('heading', { name: 'Configurations' }).first()).toBeVisible();
+
     // Click on Locations in sidebar
     await page.getByRole('link', { name: 'Locations' }).click();
     await expect(page).toHaveURL(/\/org\/[^/]+\/locations/);
-    await expect(page.getByRole('heading', { name: 'Locations' })).toBeVisible();
-    
+    await expect(page.getByRole('heading', { name: 'Locations' }).first()).toBeVisible();
+
     // Click on Documents in sidebar
     await page.getByRole('link', { name: 'Documents' }).click();
     await expect(page).toHaveURL(/\/org\/[^/]+\/documents/);
