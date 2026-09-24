@@ -57,6 +57,10 @@ test.describe('Navigation and Layout', () => {
   test('should display command palette', async ({ page }) => {
     await page.goto(`/org/${TEST_ORG}`);
 
+    // Wait for the app to hydrate before sending keys: the palette
+    // listener attaches on mount, and keys pressed earlier are lost.
+    await expect(page.getByText('Frequently Accessed')).toBeVisible();
+
     // Open command palette with keyboard shortcut (Ctrl+K works on all
     // platforms; the placeholder is scope-dependent, so match loosely).
     await page.keyboard.press('Control+k');
