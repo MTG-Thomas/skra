@@ -17,6 +17,13 @@ export const TEST_USER = {
 export const TEST_ORG_ID = process.env.E2E_TEST_ORG_ID || 'test-org-uuid';
 
 /**
+ * Org route segment for specs that navigate to `/org/<id>`.
+ * CI seeds a fresh org per run and exports its UUID via E2E_TEST_ORG_ID;
+ * local runs keep the legacy 'test-org' slug.
+ */
+export const TEST_ORG = process.env.E2E_TEST_ORG_ID || 'test-org';
+
+/**
  * Extended test fixture with helper methods.
  */
 export const test = base.extend<{

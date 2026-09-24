@@ -1,4 +1,4 @@
-import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount } from './test-utils';
+import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount, TEST_ORG } from './test-utils';
 
 /**
  * Smoke Test Suite: Passwords CRUD
@@ -8,7 +8,7 @@ import { test, expect, navigateToEntity, waitForDataTable, getTableRowCount } fr
 test.describe('Passwords', () => {
   
   test('should display passwords list page', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Should see page heading
     await expect(page.getByRole('heading', { name: 'Passwords' })).toBeVisible();
@@ -25,7 +25,7 @@ test.describe('Passwords', () => {
   });
   
   test('should create a new password', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Click add button
     await page.getByRole('button', { name: 'Add Password' }).first().click();
@@ -47,7 +47,7 @@ test.describe('Passwords', () => {
   });
   
   test('should search passwords', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Wait for table to load
     await waitForDataTable(page);
@@ -67,7 +67,7 @@ test.describe('Passwords', () => {
   });
   
   test('should show disabled passwords when toggled', async ({ page }) => {
-    await navigateToEntity(page, 'test-org', 'passwords');
+    await navigateToEntity(page, TEST_ORG, 'passwords');
     
     // Find and click Show Disabled toggle
     const showDisabledToggle = page.locator('label').filter({ hasText: 'Show Disabled' });

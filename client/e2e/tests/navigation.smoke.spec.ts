@@ -1,4 +1,4 @@
-import { test, expect, navigateToOrg } from './test-utils';
+import { test, expect, navigateToOrg, TEST_ORG } from './test-utils';
 
 /**
  * Smoke Test Suite: Navigation & Layout
@@ -17,7 +17,7 @@ test.describe('Navigation and Layout', () => {
   
   test('should navigate to org dashboard', async ({ page }) => {
     // Navigate to a test org
-    await navigateToOrg(page, 'test-org');
+    await navigateToOrg(page, TEST_ORG);
     
     // Should see the sidebar navigation
     await expect(page.locator('nav')).toBeVisible();
@@ -28,7 +28,7 @@ test.describe('Navigation and Layout', () => {
   
   test('should navigate between entity sections', async ({ page }) => {
     // Start at dashboard
-    await page.goto('/org/test-org');
+    await page.goto(`/org/${TEST_ORG}`);
     
     // Click on Passwords in sidebar
     await page.getByRole('link', { name: 'Passwords' }).click();
@@ -51,7 +51,7 @@ test.describe('Navigation and Layout', () => {
   });
   
   test('should display command palette', async ({ page }) => {
-    await page.goto('/org/test-org');
+    await page.goto(`/org/${TEST_ORG}`);
     
     // Open command palette with keyboard shortcut
     await page.keyboard.press('Meta+k'); // Cmd+K on Mac
