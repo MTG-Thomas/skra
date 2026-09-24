@@ -57,4 +57,4 @@ def test_blocking_e2e_suite_inventory():
         "e2e/tests/checklist.spec.ts",
     ):
         assert spec in block
-    assert 'E2E_TEST_ORG_ID' in block
+    assert "E2E_TEST_ORG_ID" in block
