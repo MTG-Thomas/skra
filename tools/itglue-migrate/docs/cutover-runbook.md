@@ -240,14 +240,21 @@ the run on a later pass once their cause is fixed.
 ### 3.1 Automated Verification
 
 ```bash
-# Run validation script
+# Run validation script (read-only: GETs the migrated records and compares
+# them against the export; exits nonzero when failures are found)
 cd tools/itglue-migrate
-python -m itglue_migrate.cli validate-migration \
-    --export /path/to/itglue-export \
+python -m itglue_migrate.cli verify \
+    --export-path /path/to/itglue-export \
     --api-url $SKRA_API_URL \
-    --token $SKRA_TOKEN \
-    --report /tmp/migration-validation-report.json
+    --token $SKRA_API_TOKEN \
+    --all \
+    --output /tmp/migration-validation-report.json
 ```
+
+`--api-url`/`--token` can be omitted when `SKRA_API_URL`/`SKRA_API_TOKEN`
+are exported. Use `--org <name>` instead of `--all` to validate a single
+organization, and add `--check-urls` to also probe migrated download/image
+URLs for reachability.
 
 ### 3.2 Entity Count Verification
 

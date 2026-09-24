@@ -226,6 +226,34 @@ def test_report_writes_stable_json(tmp_path: Path) -> None:
     assert data["summary"]["organization_count"] == 0
 
 
+def test_report_json_deterministic_for_same_inputs(tmp_path: Path) -> None:
+    """Same inputs must serialize to byte-identical JSON.
+
+    ``generated_at`` is the only nondeterministic field: pinning it must
+    yield identical bytes, and two live-built reports must differ only in
+    that field. Rehearsal reconciliation output is otherwise comparable
+    run-to-run.
+    """
+    kwargs: dict = {
+        "export_path": tmp_path / "export",
+        "target": "Midtown",
+        "dry_run": True,
+    }
+    pinned = "2026-01-01T00:00:00+00:00"
+
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    ReconciliationReport.create(generated_at=pinned, **kwargs).write_json(first)
+    ReconciliationReport.create(generated_at=pinned, **kwargs).write_json(second)
+    assert first.read_bytes() == second.read_bytes()
+
+    live_a = ReconciliationReport.create(**kwargs).to_dict()
+    live_b = ReconciliationReport.create(**kwargs).to_dict()
+    live_a.pop("generated_at")
+    live_b.pop("generated_at")
+    assert live_a == live_b
+
+
 def test_legacy_bifrost_id_alias_maps_to_skra_id() -> None:
     """Pre-rename callers passing bifrost_id keep working via the alias."""
     with pytest.warns(DeprecationWarning, match="bifrost_id is deprecated"):
