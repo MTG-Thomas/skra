@@ -1,7 +1,30 @@
 # Infrastructure & Hardening Assessment
 
 > Assessment Date: 2026-04-06
+> Last Re-assessed: 2026-09-24 (supersedes stale 0/10 scores below — see Re-assessment)
 > Target: Get Skra production-ready before adding new features
+
+---
+
+## 🔄 Re-assessment (2026-09-24)
+
+Verified against the repo and live CI/CD on 2026-09-24. Each row gives the
+evidence behind the new score; remaining gaps reference issue #16.
+
+| Category | Then (2026-04-06) | Now | Evidence |
+|----------|-------------------|-----|----------|
+| CI/CD | 0/10 Missing | 8/10 | `.github/workflows/ci.yml` (backend unit + ruff + pyright, frontend tsc/lint/build, image build + push; `backend-checks`, `frontend-checks`, `trivy-repo-scan`, `SonarQube Scan` required on `main`). `.github/workflows/cd.yml` auto-deploys `main` to CT117 (`100.100.0.51`) on green CI — deploy verified successful 2026-09-24. Remaining: backend gate is unit-only; high-value Playwright specs not yet enforced blocking (both in progress, refs #16). |
+| Rate Limiting | 0/10 Missing | Done | Completed 2026-04-06 (see below); still present and wired (`api/src/core/rate_limiting.py`, `main.py`). |
+| Backups | 0/10 Missing | 6/10 | `docs/deployment/BACKUP-RESTORE.md`, `scripts/backup.sh`, `scripts/backup-attachments.sh`, `scripts/verify-backup.sh` (test-restore to temp DB). Remaining: nothing schedules or runs verification automatically (in progress, refs #16). |
+| Security Headers | Missing (§4) | Done | `api/src/core/security_headers.py` wired in `main.py`, unit-tested (`test_security_headers.py`). |
+| Reverse Proxy / TLS | Missing (§5) | 5/10 | `docker-compose.tls.yml` + `docs/deployment/TLS-DEPLOYMENT.md` exist. Not demonstrated live: the CD target serves plain HTTP over the Defined.net overlay. Accepted posture for the isolated test target (no public DNS); the TLS overlay remains the production path. |
+| Monitoring | 3/10 Minimal | 5/10 | `/metrics`, `/health/detailed`, `/status` (`api/src/routers/monitoring.py`); audit logging (`audit_service.py`). Remaining: no scrape config, dashboards, or alerting (refs #16). |
+| Test Coverage | Basic pytest | 6/10 | Unit suites plus Playwright specs including `critical-workflows`; CI enforcement in progress (refs #16). |
+
+**Overall: ~7/10 for the isolated test target.** Production readiness is still
+gated on scheduled backup verification, E2E enforcement, and
+monitoring/alerting — all tracked under #16. The pre-2026-09-24 sections below
+are historical context; where they conflict with the table above, the table wins.
 
 ---
 
