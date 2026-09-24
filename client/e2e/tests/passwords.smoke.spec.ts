@@ -30,11 +30,14 @@ test.describe('Passwords', () => {
     // Click add button
     await page.getByRole('button', { name: 'Add Password' }).first().click();
     
-    // Fill in form
+    // Fill in form. Labels carry " *" markers and 'Name' substring-matches
+    // 'Username', so target the stable input names (same approach as the
+    // critical-workflows suite).
     const testName = `Test Password ${Date.now()}`;
-    await page.getByLabel('Name').fill(testName);
-    await page.getByLabel('Username').fill('testuser');
-    await page.getByLabel('Password', { exact: true }).fill('TestPassword123!');
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('input[name="name"]').fill(testName);
+    await dialog.locator('input[name="username"]').fill('testuser');
+    await dialog.locator('input[name="password"]').fill('TestPassword123!');
     
     // Submit form
     await page.getByRole('button', { name: 'Create' }).click();
