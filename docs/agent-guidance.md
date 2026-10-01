@@ -68,14 +68,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f api
 ./test.sh
 
 # Run a specific test
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pytest tests/integration/test_auth.py -v
+./test.sh tests/integration/test_auth.py -v
 ```
 
 **Ports:** Frontend → http://localhost:8080 | Postgres → localhost:5433 | Garage S3 → localhost:3900 | Garage admin → localhost:3903 | Valkey → localhost:6379
 
 ### First-time bootstrap
 
-1. Copy `.env.example` to `.env` and fill in required vars — dev defaults are already committed to `.env`, do not commit production secrets
+1. If `.env` is absent, copy `.env.example` to `.env` and fill in required vars. Preserve an existing `.env`. Do not commit production secrets.
 2. `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d`
 3. The `init` container runs Alembic migrations automatically on every startup
 4. The `garage-init` container configures Garage (layout, bucket, S3 key) — runs once and exits
@@ -91,7 +91,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pyte
 
 ### WSL2 gotcha
 
-If you see `error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.exe`, clear the credential store:
+If you see `error getting credentials - err: fork/exec /usr/bin/docker-credential-desktop.exe`, inspect and repair only the failing `credsStore` setting in the WSL-side Docker configuration; preserve unrelated credentials and settings:
 
 ```bash
 # Inspect the credential-helper setting and repair only the specific broken configuration; preserve other Docker credentials/settings.
