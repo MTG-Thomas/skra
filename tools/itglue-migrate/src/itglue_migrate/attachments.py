@@ -138,8 +138,7 @@ class AttachmentStats:
             "total_size_bytes": self.total_size_bytes,
             "formatted_size": self.formatted_size,
             "by_entity_type": {
-                entity_type: stats.to_dict()
-                for entity_type, stats in self.by_entity_type.items()
+                entity_type: stats.to_dict() for entity_type, stats in self.by_entity_type.items()
             },
         }
 
@@ -166,8 +165,7 @@ class AttachmentValidationResult:
         """Convert to dictionary representation."""
         return {
             "matched": {
-                entity_type: stats.to_dict()
-                for entity_type, stats in self.matched.items()
+                entity_type: stats.to_dict() for entity_type, stats in self.matched.items()
             },
             "orphaned": self.orphaned,
             "total_matched_files": self.total_matched_files,
@@ -224,6 +222,9 @@ def validate_attachments(
                 result.orphaned[entity_type] = []
             result.orphaned[entity_type].append(entity_id)
             result.total_orphaned_folders += 1
+
+    for orphaned_ids in result.orphaned.values():
+        orphaned_ids.sort()
 
     return result
 
@@ -355,9 +356,7 @@ class AttachmentScanner:
 
         return IMG_SRC_PATTERN.findall(content)
 
-    def _resolve_image_path(
-        self, img_src: str, html_path: Path, doc_folder: Path
-    ) -> Path | None:
+    def _resolve_image_path(self, img_src: str, html_path: Path, doc_folder: Path) -> Path | None:
         """Resolve an image source path to an actual file path.
 
         Args:
@@ -425,16 +424,14 @@ class AttachmentScanner:
 
         return stats
 
-    def _scan_attachments_directory(
-        self, attachments_dir: Path, stats: AttachmentStats
-    ) -> None:
+    def _scan_attachments_directory(self, attachments_dir: Path, stats: AttachmentStats) -> None:
         """Scan the attachments directory and update stats.
 
         Args:
             attachments_dir: Path to the attachments directory.
             stats: AttachmentStats to update.
         """
-        for entity_type_dir in attachments_dir.iterdir():
+        for entity_type_dir in sorted(attachments_dir.iterdir(), key=lambda path: path.name):
             if not entity_type_dir.is_dir():
                 continue
 
@@ -453,9 +450,7 @@ class AttachmentScanner:
             stats.total_files += entity_stats.count
             stats.total_size_bytes += entity_stats.size_bytes
 
-    def _scan_floor_plans_directories(
-        self, export_path: Path, stats: AttachmentStats
-    ) -> None:
+    def _scan_floor_plans_directories(self, export_path: Path, stats: AttachmentStats) -> None:
         """Scan for floor plans photo directories and update stats.
 
         IT Glue exports floor plans as {asset_type}-floor-plans-photos/ directories.
@@ -466,7 +461,10 @@ class AttachmentScanner:
             stats: AttachmentStats to update.
         """
         # Look for directories matching *-floor-plans-photos pattern
-        for floor_plans_dir in export_path.glob("*-floor-plans-photos"):
+        for floor_plans_dir in sorted(
+            export_path.glob("*-floor-plans-photos"),
+            key=lambda path: path.name,
+        ):
             if not floor_plans_dir.is_dir():
                 continue
 
@@ -499,9 +497,7 @@ class AttachmentScanner:
                 stats.total_files += entity_stats.count
                 stats.total_size_bytes += entity_stats.size_bytes
 
-    def _scan_document_images(
-        self, documents_dir: Path, stats: AttachmentStats
-    ) -> None:
+    def _scan_document_images(self, documents_dir: Path, stats: AttachmentStats) -> None:
         """Scan document folders for embedded images and update stats.
 
         Args:
@@ -637,15 +633,13 @@ class AttachmentScanner:
         floor_plans_dir = export_path / f"{entity_type}-floor-plans-photos"
         if floor_plans_dir.exists() and floor_plans_dir.is_dir():
             entity_id_prefix = f"{entity_id}-"
-            for item in floor_plans_dir.iterdir():
+            for item in sorted(floor_plans_dir.iterdir(), key=lambda path: path.name):
                 if item.is_file() and item.name.startswith(entity_id_prefix):
                     files.append(item)
 
         return sorted([f.resolve() for f in files])
 
-    def get_all_attachments(
-        self, export_path: Path
-    ) -> dict[tuple[str, str], list[Path]]:
+    def get_all_attachments(self, export_path: Path) -> dict[tuple[str, str], list[Path]]:
         """Get all attachments organized by entity type and ID.
 
         Args:
@@ -664,13 +658,13 @@ class AttachmentScanner:
         # Scan attachments directory
         attachments_dir = export_path / "attachments"
         if attachments_dir.exists() and attachments_dir.is_dir():
-            for entity_type_dir in attachments_dir.iterdir():
+            for entity_type_dir in sorted(attachments_dir.iterdir(), key=lambda path: path.name):
                 if not entity_type_dir.is_dir():
                     continue
 
                 entity_type = entity_type_dir.name
 
-                for entity_id_dir in entity_type_dir.iterdir():
+                for entity_id_dir in sorted(entity_type_dir.iterdir(), key=lambda path: path.name):
                     if not entity_id_dir.is_dir():
                         continue
 
@@ -707,7 +701,9 @@ class AttachmentScanner:
         id_prefix_pattern = re.compile(r"^(\d+)-(.+)$")
 
         # Look for directories matching *-floor-plans-photos pattern
-        for floor_plans_dir in export_path.glob("*-floor-plans-photos"):
+        for floor_plans_dir in sorted(
+            export_path.glob("*-floor-plans-photos"), key=lambda path: path.name
+        ):
             if not floor_plans_dir.is_dir():
                 continue
 
@@ -715,7 +711,7 @@ class AttachmentScanner:
             asset_type = floor_plans_dir.name.replace("-floor-plans-photos", "")
             entity_type_key = f"{asset_type}_floor_plans_photos"
 
-            for item in floor_plans_dir.iterdir():
+            for item in sorted(floor_plans_dir.iterdir(), key=lambda path: path.name):
                 if item.is_dir():
                     # Subdirectory structure: {id}/files...
                     entity_id = item.name
@@ -736,7 +732,7 @@ class AttachmentScanner:
         # Also check for legacy floor_plans_photos directory (no prefix)
         legacy_floor_plans_dir = export_path / "floor_plans_photos"
         if legacy_floor_plans_dir.exists() and legacy_floor_plans_dir.is_dir():
-            for item in legacy_floor_plans_dir.iterdir():
+            for item in sorted(legacy_floor_plans_dir.iterdir(), key=lambda path: path.name):
                 if item.is_dir():
                     entity_id = item.name
                     files = self._scan_directory_files(item)
@@ -752,9 +748,7 @@ class AttachmentScanner:
                             result[key] = []
                         result[key].append(item.resolve())
 
-    def get_document_folder_mapping(
-        self, export_path: Path
-    ) -> dict[str, Path]:
+    def get_document_folder_mapping(self, export_path: Path) -> dict[str, Path]:
         """Get a mapping of document IDs to their folder paths.
 
         Recursively searches subdirectories (e.g., _Archive/, _Archives/).
