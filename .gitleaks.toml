@@ -12,6 +12,7 @@ paths = [
   '''client/playwright-report/.*''',
   '''client/test-results/.*''',
   '''\.github/workflows/ci\.yml''',
+  '''\.github/workflows/sonar\.yml''',
   '''\.migration-runs/.*''',
   '''api/src/routers/attachments\.py''',
   '''api/docs/api-documentation\.md''',
