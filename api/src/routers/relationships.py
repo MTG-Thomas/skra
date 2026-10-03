@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
+from src.core.security import sanitize_log_value
 from src.models.contracts.relationship import (
     RelatedEntity,
     RelatedItemsResponse,

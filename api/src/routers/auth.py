@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, UserPrincipal
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
 from src.core.rate_limiting import RateLimits, limiter
 from src.core.security import (
     create_access_token,
@@ -26,6 +25,7 @@ from src.core.security import (
     decode_token,
     generate_csrf_token,
     get_password_hash,
+    sanitize_log_value,
     validate_csrf_token,
     verify_password,
 )

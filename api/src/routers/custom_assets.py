@@ -13,7 +13,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
+from src.core.security import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.custom_asset import (
     CustomAssetCreate,

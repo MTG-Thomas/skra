@@ -20,8 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
-from src.core.security import decrypt_secret, encrypt_secret
+from src.core.security import decrypt_secret, encrypt_secret, sanitize_log_value
 from src.models.contracts.ai_settings import (
     AISettingsResponse,
     CompletionsConfigPublic,

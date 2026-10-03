@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.core.auth import CurrentActiveUser, CurrentSuperuser
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
+from src.core.security import sanitize_log_value
 from src.models.contracts.custom_asset import (
     CustomAssetTypeCreate,
     CustomAssetTypePublic,

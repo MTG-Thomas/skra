@@ -14,8 +14,7 @@ import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.log_sanitize import sanitize_log_value
-from src.core.security import decrypt_secret, encrypt_secret
+from src.core.security import decrypt_secret, encrypt_secret, sanitize_log_value
 from src.models.contracts.oauth_config import (
     OAUTH_ALLOWED_DOMAIN,
     OAUTH_CONFIG_CATEGORY,

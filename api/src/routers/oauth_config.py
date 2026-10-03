@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import CurrentSuperuser
 from src.core.database import get_db
-from src.core.log_sanitize import sanitize_log_value
+from src.core.security import sanitize_log_value
 from src.models.contracts.oauth_config import (
     GoogleOAuthConfigRequest,
     MicrosoftOAuthConfigRequest,

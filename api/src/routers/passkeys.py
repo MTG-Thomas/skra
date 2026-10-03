@@ -20,9 +20,8 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from src.core.auth import CurrentActiveUser, UserPrincipal
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
 from src.core.rate_limiting import RateLimits, limiter
-from src.core.security import create_access_token, create_refresh_token
+from src.core.security import create_access_token, create_refresh_token, sanitize_log_value
 from src.models.contracts.auth import LoginResponse
 from src.models.contracts.passkeys import (
     PasskeyAuthOptionsRequest,

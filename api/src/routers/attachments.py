@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
-from src.core.log_sanitize import sanitize_log_value
+from src.core.security import sanitize_log_value
 from src.models.contracts.attachment import (
     AttachmentCreate,
     AttachmentDownloadResponse,
