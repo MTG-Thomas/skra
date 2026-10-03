@@ -145,6 +145,7 @@ class TestLocationsOrganizationAccess:
         """Test that users can list locations from any organization."""
         client, mock_user = authenticated_client
         org_id = uuid4()  # Different org than the user's
+        mock_location.organization_id = org_id
 
         mock_location_repo = AsyncMock()
         mock_location_repo.get_paginated_by_org = AsyncMock(return_value=([mock_location], 1))
@@ -154,11 +155,13 @@ class TestLocationsOrganizationAccess:
 
         assert response.status_code == 200
         assert response.json()["total"] == 1
+        assert response.json()["items"][0]["organization_id"] == str(org_id)
 
     async def test_create_location_cross_org(self, authenticated_client, mock_location):
         """Test that users can create locations in any organization."""
         client, mock_user = authenticated_client
         org_id = uuid4()  # Different org than the user's
+        mock_location.organization_id = org_id
 
         mock_location_repo = AsyncMock()
         mock_location_repo.create = AsyncMock(return_value=mock_location)
@@ -176,6 +179,7 @@ class TestLocationsOrganizationAccess:
 
         assert response.status_code == 201
         assert response.json()["name"] == "Test Location"
+        assert response.json()["organization_id"] == str(org_id)
 
 
 @pytest.mark.integration
