@@ -144,7 +144,7 @@ are historical context; where they conflict with the table above, the table wins
 - E2E tests with Playwright (just added, need more)
 - Load testing (k6/Locust)
 - Security testing (OWASP ZAP)
-- Dependency vulnerability scanning (Snyk/Trivy)
+- Dependency vulnerability scanning (npm audit, pip-audit, and Trivy; Snyk integration retired)
 
 ---
 
