@@ -5,14 +5,17 @@ these tests pin the renamed output (and the absence of the old names) with
 and without a working database.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import Response
 
 from src.routers import monitoring
-from src.routers.monitoring import prometheus_metrics
+from src.routers.monitoring import prometheus_metrics, status_dashboard
 
 
 def _db_failures() -> AsyncMock:
@@ -93,3 +96,29 @@ async def test_metrics_degrade_gracefully_without_database():
     assert "skra_database_connected 0" in body
     assert "skra_users_total 0" in body
     assert "skra_info" in body
+
+
+async def test_metrics_include_last_request_timestamp_once_served(monkeypatch):
+    """The last-request series appears once traffic has been served."""
+    monkeypatch.setattr(monitoring, "_last_request_time", 1700000000.5)
+
+    body = await prometheus_metrics(_db_healthy())
+
+    assert "skra_last_request_timestamp 1700000000.500" in body
+
+
+async def test_status_dashboard_hides_error_details():
+    """Dashboard stats failures return generic text, never exception details."""
+    db = AsyncMock()
+    db.execute.side_effect = Exception("db secret detail")
+    user = SimpleNamespace(user_id=uuid4(), email="admin@example.com", role="administrator")
+
+    with patch(
+        "src.services.file_storage.FileStorageService",
+        side_effect=Exception("storage secret detail"),
+    ):
+        body = await status_dashboard(MagicMock(), user, db)
+
+    assert body["database"] == {"error": "Failed to fetch database stats"}
+    assert body["storage"] == {"status": "error", "error": "Failed to fetch storage stats"}
+    assert "secret detail" not in json.dumps(body)

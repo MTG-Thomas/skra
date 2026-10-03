@@ -147,3 +147,27 @@ async def test_oauth_callback_provider_exchange_failure_returns_generic_400(monk
     assert response.json() == {"detail": "OAuth callback failed"}
     assert "upstream secret detail" not in response.text
     assert redis.deleted == ["oauth_state:state"]
+
+
+@pytest.mark.asyncio
+async def test_oauth_providers_oidc_error_uses_default_display_name(monkeypatch):
+    """OIDC display-name lookup failure falls back to default provider info."""
+
+    class FakeOAuthService:
+        def __init__(self, db):
+            pass
+
+        async def get_available_providers(self):
+            return ["oidc"]
+
+        async def get_provider_config(self, provider):
+            raise OAuthError("upstream secret detail")
+
+    monkeypatch.setattr("src.routers.oauth_sso.OAuthService", FakeOAuthService)
+
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.get("/auth/oauth/providers")
+
+    assert response.status_code == 200
+    providers = response.json()["providers"]
+    assert providers == [{"name": "oidc", "display_name": "SSO", "icon": "key"}]
