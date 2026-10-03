@@ -48,8 +48,14 @@ def create_mock_password(
     mock.username = username
     mock.url = url
     mock.notes = notes
+    mock.totp_secret_encrypted = None
+    mock.metadata_ = {}
+    mock.sync_metadata = None
+    mock.is_enabled = True
     mock.created_at = datetime.now()
     mock.updated_at = datetime.now()
+    mock.updated_by_user_id = None
+    mock.updated_by_user = None
     return mock
 
 
@@ -89,7 +95,14 @@ class TestPaginationBasic:
 
             # Verify repository was called with correct params
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by=None, sort_dir="asc", limit=2, offset=0
+                test_org_id,
+                search=None,
+                sort_by=None,
+                sort_dir="asc",
+                limit=2,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -125,7 +138,14 @@ class TestPaginationBasic:
             assert data["offset"] == 2
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by=None, sort_dir="asc", limit=2, offset=2
+                test_org_id,
+                search=None,
+                sort_by=None,
+                sort_dir="asc",
+                limit=2,
+                offset=2,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -161,7 +181,14 @@ class TestPaginationBasic:
             assert data["offset"] == 4
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by=None, sort_dir="asc", limit=2, offset=4
+                test_org_id,
+                search=None,
+                sort_by=None,
+                sort_dir="asc",
+                limit=2,
+                offset=4,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -190,7 +217,14 @@ class TestPaginationBasic:
             assert data["offset"] == 0
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by=None, sort_dir="asc", limit=100, offset=0
+                test_org_id,
+                search=None,
+                sort_by=None,
+                sort_dir="asc",
+                limit=100,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -229,7 +263,14 @@ class TestPaginationSearch:
             assert data["items"][0]["name"] == "Admin Account"
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search="admin", sort_by=None, sort_dir="asc", limit=100, offset=0
+                test_org_id,
+                search="admin",
+                sort_by=None,
+                sort_dir="asc",
+                limit=100,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -295,7 +336,14 @@ class TestPaginationSearch:
             assert data["offset"] == 0
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search="Admin", sort_by=None, sort_dir="asc", limit=2, offset=0
+                test_org_id,
+                search="Admin",
+                sort_by=None,
+                sort_dir="asc",
+                limit=2,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -336,7 +384,14 @@ class TestPaginationSorting:
             assert len(data["items"]) == 3
             # Verify sorting was requested
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by="name", sort_dir="asc", limit=100, offset=0
+                test_org_id,
+                search=None,
+                sort_by="name",
+                sort_dir="asc",
+                limit=100,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
             # Verify order in response
             assert data["items"][0]["name"] == "Alpha"
@@ -375,7 +430,14 @@ class TestPaginationSorting:
             data = response.json()
             assert len(data["items"]) == 3
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by="name", sort_dir="desc", limit=100, offset=0
+                test_org_id,
+                search=None,
+                sort_by="name",
+                sort_dir="desc",
+                limit=100,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
             # Verify reverse order in response
             assert data["items"][0]["name"] == "Gamma"
@@ -419,7 +481,14 @@ class TestPaginationSorting:
             assert len(data["items"]) == 2
             assert data["total"] == 5
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search=None, sort_by="name", sort_dir="asc", limit=2, offset=2
+                test_org_id,
+                search=None,
+                sort_by="name",
+                sort_dir="asc",
+                limit=2,
+                offset=2,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -576,7 +645,14 @@ class TestPaginationEdgeCases:
             assert len(data["items"]) == 1
             # Empty search is passed as empty string
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search="", sort_by=None, sort_dir="asc", limit=100, offset=0
+                test_org_id,
+                search="",
+                sort_by=None,
+                sort_dir="asc",
+                limit=100,
+                offset=0,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
@@ -625,7 +701,14 @@ class TestPaginationCombined:
             assert data["offset"] == 4
 
             mock_password_repo.get_paginated_by_org.assert_called_once_with(
-                test_org_id, search="Admin", sort_by="name", sort_dir="desc", limit=2, offset=4
+                test_org_id,
+                search="Admin",
+                sort_by="name",
+                sort_dir="desc",
+                limit=2,
+                offset=4,
+                is_enabled=True,
+                has_totp=None,
             )
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)

@@ -62,7 +62,7 @@ class TestAuthenticationFlow:
 
     async def test_unauthenticated_access_to_protected_route(self, client: AsyncClient):
         """Test that protected routes require authentication."""
-        response = await client.get("/api/auth/me")
+        response = await client.get("/auth/me")
         assert response.status_code == 401
 
     async def test_login_with_invalid_credentials(self, client: AsyncClient):
@@ -73,9 +73,9 @@ class TestAuthenticationFlow:
 
         with patch("src.routers.auth.UserRepository", return_value=mock_repo):
             response = await client.post(
-                "/api/auth/login",
-                data={
-                    "username": "nonexistent@example.com",
+                "/auth/login",
+                json={
+                    "email": "nonexistent@example.com",
                     "password": "wrongpassword",
                 },
             )
