@@ -6,8 +6,9 @@ Tests the complete CRUD lifecycle for locations including:
 - Organization isolation (can't access other org's locations)
 """
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -17,6 +18,22 @@ from httpx import ASGITransport, AsyncClient
 from src.core.auth import UserPrincipal, get_current_active_user
 from src.main import app
 from src.models.enums import UserRole
+
+
+@contextmanager
+def _patched_side_effects():
+    """Patch audit + search-index side effects so tests run without live infra."""
+    audit_service = MagicMock()
+    audit_service.log = AsyncMock()
+    with (
+        patch(
+            "src.routers.locations.get_audit_service",
+            return_value=audit_service,
+        ),
+        patch("src.routers.locations.index_entity_for_search", new=AsyncMock()),
+        patch("src.routers.locations.remove_entity_from_search", new=AsyncMock()),
+    ):
+        yield
 
 
 def create_mock_user(user_id=None, role=None):
@@ -61,8 +78,20 @@ def mock_location():
     location.organization_id = uuid4()
     location.name = "Test Location"
     location.notes = "Some notes"
+    location.metadata_ = {}
+    location.sync_metadata = None
+    location.is_enabled = True
     location.created_at = datetime.now(UTC)
     location.updated_at = datetime.now(UTC)
+    location.address_1 = None
+    location.address_2 = None
+    location.city = None
+    location.region = None
+    location.postal_code = None
+    location.country = None
+    location.phone = None
+    location.updated_by_user_id = None
+    location.updated_by_user = None
     return location
 
 
@@ -109,30 +138,48 @@ class TestLocationsEndpointAuth:
 
 
 @pytest.mark.integration
-class TestLocationsOrgMembership:
-    """Tests for organization membership checks on locations endpoints."""
+class TestLocationsOrganizationAccess:
+    """Tests for organization access (ADR-001: orgs are partitions, not auth boundaries)."""
 
-    async def test_list_locations_non_member(self, authenticated_client):
-        """Test that non-members cannot list locations."""
+    async def test_list_locations_cross_org(self, authenticated_client, mock_location):
+        """Test that users can list locations from any organization."""
         client, mock_user = authenticated_client
         org_id = uuid4()  # Different org than the user's
+        mock_location.organization_id = org_id
 
-        response = await client.get(f"/api/organizations/{org_id}/locations")
+        mock_location_repo = AsyncMock()
+        mock_location_repo.get_paginated_by_org = AsyncMock(return_value=([mock_location], 1))
 
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Organization not found"
+        with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
+            response = await client.get(f"/api/organizations/{org_id}/locations")
 
-    async def test_create_location_non_member(self, authenticated_client):
-        """Test that non-members cannot create locations."""
+        assert response.status_code == 200
+        assert response.json()["total"] == 1
+        assert response.json()["items"][0]["organization_id"] == str(org_id)
+
+    async def test_create_location_cross_org(self, authenticated_client, mock_location):
+        """Test that users can create locations in any organization."""
         client, mock_user = authenticated_client
         org_id = uuid4()  # Different org than the user's
+        mock_location.organization_id = org_id
 
-        response = await client.post(
-            f"/api/organizations/{org_id}/locations", json={"name": "Test Location"}
-        )
+        mock_location_repo = AsyncMock()
+        mock_location_repo.create = AsyncMock(return_value=mock_location)
 
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Organization not found"
+        with (
+            patch(
+                "src.routers.locations.LocationRepository",
+                return_value=mock_location_repo,
+            ),
+            _patched_side_effects(),
+        ):
+            response = await client.post(
+                f"/api/organizations/{org_id}/locations", json={"name": "Test Location"}
+            )
+
+        assert response.status_code == 201
+        assert response.json()["name"] == "Test Location"
+        assert response.json()["organization_id"] == str(org_id)
 
 
 @pytest.mark.integration
@@ -145,18 +192,17 @@ class TestLocationsCRUD:
         org_id = mock_location.organization_id
 
         mock_location_repo = AsyncMock()
-        mock_location_repo.get_by_organization = AsyncMock(return_value=[mock_location])
-
-        from unittest.mock import patch
+        mock_location_repo.get_paginated_by_org = AsyncMock(return_value=([mock_location], 1))
 
         with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
             response = await client.get(f"/api/organizations/{org_id}/locations")
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["name"] == "Test Location"
-        assert data[0]["notes"] == "Some notes"
+        assert len(data["items"]) == 1
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "Test Location"
+        assert data["items"][0]["notes"] == "Some notes"
 
     async def test_create_location_success(self, authenticated_client, mock_location):
         """Test successful creation of a location."""
@@ -166,9 +212,13 @@ class TestLocationsCRUD:
         mock_location_repo = AsyncMock()
         mock_location_repo.create = AsyncMock(return_value=mock_location)
 
-        from unittest.mock import patch
-
-        with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
+        with (
+            patch(
+                "src.routers.locations.LocationRepository",
+                return_value=mock_location_repo,
+            ),
+            _patched_side_effects(),
+        ):
             response = await client.post(
                 f"/api/organizations/{org_id}/locations",
                 json={"name": "Test Location", "notes": "Some notes"},
@@ -188,9 +238,13 @@ class TestLocationsCRUD:
         mock_location_repo = AsyncMock()
         mock_location_repo.get_by_id_and_organization = AsyncMock(return_value=mock_location)
 
-        from unittest.mock import patch
-
-        with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
+        with (
+            patch(
+                "src.routers.locations.LocationRepository",
+                return_value=mock_location_repo,
+            ),
+            _patched_side_effects(),
+        ):
             response = await client.get(f"/api/organizations/{org_id}/locations/{location_id}")
 
         assert response.status_code == 200
@@ -226,16 +280,32 @@ class TestLocationsCRUD:
         updated_location.organization_id = org_id
         updated_location.name = "Updated Location"
         updated_location.notes = "Updated notes"
+        updated_location.metadata_ = {}
+        updated_location.sync_metadata = None
+        updated_location.is_enabled = True
         updated_location.created_at = mock_location.created_at
         updated_location.updated_at = mock_location.updated_at
+        updated_location.address_1 = None
+        updated_location.address_2 = None
+        updated_location.city = None
+        updated_location.region = None
+        updated_location.postal_code = None
+        updated_location.country = None
+        updated_location.phone = None
+        updated_location.updated_by_user_id = None
+        updated_location.updated_by_user = None
 
         mock_location_repo = AsyncMock()
         mock_location_repo.get_by_id_and_organization = AsyncMock(return_value=mock_location)
         mock_location_repo.update = AsyncMock(return_value=updated_location)
 
-        from unittest.mock import patch
-
-        with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
+        with (
+            patch(
+                "src.routers.locations.LocationRepository",
+                return_value=mock_location_repo,
+            ),
+            _patched_side_effects(),
+        ):
             response = await client.put(
                 f"/api/organizations/{org_id}/locations/{location_id}",
                 json={"name": "Updated Location", "notes": "Updated notes"},
@@ -276,9 +346,13 @@ class TestLocationsCRUD:
         mock_location_repo.get_by_id_and_organization = AsyncMock(return_value=mock_location)
         mock_location_repo.delete = AsyncMock()
 
-        from unittest.mock import patch
-
-        with patch("src.routers.locations.LocationRepository", return_value=mock_location_repo):
+        with (
+            patch(
+                "src.routers.locations.LocationRepository",
+                return_value=mock_location_repo,
+            ),
+            _patched_side_effects(),
+        ):
             response = await client.delete(f"/api/organizations/{org_id}/locations/{location_id}")
 
         assert response.status_code == 204

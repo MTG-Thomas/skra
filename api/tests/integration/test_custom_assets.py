@@ -396,8 +396,8 @@ class TestPasswordFieldHandling:
         """Test that passwords survive encryption/decryption roundtrip."""
         from src.models.contracts.custom_asset import FieldDefinition
         from src.services.custom_asset_validation import (
-            decrypt_password_fields,
-            encrypt_password_fields,
+            values_id_to_key,
+            values_key_to_id,
         )
 
         repo = CustomAssetRepository(db_session)
@@ -410,14 +410,13 @@ class TestPasswordFieldHandling:
             "api_secret": "sk_live_xyz789",
         }
 
-        # Encrypt for storage
-        encrypted_values = encrypt_password_fields(type_fields, original_values)
+        # Encrypt for storage (key-based API format -> ID-based storage format)
+        encrypted_values = values_key_to_id(type_fields, original_values)
 
         # Create asset with encrypted values
         asset = CustomAsset(
             organization_id=test_org.id,
             custom_asset_type_id=asset_type_with_passwords.id,
-            name="Stripe API",
             values=encrypted_values,
         )
         created = await repo.create(asset)
@@ -427,7 +426,7 @@ class TestPasswordFieldHandling:
         assert retrieved is not None
 
         # Decrypt the values
-        decrypted_values = decrypt_password_fields(type_fields, retrieved.values)
+        decrypted_values = values_id_to_key(type_fields, retrieved.values, decrypt_secrets=True)
 
         # Verify roundtrip
         assert decrypted_values["service_name"] == "Payment Gateway"
@@ -442,7 +441,7 @@ class TestPasswordFieldHandling:
     ):
         """Test that encrypted values are actually stored encrypted in database."""
         from src.models.contracts.custom_asset import FieldDefinition
-        from src.services.custom_asset_validation import encrypt_password_fields
+        from src.services.custom_asset_validation import values_key_to_id
 
         repo = CustomAssetRepository(db_session)
         type_fields = [FieldDefinition(**f) for f in asset_type_with_passwords.fields]
@@ -453,17 +452,19 @@ class TestPasswordFieldHandling:
             "api_key": original_secret,
         }
 
-        encrypted_values = encrypt_password_fields(type_fields, values)
+        encrypted_values = values_key_to_id(type_fields, values)
 
         asset = CustomAsset(
             organization_id=test_org.id,
             custom_asset_type_id=asset_type_with_passwords.id,
-            name="Test Asset",
             values=encrypted_values,
         )
         created = await repo.create(asset)
 
+        # Values are stored keyed by field ID with secrets encrypted inline
+        api_key_field_id = next(f.id for f in type_fields if f.key == "api_key")
+
         # Verify stored values don't contain plaintext
         assert original_secret not in str(created.values)
-        assert "api_key_encrypted" in created.values
-        assert created.values["api_key_encrypted"] != original_secret
+        assert api_key_field_id in created.values
+        assert created.values[api_key_field_id] != original_secret

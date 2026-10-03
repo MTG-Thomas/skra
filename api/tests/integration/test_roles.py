@@ -11,6 +11,8 @@ Test Scenarios:
 4. Contributor access - Can perform CRUD on their organization's resources
 """
 
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -22,6 +24,15 @@ from src.core.auth import UserPrincipal, get_current_active_user
 from src.main import app
 from src.models.enums import UserRole
 from src.models.orm.user import User
+
+
+@contextmanager
+def _patched_audit(router: str):
+    """Patch the audit service for a router so tests run without live infra."""
+    audit_service = MagicMock()
+    audit_service.log = AsyncMock()
+    with patch(f"src.routers.{router}.get_audit_service", return_value=audit_service):
+        yield audit_service
 
 
 def create_mock_user(
@@ -154,27 +165,39 @@ class TestAdminEndpointsAccessControl:
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_invite_user_as_admin(self, client: AsyncClient, admin_user):
-        """Test that ADMINISTRATOR can access POST /api/admin/users/invite."""
+    async def test_create_user_as_admin(self, client: AsyncClient, admin_user):
+        """Test that ADMINISTRATOR can access POST /api/admin/users/create."""
         app.dependency_overrides[get_current_active_user] = lambda: admin_user
+
+        mock_user_repo = AsyncMock()
+        mock_user_repo.get_by_email = AsyncMock(return_value=None)
+        created_user = MagicMock(spec=User)
+        created_user.id = uuid4()
+        created_user.email = "newuser@example.com"
+        created_user.name = "newuser"
+        created_user.role = UserRole.CONTRIBUTOR
+        created_user.is_active = True
+        mock_user_repo.create_user = AsyncMock(return_value=created_user)
 
         try:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as test_client:
-                response = await test_client.post(
-                    "/api/admin/users/invite",
-                    json={"email": "newuser@example.com", "role": "contributor"},
-                )
+                with patch("src.routers.admin.UserRepository", return_value=mock_user_repo):
+                    response = await test_client.post(
+                        "/api/admin/users/create",
+                        json={"email": "newuser@example.com", "role": "contributor"},
+                    )
 
             assert response.status_code == 200
+            assert response.json()["email"] == "newuser@example.com"
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_invite_user_as_contributor_forbidden(
+    async def test_create_user_as_contributor_forbidden(
         self, client: AsyncClient, contributor_user
     ):
-        """Test that CONTRIBUTOR cannot access POST /api/admin/users/invite (403)."""
+        """Test that CONTRIBUTOR cannot access POST /api/admin/users/create (403)."""
         app.dependency_overrides[get_current_active_user] = lambda: contributor_user
 
         try:
@@ -182,7 +205,7 @@ class TestAdminEndpointsAccessControl:
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as test_client:
                 response = await test_client.post(
-                    "/api/admin/users/invite",
+                    "/api/admin/users/create",
                     json={"email": "newuser@example.com", "role": "contributor"},
                 )
 
@@ -190,8 +213,8 @@ class TestAdminEndpointsAccessControl:
         finally:
             app.dependency_overrides.pop(get_current_active_user, None)
 
-    async def test_invite_user_as_reader_forbidden(self, client: AsyncClient, reader_user):
-        """Test that READER cannot access POST /api/admin/users/invite (403)."""
+    async def test_create_user_as_reader_forbidden(self, client: AsyncClient, reader_user):
+        """Test that READER cannot access POST /api/admin/users/create (403)."""
         app.dependency_overrides[get_current_active_user] = lambda: reader_user
 
         try:
@@ -199,7 +222,7 @@ class TestAdminEndpointsAccessControl:
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as test_client:
                 response = await test_client.post(
-                    "/api/admin/users/invite",
+                    "/api/admin/users/create",
                     json={"email": "newuser@example.com", "role": "contributor"},
                 )
 
@@ -714,8 +737,14 @@ class TestContributorAccess:
         mock_password.username = "testuser"
         mock_password.url = "https://example.com"
         mock_password.notes = "Test notes"
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.sync_metadata = None
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.create = AsyncMock(return_value=mock_password)
@@ -729,6 +758,7 @@ class TestContributorAccess:
                         "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
                     ),
                     patch("src.routers.passwords.index_entity_for_search", new_callable=AsyncMock),
+                    _patched_audit("passwords"),
                 ):
                     response = await test_client.post(
                         f"/api/organizations/{test_org_id}/passwords",
@@ -761,8 +791,14 @@ class TestContributorAccess:
         mock_password.username = "updateduser"
         mock_password.url = "https://updated.com"
         mock_password.notes = "Updated notes"
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.sync_metadata = None
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.get_by_id_and_org = AsyncMock(return_value=mock_password)
@@ -777,6 +813,7 @@ class TestContributorAccess:
                         "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
                     ),
                     patch("src.routers.passwords.index_entity_for_search", new_callable=AsyncMock),
+                    _patched_audit("passwords"),
                 ):
                     response = await test_client.put(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}",
@@ -813,6 +850,7 @@ class TestContributorAccess:
                     patch(
                         "src.routers.passwords.remove_entity_from_search", new_callable=AsyncMock
                     ),
+                    _patched_audit("passwords"),
                 ):
                     response = await test_client.delete(
                         f"/api/organizations/{test_org_id}/passwords/{password_id}"
@@ -834,8 +872,13 @@ class TestContributorAccess:
         mock_document.path = "/Infrastructure"
         mock_document.name = "Network Docs"
         mock_document.content = "# Network Documentation"
+        mock_document.metadata_ = {}
+        mock_document.sync_metadata = None
+        mock_document.is_enabled = True
         mock_document.created_at = "2024-01-01T00:00:00Z"
         mock_document.updated_at = "2024-01-01T00:00:00Z"
+        mock_document.updated_by_user_id = None
+        mock_document.updated_by_user = None
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.create = AsyncMock(return_value=mock_document)
@@ -847,6 +890,7 @@ class TestContributorAccess:
                 with (
                     patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
                     patch("src.routers.documents.index_entity_for_search", new_callable=AsyncMock),
+                    _patched_audit("documents"),
                 ):
                     response = await test_client.post(
                         f"/api/organizations/{test_org_id}/documents",
@@ -874,8 +918,13 @@ class TestContributorAccess:
         mock_document.path = "/Infrastructure"
         mock_document.name = "Updated Docs"
         mock_document.content = "# Updated Content"
+        mock_document.metadata_ = {}
+        mock_document.sync_metadata = None
+        mock_document.is_enabled = True
         mock_document.created_at = "2024-01-01T00:00:00Z"
         mock_document.updated_at = "2024-01-01T00:00:00Z"
+        mock_document.updated_by_user_id = None
+        mock_document.updated_by_user = None
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.get_by_id_and_org = AsyncMock(return_value=mock_document)
@@ -888,6 +937,7 @@ class TestContributorAccess:
                 with (
                     patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
                     patch("src.routers.documents.index_entity_for_search", new_callable=AsyncMock),
+                    _patched_audit("documents"),
                 ):
                     response = await test_client.put(
                         f"/api/organizations/{test_org_id}/documents/{doc_id}",
@@ -921,6 +971,7 @@ class TestContributorAccess:
                         "src.routers.configurations.remove_entity_from_search",
                         new_callable=AsyncMock,
                     ),
+                    _patched_audit("configurations"),
                 ):
                     response = await test_client.delete(
                         f"/api/organizations/{test_org_id}/configurations/{config_id}"
@@ -973,8 +1024,14 @@ class TestRoleHierarchy:
         mock_password.username = "admin"
         mock_password.url = None
         mock_password.notes = None
-        mock_password.created_at = MagicMock()
-        mock_password.updated_at = MagicMock()
+        mock_password.totp_secret_encrypted = None
+        mock_password.metadata_ = {}
+        mock_password.sync_metadata = None
+        mock_password.is_enabled = True
+        mock_password.created_at = datetime.now(UTC)
+        mock_password.updated_at = datetime.now(UTC)
+        mock_password.updated_by_user_id = None
+        mock_password.updated_by_user = None
 
         mock_password_repo = AsyncMock()
         mock_password_repo.create = AsyncMock(return_value=mock_password)
@@ -988,6 +1045,7 @@ class TestRoleHierarchy:
                         "src.routers.passwords.PasswordRepository", return_value=mock_password_repo
                     ),
                     patch("src.routers.passwords.index_entity_for_search", new_callable=AsyncMock),
+                    _patched_audit("passwords"),
                 ):
                     response = await test_client.post(
                         f"/api/organizations/{test_org_id}/passwords",

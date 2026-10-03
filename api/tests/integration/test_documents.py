@@ -9,7 +9,8 @@ Tests the complete document CRUD flow including:
 - Organization access
 """
 
-from unittest.mock import AsyncMock, patch
+from contextlib import contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -19,6 +20,42 @@ from httpx import ASGITransport, AsyncClient
 from src.core.auth import UserPrincipal, get_current_active_user
 from src.main import app
 from src.models.enums import UserRole
+
+
+def create_mock_document(org_id, doc_id=None, **overrides):
+    """Create a mock document entity with all converter-touched fields set."""
+    mock_doc = MagicMock()
+    mock_doc.id = doc_id or uuid4()
+    mock_doc.organization_id = org_id
+    mock_doc.path = "/Infrastructure"
+    mock_doc.name = "Overview"
+    mock_doc.content = "# Overview"
+    mock_doc.metadata_ = {}
+    mock_doc.sync_metadata = None
+    mock_doc.is_enabled = True
+    mock_doc.created_at = "2026-01-12T00:00:00Z"
+    mock_doc.updated_at = "2026-01-12T00:00:00Z"
+    mock_doc.updated_by_user_id = None
+    mock_doc.updated_by_user = None
+    for key, value in overrides.items():
+        setattr(mock_doc, key, value)
+    return mock_doc
+
+
+@contextmanager
+def _patched_side_effects():
+    """Patch audit + search-index side effects so tests run without live infra."""
+    audit_service = MagicMock()
+    audit_service.log = AsyncMock()
+    with (
+        patch(
+            "src.routers.documents.get_audit_service",
+            return_value=audit_service,
+        ),
+        patch("src.routers.documents.index_entity_for_search", new=AsyncMock()),
+        patch("src.routers.documents.remove_entity_from_search", new=AsyncMock()),
+    ):
+        yield
 
 
 @pytest_asyncio.fixture
@@ -129,19 +166,20 @@ class TestDocumentsCRUD:
         """Test creating a document with valid data."""
         org_id = uuid4()
 
-        mock_doc = AsyncMock()
-        mock_doc.id = uuid4()
-        mock_doc.organization_id = org_id
-        mock_doc.path = "/Infrastructure/Network"
-        mock_doc.name = "Network Diagram"
-        mock_doc.content = "# Network Diagram\n\nDescription here."
-        mock_doc.created_at = "2026-01-12T00:00:00Z"
-        mock_doc.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc = create_mock_document(
+            org_id,
+            path="/Infrastructure/Network",
+            name="Network Diagram",
+            content="# Network Diagram\n\nDescription here.",
+        )
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.create = AsyncMock(return_value=mock_doc)
 
-        with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
+        with (
+            patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
+            _patched_side_effects(),
+        ):
             response = await authenticated_client.post(
                 f"/api/organizations/{org_id}/documents",
                 json={
@@ -161,49 +199,38 @@ class TestDocumentsCRUD:
         """Test listing documents for an organization."""
         org_id = uuid4()
 
-        mock_doc1 = AsyncMock()
-        mock_doc1.id = uuid4()
-        mock_doc1.organization_id = org_id
-        mock_doc1.path = "/Infrastructure"
-        mock_doc1.name = "Overview"
-        mock_doc1.content = "# Overview"
-        mock_doc1.created_at = "2026-01-12T00:00:00Z"
-        mock_doc1.updated_at = "2026-01-12T00:00:00Z"
-
-        mock_doc2 = AsyncMock()
-        mock_doc2.id = uuid4()
-        mock_doc2.organization_id = org_id
-        mock_doc2.path = "/Infrastructure/Network"
-        mock_doc2.name = "Network Docs"
-        mock_doc2.content = "# Network"
-        mock_doc2.created_at = "2026-01-12T00:00:00Z"
-        mock_doc2.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc1 = create_mock_document(org_id, name="Overview", content="# Overview")
+        mock_doc2 = create_mock_document(
+            org_id,
+            path="/Infrastructure/Network",
+            name="Network Docs",
+            content="# Network",
+        )
 
         mock_doc_repo = AsyncMock()
-        mock_doc_repo.get_all_by_org = AsyncMock(return_value=[mock_doc1, mock_doc2])
+        mock_doc_repo.get_paginated_by_org = AsyncMock(return_value=([mock_doc1, mock_doc2], 2))
 
         with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
             response = await authenticated_client.get(f"/api/organizations/{org_id}/documents")
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
+        assert len(data["items"]) == 2
+        assert data["total"] == 2
 
     async def test_list_documents_with_path_filter(self, authenticated_client: AsyncClient):
         """Test listing documents filtered by path."""
         org_id = uuid4()
 
-        mock_doc = AsyncMock()
-        mock_doc.id = uuid4()
-        mock_doc.organization_id = org_id
-        mock_doc.path = "/Infrastructure/Network"
-        mock_doc.name = "Network Docs"
-        mock_doc.content = "# Network"
-        mock_doc.created_at = "2026-01-12T00:00:00Z"
-        mock_doc.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc = create_mock_document(
+            org_id,
+            path="/Infrastructure/Network",
+            name="Network Docs",
+            content="# Network",
+        )
 
         mock_doc_repo = AsyncMock()
-        mock_doc_repo.get_by_path = AsyncMock(return_value=[mock_doc])
+        mock_doc_repo.get_paginated_by_org = AsyncMock(return_value=([mock_doc], 1))
 
         with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
             response = await authenticated_client.get(
@@ -212,16 +239,20 @@ class TestDocumentsCRUD:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["path"] == "/Infrastructure/Network"
+        assert len(data["items"]) == 1
+        assert data["items"][0]["path"] == "/Infrastructure/Network"
 
     async def test_get_folders_success(self, authenticated_client: AsyncClient):
         """Test getting distinct folder paths."""
         org_id = uuid4()
 
         mock_doc_repo = AsyncMock()
-        mock_doc_repo.get_distinct_paths = AsyncMock(
-            return_value=["/Infrastructure", "/Infrastructure/Network", "/Policies"]
+        mock_doc_repo.get_paths_with_counts = AsyncMock(
+            return_value=[
+                ("/Infrastructure", 2),
+                ("/Infrastructure/Network", 1),
+                ("/Policies", 1),
+            ]
         )
 
         with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
@@ -233,27 +264,26 @@ class TestDocumentsCRUD:
         data = response.json()
         assert "folders" in data
         assert len(data["folders"]) == 3
-        assert "/Infrastructure" in data["folders"]
-        assert "/Policies" in data["folders"]
+        paths = [f["path"] for f in data["folders"]]
+        assert "/Infrastructure" in paths
+        assert "/Policies" in paths
 
     async def test_get_document_success(self, authenticated_client: AsyncClient):
         """Test getting a single document by ID."""
         org_id = uuid4()
         doc_id = uuid4()
 
-        mock_doc = AsyncMock()
-        mock_doc.id = doc_id
-        mock_doc.organization_id = org_id
-        mock_doc.path = "/Infrastructure"
-        mock_doc.name = "Overview"
-        mock_doc.content = "# Overview\n\nThis is the overview."
-        mock_doc.created_at = "2026-01-12T00:00:00Z"
-        mock_doc.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc = create_mock_document(
+            org_id, doc_id, content="# Overview\n\nThis is the overview."
+        )
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.get_by_id_and_org = AsyncMock(return_value=mock_doc)
 
-        with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
+        with (
+            patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
+            _patched_side_effects(),
+        ):
             response = await authenticated_client.get(
                 f"/api/organizations/{org_id}/documents/{doc_id}"
             )
@@ -283,20 +313,16 @@ class TestDocumentsCRUD:
         org_id = uuid4()
         doc_id = uuid4()
 
-        mock_doc = AsyncMock()
-        mock_doc.id = doc_id
-        mock_doc.organization_id = org_id
-        mock_doc.path = "/Infrastructure"
-        mock_doc.name = "Overview"
-        mock_doc.content = "# Overview"
-        mock_doc.created_at = "2026-01-12T00:00:00Z"
-        mock_doc.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc = create_mock_document(org_id, doc_id)
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.get_by_id_and_org = AsyncMock(return_value=mock_doc)
         mock_doc_repo.update = AsyncMock(return_value=mock_doc)
 
-        with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
+        with (
+            patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
+            _patched_side_effects(),
+        ):
             response = await authenticated_client.put(
                 f"/api/organizations/{org_id}/documents/{doc_id}",
                 json={"name": "Updated Overview", "content": "# Updated Content"},
@@ -309,14 +335,9 @@ class TestDocumentsCRUD:
         org_id = uuid4()
         doc_id = uuid4()
 
-        mock_doc = AsyncMock()
-        mock_doc.id = doc_id
-        mock_doc.organization_id = org_id
-        mock_doc.path = "/OldPath"
-        mock_doc.name = "Document"
-        mock_doc.content = "# Content"
-        mock_doc.created_at = "2026-01-12T00:00:00Z"
-        mock_doc.updated_at = "2026-01-12T00:00:00Z"
+        mock_doc = create_mock_document(
+            org_id, doc_id, path="/OldPath", name="Document", content="# Content"
+        )
 
         mock_doc_repo = AsyncMock()
         mock_doc_repo.get_by_id_and_org = AsyncMock(return_value=mock_doc)
@@ -328,7 +349,10 @@ class TestDocumentsCRUD:
 
         mock_doc_repo.update = AsyncMock(side_effect=update_doc)
 
-        with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
+        with (
+            patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
+            _patched_side_effects(),
+        ):
             response = await authenticated_client.put(
                 f"/api/organizations/{org_id}/documents/{doc_id}", json={"path": "/NewPath"}
             )
@@ -345,7 +369,10 @@ class TestDocumentsCRUD:
         mock_doc_repo = AsyncMock()
         mock_doc_repo.delete_by_id_and_org = AsyncMock(return_value=True)
 
-        with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
+        with (
+            patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo),
+            _patched_side_effects(),
+        ):
             response = await authenticated_client.delete(
                 f"/api/organizations/{org_id}/documents/{doc_id}"
             )
@@ -377,7 +404,7 @@ class TestDocumentsOrganizationAccess:
         other_org_id = uuid4()  # Different from user's org
 
         mock_doc_repo = AsyncMock()
-        mock_doc_repo.get_all_by_org = AsyncMock(return_value=[])
+        mock_doc_repo.get_paginated_by_org = AsyncMock(return_value=([], 0))
 
         with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
             response = await authenticated_client.get(
@@ -392,7 +419,7 @@ class TestDocumentsOrganizationAccess:
         any_org_id = uuid4()
 
         mock_doc_repo = AsyncMock()
-        mock_doc_repo.get_all_by_org = AsyncMock(return_value=[])
+        mock_doc_repo.get_paginated_by_org = AsyncMock(return_value=([], 0))
 
         with patch("src.routers.documents.DocumentRepository", return_value=mock_doc_repo):
             response = await superuser_client.get(f"/api/organizations/{any_org_id}/documents")

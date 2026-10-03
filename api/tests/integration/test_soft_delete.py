@@ -14,6 +14,7 @@ Each entity has:
 - Cannot DELETE if related entities exist
 """
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -72,10 +73,12 @@ def create_mock_custom_asset_type(
     mock_type.name = name
     mock_type.is_active = is_active
     mock_type.fields = fields or [{"key": "hostname", "name": "Hostname", "type": "text"}]
+    mock_type.sort_order = 0
+    mock_type.display_field_key = None
     mock_type.icon = None
     mock_type.color = None
-    mock_type.created_at = MagicMock()
-    mock_type.updated_at = MagicMock()
+    mock_type.created_at = datetime.now(UTC)
+    mock_type.updated_at = datetime.now(UTC)
     return mock_type
 
 
@@ -132,6 +135,7 @@ class TestCustomAssetTypeSoftDelete:
         mock_repo = AsyncMock()
         mock_repo.get_by_id = AsyncMock(return_value=mock_type)
         mock_repo.deactivate = AsyncMock(return_value=deactivated_type)
+        mock_repo.get_asset_count = AsyncMock(return_value=0)
 
         with patch(
             "src.routers.custom_asset_types.CustomAssetTypeRepository",
@@ -153,6 +157,7 @@ class TestCustomAssetTypeSoftDelete:
         mock_repo = AsyncMock()
         mock_repo.get_by_id = AsyncMock(return_value=mock_type)
         mock_repo.activate = AsyncMock(return_value=activated_type)
+        mock_repo.get_asset_count = AsyncMock(return_value=0)
 
         with patch(
             "src.routers.custom_asset_types.CustomAssetTypeRepository",
@@ -173,6 +178,7 @@ class TestCustomAssetTypeSoftDelete:
 
         mock_repo = AsyncMock()
         mock_repo.get_all_ordered = AsyncMock(return_value=[active_type])
+        mock_repo.get_asset_count = AsyncMock(return_value=0)
 
         with patch(
             "src.routers.custom_asset_types.CustomAssetTypeRepository",
@@ -194,6 +200,7 @@ class TestCustomAssetTypeSoftDelete:
 
         mock_repo = AsyncMock()
         mock_repo.get_all_ordered = AsyncMock(return_value=[active_type, inactive_type])
+        mock_repo.get_asset_count = AsyncMock(return_value=0)
 
         with patch(
             "src.routers.custom_asset_types.CustomAssetTypeRepository",
