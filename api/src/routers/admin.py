@@ -210,9 +210,9 @@ async def update_config(
     logger.info(
         sanitize_log_value("Config updated"),
         extra={
-            "user_id": str(current_user.user_id),
-            "openai_key_updated": config_data.openai_api_key is not None,
-            "embedding_model": config_data.embedding_model,
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "openai_key_updated": sanitize_log_value(config_data.openai_api_key is not None),
+            "embedding_model": sanitize_log_value(config_data.embedding_model),
         },
     )
 
@@ -398,8 +398,8 @@ async def remove_user(
     logger.info(
         sanitize_log_value(f"User removed: {user.email}"),
         extra={
-            "admin_id": str(current_user.user_id),
-            "removed_user_id": str(user_id),
+            "admin_id": sanitize_log_value(str(current_user.user_id)),
+            "removed_user_id": sanitize_log_value(str(user_id)),
         },
     )
 
@@ -462,8 +462,8 @@ async def update_user_role(
     logger.info(
         f"User role updated: {sanitize_log_value(user.email)} -> {sanitize_log_value(role_data.role)}",
         extra={
-            "admin_id": str(current_user.user_id),
-            "user_id": str(user_id),
+            "admin_id": sanitize_log_value(str(current_user.user_id)),
+            "user_id": sanitize_log_value(str(user_id)),
             "new_role": sanitize_log_value(role_data.role),
         },
     )
@@ -688,11 +688,11 @@ async def start_reindex(
         logger.info(
             sanitize_log_value("Reindex job started"),
             extra={
-                "job_id": job_id,
-                "entity_type": entity_type,
-                "organization_id": organization_id,
-                "total_entities": total,
-                "user_id": str(current_user.user_id),
+                "job_id": sanitize_log_value(job_id),
+                "entity_type": sanitize_log_value(entity_type),
+                "organization_id": sanitize_log_value(organization_id),
+                "total_entities": sanitize_log_value(total),
+                "user_id": sanitize_log_value(str(current_user.user_id)),
             },
         )
 

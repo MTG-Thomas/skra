@@ -371,10 +371,10 @@ async def update_completions_config(
     logger.info(
         sanitize_log_value("Completions config updated"),
         extra={
-            "user_id": str(current_user.user_id),
-            "provider": config.get("provider"),
-            "model": config.get("model"),
-            "api_key_updated": update_data.api_key is not None,
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "provider": sanitize_log_value(config.get("provider")),
+            "model": sanitize_log_value(config.get("model")),
+            "api_key_updated": sanitize_log_value(update_data.api_key is not None),
         },
     )
 
@@ -418,9 +418,9 @@ async def update_embeddings_config(
     logger.info(
         sanitize_log_value("Embeddings config updated"),
         extra={
-            "user_id": str(current_user.user_id),
-            "model": config.get("model"),
-            "api_key_updated": update_data.api_key is not None,
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "model": sanitize_log_value(config.get("model")),
+            "api_key_updated": sanitize_log_value(update_data.api_key is not None),
         },
     )
 
@@ -476,8 +476,8 @@ async def update_indexing_config(
     logger.info(
         sanitize_log_value("Indexing config updated"),
         extra={
-            "user_id": str(current_user.user_id),
-            "enabled": update_data.enabled,
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "enabled": sanitize_log_value(update_data.enabled),
         },
     )
 
@@ -652,10 +652,10 @@ async def test_ai_connection(
         logger.info(
             sanitize_log_value("AI connection test successful"),
             extra={
-                "user_id": str(current_user.user_id),
-                "provider": test_request.provider,
-                "completions_count": len(completions_models),
-                "embedding_count": len(embedding_models),
+                "user_id": sanitize_log_value(str(current_user.user_id)),
+                "provider": sanitize_log_value(test_request.provider),
+                "completions_count": sanitize_log_value(len(completions_models)),
+                "embedding_count": sanitize_log_value(len(embedding_models)),
             },
         )
 
@@ -693,8 +693,8 @@ async def test_ai_connection(
         logger.warning(
             sanitize_log_value(f"AI connection test failed: {error_message}"),
             extra={
-                "user_id": str(current_user.user_id),
-                "provider": test_request.provider,
+                "user_id": sanitize_log_value(str(current_user.user_id)),
+                "provider": sanitize_log_value(test_request.provider),
             },
         )
 

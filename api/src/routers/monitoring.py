@@ -123,7 +123,8 @@ async def detailed_health_check(db: DbSession) -> JSONResponse:
         db_latency = time.time() - start
         checks["database"] = {"status": "healthy", "latency_ms": round(db_latency * 1000, 2)}
     except SQLAlchemyError as e:
-        checks["database"] = {"status": "unhealthy", "error": str(e)}
+        logger.warning(f"Database health check failed: {e}")
+        checks["database"] = {"status": "unhealthy", "error": "Database health check failed"}
         overall_healthy = False
 
     # Check Redis (if configured)
@@ -137,9 +138,10 @@ async def detailed_health_check(db: DbSession) -> JSONResponse:
         checks["redis"] = {"status": "healthy", "latency_ms": round(redis_latency * 1000, 2)}
     except Exception as e:
         # Redis is optional for basic operation
+        logger.warning(f"Redis health check failed: {e}")
         checks["redis"] = {
             "status": "degraded",
-            "error": str(e),
+            "error": "Redis health check failed",
             "note": "Redis is optional, app can function without it",
         }
 

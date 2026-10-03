@@ -15,7 +15,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from src.routers import monitoring
-from src.routers.monitoring import prometheus_metrics, status_dashboard
+from src.routers.monitoring import detailed_health_check, prometheus_metrics, status_dashboard
 
 
 def _db_failures() -> AsyncMock:
@@ -121,4 +121,27 @@ async def test_status_dashboard_hides_error_details():
 
     assert body["database"] == {"error": "Failed to fetch database stats"}
     assert body["storage"] == {"status": "error", "error": "Failed to fetch storage stats"}
+    assert "secret detail" not in json.dumps(body)
+
+
+async def test_detailed_health_check_hides_error_details():
+    """Health-check failures return generic text, never exception details."""
+    db = AsyncMock()
+    db.execute.side_effect = SQLAlchemyError("db secret detail")
+
+    with patch(
+        "src.core.cache.get_redis",
+        side_effect=Exception("redis secret detail"),
+    ):
+        response = await detailed_health_check(db)
+
+    assert response.status_code == 503
+    body = json.loads(response.body)
+    assert body["status"] == "unhealthy"
+    assert body["checks"]["database"] == {
+        "status": "unhealthy",
+        "error": "Database health check failed",
+    }
+    assert body["checks"]["redis"]["status"] == "degraded"
+    assert body["checks"]["redis"]["error"] == "Redis health check failed"
     assert "secret detail" not in json.dumps(body)

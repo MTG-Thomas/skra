@@ -174,7 +174,10 @@ async def search(
 
     logger.info(
         f"Search completed: mode={effective_mode}, query='{sanitize_log_value(q)}', results={len(results)}",
-        extra={"user_id": str(current_user.user_id), "org_ids": [str(o) for o in org_ids]},
+        extra={
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "org_ids": sanitize_log_value([str(o) for o in org_ids]),
+        },
     )
 
     return SearchResponse(query=q, results=results)
@@ -818,7 +821,10 @@ async def apply_mutation(
         sanitize_log_value(
             f"Mutation applied: entity_type={request.entity_type}, entity_id={request.entity_id}"
         ),
-        extra={"user_id": str(current_user.user_id), "org_id": str(request.organization_id)},
+        extra={
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "org_id": sanitize_log_value(str(request.organization_id)),
+        },
     )
 
     return ApplyMutationResponse(

@@ -106,8 +106,8 @@ async def upsert_preferences(
     logger.info(
         sanitize_log_value("User preferences updated"),
         extra={
-            "user_id": str(current_user.user_id),
-            "entity_type": entity_type,
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "entity_type": sanitize_log_value(entity_type),
         },
     )
 
@@ -148,7 +148,7 @@ async def delete_preferences(
         logger.info(
             sanitize_log_value("User preferences deleted"),
             extra={
-                "user_id": str(current_user.user_id),
-                "entity_type": entity_type,
+                "user_id": sanitize_log_value(str(current_user.user_id)),
+                "entity_type": sanitize_log_value(entity_type),
             },
         )

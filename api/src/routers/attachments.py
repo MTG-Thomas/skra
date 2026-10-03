@@ -181,11 +181,11 @@ async def create_attachment(
     logger.info(
         sanitize_log_value(f"Created attachment: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment.id),
-            "org_id": str(org_id),
-            "entity_type": attachment_data.entity_type.value,
-            "entity_id": str(attachment_data.entity_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "entity_type": sanitize_log_value(attachment_data.entity_type.value),
+            "entity_id": sanitize_log_value(str(attachment_data.entity_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -366,9 +366,9 @@ async def delete_attachment(
     logger.info(
         sanitize_log_value(f"Deleted attachment: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -459,9 +459,9 @@ async def upload_document_image(
     logger.info(
         sanitize_log_value(f"Created document image: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 

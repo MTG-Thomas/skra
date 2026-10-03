@@ -355,10 +355,10 @@ async def create_custom_asset(
     logger.info(
         sanitize_log_value(f"Custom asset created: {display_name}"),
         extra={
-            "org_id": str(org_id),
-            "asset_type_id": str(type_id),
-            "asset_id": str(asset.id),
-            "user_id": str(current_user.user_id),
+            "org_id": sanitize_log_value(str(org_id)),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "asset_id": sanitize_log_value(str(asset.id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -532,10 +532,10 @@ async def reveal_custom_asset(
     logger.info(
         sanitize_log_value(f"Custom asset revealed: {display_name}"),
         extra={
-            "org_id": str(org_id),
-            "asset_type_id": str(type_id),
-            "asset_id": str(asset_id),
-            "user_id": str(current_user.user_id),
+            "org_id": sanitize_log_value(str(org_id)),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "asset_id": sanitize_log_value(str(asset_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -658,10 +658,10 @@ async def update_custom_asset(
     logger.info(
         sanitize_log_value(f"Custom asset updated: {display_name}"),
         extra={
-            "org_id": str(org_id),
-            "asset_type_id": str(type_id),
-            "asset_id": str(asset_id),
-            "user_id": str(current_user.user_id),
+            "org_id": sanitize_log_value(str(org_id)),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "asset_id": sanitize_log_value(str(asset_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -728,10 +728,10 @@ async def delete_custom_asset(
     logger.info(
         sanitize_log_value(f"Custom asset deleted: {display_name}"),
         extra={
-            "org_id": str(org_id),
-            "asset_type_id": str(type_id),
-            "asset_id": str(asset_id),
-            "user_id": str(current_user.user_id),
+            "org_id": sanitize_log_value(str(org_id)),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "asset_id": sanitize_log_value(str(asset_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -778,10 +778,10 @@ async def batch_toggle_custom_assets(
             f"Batch toggle custom assets: {result.rowcount} assets set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
         ),
         extra={
-            "org_id": str(org_id),
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 

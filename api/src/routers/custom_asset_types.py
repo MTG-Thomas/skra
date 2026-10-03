@@ -373,8 +373,8 @@ async def deactivate_custom_asset_type(
     logger.info(
         sanitize_log_value(f"Custom asset type deactivated: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -415,8 +415,8 @@ async def activate_custom_asset_type(
     logger.info(
         sanitize_log_value(f"Custom asset type activated: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -462,7 +462,7 @@ async def delete_custom_asset_type(
     logger.info(
         sanitize_log_value(f"Custom asset type deleted: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )

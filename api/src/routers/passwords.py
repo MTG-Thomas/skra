@@ -184,9 +184,9 @@ async def create_password(
     logger.info(
         sanitize_log_value(f"Password created: {password.name}"),
         extra={
-            "password_id": str(password.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "password_id": sanitize_log_value(str(password.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -344,9 +344,9 @@ async def reveal_password(
     logger.info(
         sanitize_log_value(f"Password revealed: {password.name}"),
         extra={
-            "password_id": str(password.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "password_id": sanitize_log_value(str(password.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -449,9 +449,9 @@ async def update_password(
     logger.info(
         sanitize_log_value(f"Password updated: {password.name}"),
         extra={
-            "password_id": str(password.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "password_id": sanitize_log_value(str(password.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -507,9 +507,9 @@ async def delete_password(
     logger.info(
         sanitize_log_value(f"Password deleted: {password.name}"),
         extra={
-            "password_id": str(password.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "password_id": sanitize_log_value(str(password.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -550,9 +550,9 @@ async def batch_toggle_passwords(
             f"Batch toggle passwords: {result.rowcount} passwords set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
         ),
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 
