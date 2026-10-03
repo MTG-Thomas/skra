@@ -50,7 +50,7 @@ export function markdownToHTML(markdown: string): string {
 
   // Paragraphs
   html = html.split("\n\n").map(para => {
-    if (!para.match(/^<[h|u|o|p|l]/)) {
+    if (!para.match(/^<[huopl]/)) {
       return `<p>${para}</p>`;
     }
     return para;

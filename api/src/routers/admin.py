@@ -208,7 +208,7 @@ async def update_config(
 
     # TODO: Store in database/settings table
     logger.info(
-        "Config updated",
+        sanitize_log_value("Config updated"),
         extra={
             "user_id": str(current_user.user_id),
             "openai_key_updated": config_data.openai_api_key is not None,
@@ -396,7 +396,7 @@ async def remove_user(
     await user_repo.delete(user)
 
     logger.info(
-        f"User removed: {user.email}",
+        sanitize_log_value(f"User removed: {user.email}"),
         extra={
             "admin_id": str(current_user.user_id),
             "removed_user_id": str(user_id),
@@ -686,7 +686,7 @@ async def start_reindex(
         background_tasks.add_task(_enqueue_reindex, entity_type, org_uuid, job_id, total)
 
         logger.info(
-            "Reindex job started",
+            sanitize_log_value("Reindex job started"),
             extra={
                 "job_id": job_id,
                 "entity_type": entity_type,

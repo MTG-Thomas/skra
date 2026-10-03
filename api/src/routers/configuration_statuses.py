@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.core.auth import CurrentActiveUser, CurrentSuperuser
 from src.core.database import DbSession
+from src.core.log_sanitize import sanitize_log_value
 from src.models.contracts.configuration import (
     ConfigurationStatusCreate,
     ConfigurationStatusPublic,
@@ -188,7 +189,7 @@ async def deactivate_configuration_status(
     config_count = await repo.get_configuration_count(status_id)
 
     logger.info(
-        f"Configuration status deactivated: {config_status.name}",
+        sanitize_log_value(f"Configuration status deactivated: {config_status.name}"),
         extra={
             "config_status_id": str(status_id),
             "user_id": str(current_user.user_id),
@@ -230,7 +231,7 @@ async def activate_configuration_status(
     config_count = await repo.get_configuration_count(status_id)
 
     logger.info(
-        f"Configuration status activated: {config_status.name}",
+        sanitize_log_value(f"Configuration status activated: {config_status.name}"),
         extra={
             "config_status_id": str(status_id),
             "user_id": str(current_user.user_id),
@@ -280,7 +281,7 @@ async def delete_configuration_status(
     await repo.delete_by_id(status_id)
 
     logger.info(
-        f"Configuration status deleted: {status_id}",
+        sanitize_log_value(f"Configuration status deleted: {status_id}"),
         extra={
             "config_status_id": str(status_id),
             "user_id": str(current_user.user_id),

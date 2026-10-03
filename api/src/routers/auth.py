@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, UserPrincipal
 from src.core.database import DbSession
+from src.core.log_sanitize import sanitize_log_value
 from src.core.rate_limiting import RateLimits, limiter
 from src.core.security import (
     create_access_token,
@@ -570,7 +571,9 @@ async def setup_passkey_options(
         ) from e
 
     logger.info(
-        f"Passkey setup initiated for first-time registration: {setup_request.email}",
+        sanitize_log_value(
+            f"Passkey setup initiated for first-time registration: {setup_request.email}"
+        ),
     )
 
     return SetupPasskeyOptionsResponse(

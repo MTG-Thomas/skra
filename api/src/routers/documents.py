@@ -220,7 +220,7 @@ async def create_document(
     )
 
     logger.info(
-        f"Document created: {doc.name}",
+        sanitize_log_value(f"Document created: {doc.name}"),
         extra={
             "doc_id": str(doc.id),
             "org_id": str(org_id),
@@ -372,7 +372,7 @@ async def clean_document(
     )
 
     logger.info(
-        f"Document cleaned: {doc.name}",
+        sanitize_log_value(f"Document cleaned: {doc.name}"),
         extra={
             "doc_id": str(doc.id),
             "org_id": str(org_id),
@@ -450,7 +450,7 @@ async def update_document(
     )
 
     logger.info(
-        f"Document updated: {doc.name}",
+        sanitize_log_value(f"Document updated: {doc.name}"),
         extra={
             "doc_id": str(doc.id),
             "org_id": str(org_id),
@@ -507,7 +507,7 @@ async def delete_document(
     await remove_entity_from_search(db, "document", doc_id)
 
     logger.info(
-        "Document deleted",
+        sanitize_log_value("Document deleted"),
         extra={
             "doc_id": str(doc_id),
             "org_id": str(org_id),
@@ -548,7 +548,9 @@ async def batch_toggle_documents(
     await db.commit()
 
     logger.info(
-        f"Batch toggle documents: {result.rowcount} docs set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle documents: {result.rowcount} docs set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
             "org_id": str(org_id),
             "user_id": str(current_user.user_id),

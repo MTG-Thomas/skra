@@ -72,7 +72,6 @@ class BaseLLMClient(ABC):
         **kwargs,
     ) -> LLMResponse:
         """Send a completion request and return the full response."""
-        ...
 
     @abstractmethod
     def stream(
@@ -82,4 +81,3 @@ class BaseLLMClient(ABC):
         **kwargs,
     ) -> AsyncGenerator[LLMStreamChunk, None]:
         """Stream a completion response chunk by chunk."""
-        ...

@@ -13,6 +13,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.log_sanitize import sanitize_log_value
 from src.core.security import decrypt_secret, encrypt_secret
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.password import (
@@ -182,7 +183,7 @@ async def create_password(
     )
 
     logger.info(
-        f"Password created: {password.name}",
+        sanitize_log_value(f"Password created: {password.name}"),
         extra={
             "password_id": str(password.id),
             "org_id": str(org_id),
@@ -342,7 +343,7 @@ async def reveal_password(
     )
 
     logger.info(
-        f"Password revealed: {password.name}",
+        sanitize_log_value(f"Password revealed: {password.name}"),
         extra={
             "password_id": str(password.id),
             "org_id": str(org_id),
@@ -447,7 +448,7 @@ async def update_password(
     )
 
     logger.info(
-        f"Password updated: {password.name}",
+        sanitize_log_value(f"Password updated: {password.name}"),
         extra={
             "password_id": str(password.id),
             "org_id": str(org_id),
@@ -505,7 +506,7 @@ async def delete_password(
     await remove_entity_from_search(db, "password", password_id)
 
     logger.info(
-        f"Password deleted: {password.name}",
+        sanitize_log_value(f"Password deleted: {password.name}"),
         extra={
             "password_id": str(password.id),
             "org_id": str(org_id),
@@ -546,7 +547,9 @@ async def batch_toggle_passwords(
     await db.commit()
 
     logger.info(
-        f"Batch toggle passwords: {result.rowcount} passwords set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle passwords: {result.rowcount} passwords set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
             "org_id": str(org_id),
             "user_id": str(current_user.user_id),

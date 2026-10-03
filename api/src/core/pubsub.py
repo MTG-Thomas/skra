@@ -148,7 +148,7 @@ class ConnectionManager:
             try:
                 await self._pubsub_task
             except asyncio.CancelledError:
-                pass
+                logger.debug("Pub/sub listener task cancelled during stop")
             self._pubsub_task = None
             logger.info("WebSocket Redis pub/sub stopped")
 
@@ -258,7 +258,7 @@ class ConnectionManager:
             self._connections[connection_id].channels.add(channel)
             self._channel_subscribers[channel].add(connection_id)
 
-        logger.debug(f"Connection {connection_id} subscribed to {channel}")
+        logger.debug(sanitize_log_value(f"Connection {connection_id} subscribed to {channel}"))
 
     async def unsubscribe(self, connection_id: str, channel: str) -> None:
         """
@@ -278,7 +278,7 @@ class ConnectionManager:
             if not self._channel_subscribers[channel]:
                 del self._channel_subscribers[channel]
 
-        logger.debug(f"Connection {connection_id} unsubscribed from {channel}")
+        logger.debug(sanitize_log_value(f"Connection {connection_id} unsubscribed from {channel}"))
 
     async def broadcast(self, channel: str, message: WebSocketMessage) -> None:
         """

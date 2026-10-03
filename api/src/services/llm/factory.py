@@ -168,12 +168,11 @@ def get_llm_client(config: CompletionsConfig) -> BaseLLMClient:
     Raises:
         ValueError: If the provider is not supported.
     """
-    match config.provider:
-        case LLMProvider.OPENAI:
-            return OpenAIClient(config.api_key, config.model, None)
-        case LLMProvider.ANTHROPIC:
-            return AnthropicClient(config.api_key, config.model)
-        case LLMProvider.OPENAI_COMPATIBLE:
-            return OpenAIClient(config.api_key, config.model, config.endpoint)
-        case _:
-            raise ValueError(f"Unsupported LLM provider: {config.provider}")
+    if config.provider == LLMProvider.OPENAI:
+        return OpenAIClient(config.api_key, config.model, None)
+    elif config.provider == LLMProvider.ANTHROPIC:
+        return AnthropicClient(config.api_key, config.model)
+    elif config.provider == LLMProvider.OPENAI_COMPATIBLE:
+        return OpenAIClient(config.api_key, config.model, config.endpoint)
+    else:
+        raise ValueError(f"Unsupported LLM provider: {config.provider}")

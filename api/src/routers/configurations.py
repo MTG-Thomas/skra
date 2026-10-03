@@ -13,6 +13,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.log_sanitize import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.configuration import (
     ConfigurationCreate,
@@ -200,7 +201,7 @@ async def create_configuration(
     )
 
     logger.info(
-        f"Configuration created: {config.name}",
+        sanitize_log_value(f"Configuration created: {config.name}"),
         extra={
             "config_id": str(config.id),
             "org_id": str(org_id),
@@ -393,9 +394,8 @@ async def update_configuration(
     # Track who updated
     config.updated_by_user_id = current_user.user_id
 
-    config = await repo.update(config)
-
-    # Reload to get updated relationships
+    # Flush updates, then reload to get updated relationships
+    await repo.update(config)
     config = await repo.get_by_id_for_org(config_id, org_id)
     if not config:
         raise HTTPException(
@@ -414,7 +414,7 @@ async def update_configuration(
     )
 
     logger.info(
-        f"Configuration updated: {config.name}",
+        sanitize_log_value(f"Configuration updated: {config.name}"),
         extra={
             "config_id": str(config_id),
             "org_id": str(org_id),
@@ -471,7 +471,7 @@ async def delete_configuration(
     await remove_entity_from_search(db, "configuration", config_id)
 
     logger.info(
-        f"Configuration deleted: {config_id}",
+        sanitize_log_value(f"Configuration deleted: {config_id}"),
         extra={
             "config_id": str(config_id),
             "org_id": str(org_id),
@@ -512,7 +512,9 @@ async def batch_toggle_configurations(
     await db.commit()
 
     logger.info(
-        f"Batch toggle configurations: {result.rowcount} configs set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle configurations: {result.rowcount} configs set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
             "org_id": str(org_id),
             "user_id": str(current_user.user_id),

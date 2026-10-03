@@ -14,6 +14,7 @@ import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.log_sanitize import sanitize_log_value
 from src.core.security import decrypt_secret, encrypt_secret
 from src.models.contracts.oauth_config import (
     OAUTH_ALLOWED_DOMAIN,
@@ -285,7 +286,7 @@ class OAuthConfigService:
             return False
 
         await self._delete_config_keys(keys)
-        logger.info(f"OAuth config deleted for provider: {provider}")
+        logger.info(sanitize_log_value(f"OAuth config deleted for provider: {provider}"))
         return True
 
     # =========================================================================
@@ -348,8 +349,6 @@ class OAuthConfigService:
                     success=False,
                     message="Microsoft OAuth is not configured",
                 )
-            client_id = client_id or config.client_id
-            client_secret = client_secret or config.client_secret
             tenant_id = tenant_id or config.tenant_id
 
         tenant = tenant_id or "common"
@@ -396,8 +395,7 @@ class OAuthConfigService:
                     success=False,
                     message="Google OAuth is not configured",
                 )
-            client_id = client_id or config.client_id
-            client_secret = client_secret or config.client_secret
+            # Saved config exists; the discovery URL below is all this check needs
 
         discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
 
@@ -442,8 +440,6 @@ class OAuthConfigService:
                     message="OIDC is not configured",
                 )
             discovery_url = discovery_url or config.discovery_url
-            client_id = client_id or config.client_id
-            client_secret = client_secret or config.client_secret
 
         if not discovery_url:
             return OAuthConfigTestResponse(
@@ -555,7 +551,9 @@ class OAuthConfigService:
                 is_secret=False,
                 updated_by=updated_by,
             )
-            logger.info(f"OAuth allowed domain set to: {domain} by {updated_by}")
+            logger.info(
+                sanitize_log_value(f"OAuth allowed domain set to: {domain} by {updated_by}")
+            )
         else:
             # Delete the config to allow all domains
             await self._delete_config_keys([OAUTH_ALLOWED_DOMAIN])

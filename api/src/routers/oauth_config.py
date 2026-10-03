@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import CurrentSuperuser
 from src.core.database import get_db
+from src.core.log_sanitize import sanitize_log_value
 from src.models.contracts.oauth_config import (
     GoogleOAuthConfigRequest,
     MicrosoftOAuthConfigRequest,
@@ -246,7 +247,7 @@ async def delete_oauth_config(
             detail=f"OAuth provider {provider} not found or already deleted",
         )
 
-    logger.info(f"OAuth config deleted for {provider} by {user.email}")
+    logger.info(sanitize_log_value(f"OAuth config deleted for {provider} by {user.email}"))
 
 
 @router.post(
@@ -332,7 +333,9 @@ async def set_domain_whitelist(
     await db.commit()
 
     logger.info(
-        f"OAuth domain whitelist updated by {user.email}: {domain or 'disabled'}",
+        sanitize_log_value(
+            f"OAuth domain whitelist updated by {user.email}: {domain or 'disabled'}"
+        ),
     )
 
     return {"allowed_domain": domain}

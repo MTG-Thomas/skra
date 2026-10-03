@@ -254,7 +254,7 @@ async def ping_loop(
                 logger.debug(f"Ping failed for {connection_id}: {e}")
                 break
     except asyncio.CancelledError:
-        pass
+        logger.debug("WebSocket ping loop cancelled")
 
 
 async def receive_loop(
@@ -405,7 +405,7 @@ async def websocket_connect(
             try:
                 await ping_task
             except asyncio.CancelledError:
-                pass
+                logger.debug("WebSocket ping task cancelled on disconnect")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket {connection_id} disconnected normally")

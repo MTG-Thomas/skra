@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
+from src.core.log_sanitize import sanitize_log_value
 from src.core.security import decrypt_secret, encrypt_secret
 from src.models.contracts.ai_settings import (
     AISettingsResponse,
@@ -369,7 +370,7 @@ async def update_completions_config(
     await repo.set_config(LLM_CATEGORY, COMPLETIONS_CONFIG_KEY, config)
 
     logger.info(
-        "Completions config updated",
+        sanitize_log_value("Completions config updated"),
         extra={
             "user_id": str(current_user.user_id),
             "provider": config.get("provider"),
@@ -416,7 +417,7 @@ async def update_embeddings_config(
     await repo.set_config(LLM_CATEGORY, EMBEDDINGS_CONFIG_KEY, config)
 
     logger.info(
-        "Embeddings config updated",
+        sanitize_log_value("Embeddings config updated"),
         extra={
             "user_id": str(current_user.user_id),
             "model": config.get("model"),
@@ -474,7 +475,7 @@ async def update_indexing_config(
     await repo.set_config(LLM_CATEGORY, INDEXING_CONFIG_KEY, config)
 
     logger.info(
-        "Indexing config updated",
+        sanitize_log_value("Indexing config updated"),
         extra={
             "user_id": str(current_user.user_id),
             "enabled": update_data.enabled,
@@ -568,7 +569,7 @@ async def list_available_models(
         return ModelsResponse(models=models)
 
     except Exception as e:
-        logger.warning(f"Failed to fetch models from {provider}: {e}")
+        logger.warning(sanitize_log_value(f"Failed to fetch models from {provider}: {e}"))
         # Fall back to curated list on error
         if provider == "openai":
             return ModelsResponse(
@@ -650,7 +651,7 @@ async def test_ai_connection(
         total_models = len(completions_models) + len(embedding_models)
 
         logger.info(
-            "AI connection test successful",
+            sanitize_log_value("AI connection test successful"),
             extra={
                 "user_id": str(current_user.user_id),
                 "provider": test_request.provider,
@@ -691,7 +692,7 @@ async def test_ai_connection(
             error_message = "Connection failed - please check your network"
 
         logger.warning(
-            f"AI connection test failed: {error_message}",
+            sanitize_log_value(f"AI connection test failed: {error_message}"),
             extra={
                 "user_id": str(current_user.user_id),
                 "provider": test_request.provider,

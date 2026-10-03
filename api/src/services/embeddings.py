@@ -173,7 +173,10 @@ class EmbeddingsService:
                     .where(CustomAsset.id == entity_id)
                 )
             case _:
-                raise ValueError(f"Unknown entity type: {entity_type}")
+                result = None
+
+        if result is None:
+            raise ValueError(f"Unknown entity type: {entity_type}")
 
         row = result.one_or_none()
         if row is None:
@@ -922,7 +925,10 @@ class EmbeddingsService:
                     return values.get("name") or values.get("title") or values.get("domain")
                 return None
             case _:
-                return None
+                result = None
+
+        if result is None:
+            return None
 
         return result.scalar_one_or_none()
 

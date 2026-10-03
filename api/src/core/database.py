@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from src.config import Settings, get_settings
-from src.models.orm.base import Base  # noqa: F401 - imported for Alembic
 
 
 def _prepare_asyncpg_url(url: str) -> tuple[str, dict]:
