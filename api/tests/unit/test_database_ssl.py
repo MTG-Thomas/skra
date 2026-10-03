@@ -25,12 +25,18 @@ def test_require_rejected_everywhere():
         _prepare_asyncpg_url(BASE_URL + "?sslmode=require")
 
 
-def test_verify_ca_requires_cert_but_skips_hostname():
+def test_verify_ca_enforced_as_verify_full():
+    """verify-ca stays accepted but enforces hostname verification too.
+
+    Skipping hostname checks trips Sonar python:S5527; production only
+    allows verify-full anyway (#131/#133), so both modes yield a fully
+    verifying default context.
+    """
     cleaned, connect_args = _prepare_asyncpg_url(BASE_URL + "?sslmode=verify-ca")
 
     assert "sslmode" not in cleaned
     assert connect_args["ssl"].verify_mode is ssl.CERT_REQUIRED
-    assert connect_args["ssl"].check_hostname is False
+    assert connect_args["ssl"].check_hostname is True
 
 
 def test_verify_full_verifies_cert_and_hostname():

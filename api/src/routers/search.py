@@ -173,7 +173,7 @@ async def search(
         ) from e
 
     logger.info(
-        f"Search completed: mode={effective_mode}, query='{sanitize_log_value(q)}', results={len(results)}",
+        f"Search completed: mode={sanitize_log_value(effective_mode)}, query='{sanitize_log_value(q)}', results={sanitize_log_value(len(results))}",
         extra={
             "user_id": sanitize_log_value(str(current_user.user_id)),
             "org_ids": sanitize_log_value([str(o) for o in org_ids]),

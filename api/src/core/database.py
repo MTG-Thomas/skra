@@ -54,15 +54,13 @@ def _prepare_asyncpg_url(url: str) -> tuple[str, dict]:
             )
 
         if sslmode in ("verify-ca", "verify-full"):
-            # Create SSL context for secure connections
-            ssl_context = ssl.create_default_context()
-
-            if sslmode == "verify-ca":
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_REQUIRED
-            # verify-full uses default (check_hostname=True, CERT_REQUIRED)
-
-            connect_args["ssl"] = ssl_context
+            # Full verification for every accepted mode (Sonar python:S5527):
+            # the default context verifies the certificate chain AND the
+            # hostname. verify-ca stays accepted for PostgreSQL compatibility
+            # but is enforced as verify-full; production only allows
+            # verify-full anyway (#131/#133), and nothing in-repo uses
+            # verify-ca semantics.
+            connect_args["ssl"] = ssl.create_default_context()
         elif sslmode == "prefer":
             # Try SSL but don't require it
             connect_args["ssl"] = "prefer"
