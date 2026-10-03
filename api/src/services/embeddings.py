@@ -141,6 +141,7 @@ class EmbeddingsService:
         Returns:
             Tuple of (entity, organization) or None if not found
         """
+        result = None
         match entity_type:
             case "password":
                 result = await db.execute(
@@ -903,6 +904,7 @@ class EmbeddingsService:
         entity_id: UUID,
     ) -> str | None:
         """Get the name of an entity by type and ID."""
+        result = None
         match entity_type:
             case "password":
                 result = await db.execute(select(Password.name).where(Password.id == entity_id))
