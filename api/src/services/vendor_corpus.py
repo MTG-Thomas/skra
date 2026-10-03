@@ -157,17 +157,22 @@ def reference_uri(asset: CorpusAsset, archive_base_uri: str) -> str:
     return f"{base}/{asset.local_path.lstrip('/')}"
 
 
-def assert_import_target_allowed(manifest: CorpusManifest, target: str) -> None:
+def assert_import_target_allowed(
+    manifest: CorpusManifest, target: str, curated: bool = False
+) -> None:
     """Reject target/corpus combinations that would leak restricted material.
 
     Authorized (member-only) corpora may only go to restricted targets, and
-    raw mirrored pages may only land in staging — never directly in a
-    curated/public collection.
+    raw mirrored pages may only land in staging or durable storage — never
+    directly in a curated collection. Pass ``curated=True`` only for
+    human-curated articles, never for raw converted mirror output.
     """
     if target not in KNOWN_TARGETS:
         raise ValueError(f"unknown import target: {target!r}")
     if manifest.access_class == AccessClass.AUTHORIZED and target in PUBLIC_TARGETS:
         raise ValueError(f"target {target!r} cannot receive authorized corpora")
+    if target == "itglue-curated" and not curated:
+        raise ValueError("target 'itglue-curated' accepts curated articles only, not raw pages")
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +206,9 @@ def _convert_inline(text: str) -> str:
     text = _MEDIA_RE.sub(_media, text)
     text = _LINK_RE.sub(_link, text)
     # Bold, italic, monospace, strikethrough. Order matters: bold first.
+    # The italic delimiters must not match URL scheme separators (https://).
     text = re.sub(r"\*\*(.+?)\*\*", r"**\1**", text)
-    text = re.sub(r"//(.+?)//", r"*\1*", text)
+    text = re.sub(r"(?<!:)//(.+?)(?<!:)//", r"*\1*", text)
     text = re.sub(r"''(.+?)''", r"`\1`", text)
     text = re.sub(r"<del>(.+?)</del>", r"~~\1~~", text)
     return text
@@ -227,11 +233,25 @@ def dokuwiki_to_markdown(source: str) -> str:
     bold/italic/monospace, internal and external links, embedded media,
     bullet/numbered lists, code blocks, horizontal rules, and simple tables.
     """
-    lines = _CODE_BLOCK_RE.sub(lambda m: f"\n```\n{m.group(3).strip()}\n```\n", source).splitlines()
+
+    def _fence(match: re.Match[str]) -> str:
+        body = match.group(3).strip("\n")
+        return f"\n```\n{body}\n```\n"
+
+    lines = _CODE_BLOCK_RE.sub(_fence, source).splitlines()
 
     out: list[str] = []
     prev_was_header_row = False
+    in_code = False
     for line in lines:
+        if line.strip().startswith("```"):
+            out.append(line.strip())
+            in_code = not in_code
+            prev_was_header_row = False
+            continue
+        if in_code:
+            out.append(line)
+            continue
         if not line.strip():
             out.append("")
             prev_was_header_row = False
@@ -246,11 +266,6 @@ def dokuwiki_to_markdown(source: str) -> str:
 
         if line.strip() == "----":
             out.append("---")
-            prev_was_header_row = False
-            continue
-
-        if line.strip().startswith("```"):
-            out.append(line.strip())
             prev_was_header_row = False
             continue
 
@@ -358,13 +373,15 @@ def build_dry_run_report(
     conversions: list[ConversionRecord],
     target: str,
     archive_base_uri: str,
+    curated: bool = False,
 ) -> dict:
     """Build a dry-run import report without touching the import target.
 
     Raises ValueError when the target is not allowed for the corpus access
-    class, so an invalid pilot is a hard failure rather than a warning.
+    class or when raw pages target a curated collection, so an invalid
+    pilot is a hard failure rather than a warning.
     """
-    assert_import_target_allowed(manifest, target)
+    assert_import_target_allowed(manifest, target, curated=curated)
 
     by_path = {c.local_path: c for c in conversions}
     converted = [c for c in conversions if c.status == "converted"]

@@ -176,10 +176,18 @@ def test_public_corpus_allowed_for_public_target() -> None:
     assert_import_target_allowed(_manifest(), "outline-staging-public")
 
 
-@pytest.mark.parametrize("target", ["outline-staging-authorized", "itglue-curated"])
-def test_authorized_corpus_allowed_for_restricted_targets(target: str) -> None:
+def test_authorized_corpus_allowed_for_restricted_staging() -> None:
     manifest = _manifest(access_class=AccessClass.AUTHORIZED)
-    assert_import_target_allowed(manifest, target)
+    assert_import_target_allowed(manifest, "outline-staging-authorized")
+
+
+def test_raw_pages_rejected_for_curated_target() -> None:
+    with pytest.raises(ValueError, match="curated articles only"):
+        assert_import_target_allowed(_manifest(), "itglue-curated")
+
+
+def test_curated_articles_allowed_for_curated_target() -> None:
+    assert_import_target_allowed(_manifest(), "itglue-curated", curated=True)
 
 
 # --- DokuWiki conversion ----------------------------------------------------
@@ -213,6 +221,23 @@ def test_dokuwiki_inline_conversions(source: str, expected: str) -> None:
 def test_dokuwiki_table_with_header_separator() -> None:
     source = "^ Name ^ Version ^\n| Widget | 2.0 |"
     assert dokuwiki_to_markdown(source) == ("| Name | Version |\n| --- | --- |\n| Widget | 2.0 |\n")
+
+
+def test_dokuwiki_two_urls_on_one_line_survive_italic_pass() -> None:
+    source = "[[https://a.test/x|A]] and [[https://b.test/y|B]]"
+    assert dokuwiki_to_markdown(source) == "[A](https://a.test/x) and [B](https://b.test/y)\n"
+
+
+def test_dokuwiki_italic_beside_url_still_converts() -> None:
+    source = "//note// see [[https://a.test/x|A]]"
+    assert dokuwiki_to_markdown(source) == "*note* see [A](https://a.test/x)\n"
+
+
+def test_dokuwiki_code_block_content_passes_through_verbatim() -> None:
+    source = "<code>\n  * not a list\n^ not | a table\n====== not a heading ======\n//not italic//\n</code>"
+    assert dokuwiki_to_markdown(source) == (
+        "```\n  * not a list\n^ not | a table\n====== not a heading ======\n//not italic//\n```\n"
+    )
 
 
 def test_dokuwiki_multiline_document() -> None:
@@ -318,6 +343,19 @@ def test_dry_run_report_rejects_disallowed_target() -> None:
     manifest = _manifest(access_class=AccessClass.AUTHORIZED)
     with pytest.raises(ValueError, match="cannot receive authorized corpora"):
         build_dry_run_report(manifest, [], "outline-staging-public", "s3://vendor-corpus/example")
+
+
+def test_dry_run_report_rejects_raw_pages_for_curated_target() -> None:
+    with pytest.raises(ValueError, match="curated articles only"):
+        build_dry_run_report(_manifest(), _conversions(), "itglue-curated", "s3://vendor-corpus/x")
+
+
+def test_dry_run_report_allows_curated_articles_for_curated_target() -> None:
+    report = build_dry_run_report(
+        _manifest(), _conversions(), "itglue-curated", "s3://vendor-corpus/x", curated=True
+    )
+    assert report["target"] == "itglue-curated"
+    assert report["ready_for_import"] is True
 
 
 def test_dry_run_report_warns_on_authorized_corpus() -> None:

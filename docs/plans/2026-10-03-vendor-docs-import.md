@@ -30,6 +30,7 @@ manifest at its root:
 
 ```text
 s3://vendor-corpus/<corpus-slug>/<capture-date>/
+├── <corpus-slug>-<capture-date>.tar.gz   # full archive, DEEP_ARCHIVE
 ├── corpus-manifest.json      # CorpusManifest v1 (required)
 ├── pages/                    # raw page exports (DokuWiki .txt, XHTML, HTML)
 ├── media/                    # same-site images, CSS, small attachments
@@ -42,17 +43,22 @@ Archive procedure (run once per corpus from the machine holding the mirror):
 ```bash
 CORPUS=planmeca-dokuwiki
 DATE=2026-04-30
+PREFIX=s3://vendor-corpus/${CORPUS}/${DATE}
+# 1. Full archive tarball (cold copy of everything, manifest included).
 tar -czf /tmp/${CORPUS}-${DATE}.tar.gz -C /path/to/mirror ${CORPUS}/
-aws s3 cp /tmp/${CORPUS}-${DATE}.tar.gz \
-  s3://vendor-corpus/${CORPUS}/${DATE}/${CORPUS}-${DATE}.tar.gz --storage-class DEEP_ARCHIVE
-aws s3 cp /path/to/mirror/${CORPUS}/corpus-manifest.json \
-  s3://vendor-corpus/${CORPUS}/${DATE}/corpus-manifest.json
+aws s3 cp /tmp/${CORPUS}-${DATE}.tar.gz ${PREFIX}/${CORPUS}-${DATE}.tar.gz \
+  --storage-class DEEP_ARCHIVE
+# 2. Extracted tree (working set). Per-object URIs such as
+#    ${PREFIX}/bin/viewer-setup.zip MUST resolve, because dry-run reports
+#    and curated articles reference large binaries by these URIs.
+aws s3 sync /path/to/mirror/${CORPUS}/ ${PREFIX}/
 ```
 
-The manifest is stored both inside the tarball and beside it so corpus
-contents stay locatable without fetching the full archive. Until the laptop
-holder runs this upload, the manifests and tooling in this repo are the
-preservation path; the physical copy step is tracked as follow-up work on
+The extracted tree keeps every manifest `local_path` (and every
+`reference_uri` in dry-run reports) directly resolvable without fetching the
+full archive; the tarball is the cold backup. Until the laptop holder runs
+this upload, the manifests and tooling in this repo are the preservation
+path; the physical copy step is tracked as follow-up work on
 bifrost-infra#74.
 
 ## Corpus manifest (source of truth)
