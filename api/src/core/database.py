@@ -44,15 +44,20 @@ def _prepare_asyncpg_url(url: str) -> tuple[str, dict]:
     if "sslmode" in query_params:
         sslmode = query_params.pop("sslmode")[0]
 
-        if sslmode in ("require", "verify-ca", "verify-full"):
+        if sslmode == "require":
+            # Refuse unverified TLS everywhere (Sonar python:S5527). Production
+            # already rejects require at Settings validation (#131/#133); failing
+            # here too keeps dev/test from silently negotiating MITM-able links.
+            raise ValueError(
+                "sslmode=require is not supported: it negotiates unverified TLS. "
+                "Use sslmode=verify-full, or omit TLS parameters for the internal network."
+            )
+
+        if sslmode in ("verify-ca", "verify-full"):
             # Create SSL context for secure connections
             ssl_context = ssl.create_default_context()
 
-            if sslmode == "require":
-                # Don't verify certificate (common for managed databases)
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-            elif sslmode == "verify-ca":
+            if sslmode == "verify-ca":
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_REQUIRED
             # verify-full uses default (check_hostname=True, CERT_REQUIRED)

@@ -191,8 +191,8 @@ async def deactivate_configuration_type(
     logger.info(
         sanitize_log_value(f"Configuration type deactivated: {config_type.name}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -233,8 +233,8 @@ async def activate_configuration_type(
     logger.info(
         sanitize_log_value(f"Configuration type activated: {config_type.name}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -283,7 +283,7 @@ async def delete_configuration_type(
     logger.info(
         sanitize_log_value(f"Configuration type deleted: {type_id}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )

@@ -191,8 +191,8 @@ async def deactivate_configuration_status(
     logger.info(
         sanitize_log_value(f"Configuration status deactivated: {config_status.name}"),
         extra={
-            "config_status_id": str(status_id),
-            "user_id": str(current_user.user_id),
+            "config_status_id": sanitize_log_value(str(status_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -233,8 +233,8 @@ async def activate_configuration_status(
     logger.info(
         sanitize_log_value(f"Configuration status activated: {config_status.name}"),
         extra={
-            "config_status_id": str(status_id),
-            "user_id": str(current_user.user_id),
+            "config_status_id": sanitize_log_value(str(status_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -283,7 +283,7 @@ async def delete_configuration_status(
     logger.info(
         sanitize_log_value(f"Configuration status deleted: {status_id}"),
         extra={
-            "config_status_id": str(status_id),
-            "user_id": str(current_user.user_id),
+            "config_status_id": sanitize_log_value(str(status_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )

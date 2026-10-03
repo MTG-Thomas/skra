@@ -186,9 +186,9 @@ async def create_location(
     logger.info(
         sanitize_log_value(f"Location created: {location.name}"),
         extra={
-            "location_id": str(location.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "location_id": sanitize_log_value(str(location.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -397,9 +397,9 @@ async def update_location(
     logger.info(
         sanitize_log_value(f"Location updated: {location.name}"),
         extra={
-            "location_id": str(location.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "location_id": sanitize_log_value(str(location.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -455,9 +455,9 @@ async def delete_location(
     logger.info(
         sanitize_log_value(f"Location deleted: {location.name}"),
         extra={
-            "location_id": str(location.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "location_id": sanitize_log_value(str(location.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -498,9 +498,9 @@ async def batch_toggle_locations(
             f"Batch toggle locations: {result.rowcount} locations set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
         ),
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 

@@ -203,9 +203,9 @@ async def create_configuration(
     logger.info(
         sanitize_log_value(f"Configuration created: {config.name}"),
         extra={
-            "config_id": str(config.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "config_id": sanitize_log_value(str(config.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -416,9 +416,9 @@ async def update_configuration(
     logger.info(
         sanitize_log_value(f"Configuration updated: {config.name}"),
         extra={
-            "config_id": str(config_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "config_id": sanitize_log_value(str(config_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -473,9 +473,9 @@ async def delete_configuration(
     logger.info(
         sanitize_log_value(f"Configuration deleted: {config_id}"),
         extra={
-            "config_id": str(config_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "config_id": sanitize_log_value(str(config_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -516,9 +516,9 @@ async def batch_toggle_configurations(
             f"Batch toggle configurations: {result.rowcount} configs set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
         ),
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 

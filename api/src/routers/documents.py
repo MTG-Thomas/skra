@@ -222,9 +222,9 @@ async def create_document(
     logger.info(
         sanitize_log_value(f"Document created: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -374,9 +374,9 @@ async def clean_document(
     logger.info(
         sanitize_log_value(f"Document cleaned: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -452,9 +452,9 @@ async def update_document(
     logger.info(
         sanitize_log_value(f"Document updated: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -509,9 +509,9 @@ async def delete_document(
     logger.info(
         sanitize_log_value("Document deleted"),
         extra={
-            "doc_id": str(doc_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -552,9 +552,9 @@ async def batch_toggle_documents(
             f"Batch toggle documents: {result.rowcount} docs set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
         ),
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 
@@ -623,11 +623,11 @@ async def batch_update_paths(
     logger.info(
         f"Batch path update: {updated_count} docs moved from '{sanitize_log_value(request.old_path_prefix)}' to '{sanitize_log_value(request.new_path_prefix)}'",
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
             "old_prefix": sanitize_log_value(request.old_path_prefix),
             "new_prefix": sanitize_log_value(request.new_path_prefix),
-            "updated_count": updated_count,
+            "updated_count": sanitize_log_value(updated_count),
         },
     )
 

@@ -168,9 +168,9 @@ async def create_relationship(
             f"{relationship.target_type}/{relationship.target_id}"
         ),
         extra={
-            "relationship_id": str(relationship.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "relationship_id": sanitize_log_value(str(relationship.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -210,9 +210,9 @@ async def delete_relationship(
             f"{relationship.target_type}/{relationship.target_id}"
         ),
         extra={
-            "relationship_id": str(relationship.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "relationship_id": sanitize_log_value(str(relationship.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
