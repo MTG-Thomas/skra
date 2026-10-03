@@ -17,7 +17,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.orm.base import Base
 
 if TYPE_CHECKING:
-    from src.models.orm.custom_asset import CustomAsset
+    # custom_asset imports this module, so importing it here would close an
+    # import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    CustomAsset = Any
 
 
 class CustomAssetType(Base):

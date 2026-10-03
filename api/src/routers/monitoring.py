@@ -7,6 +7,7 @@ Provides endpoints for application monitoring:
 - /status - Application status dashboard
 """
 
+import logging
 import time
 from datetime import UTC, datetime
 
@@ -21,6 +22,8 @@ from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
 
 router = APIRouter(tags=["monitoring"])
+
+logger = logging.getLogger(__name__)
 
 # In-memory metrics storage (in production, use Prometheus client)
 _request_count = 0
@@ -74,12 +77,27 @@ async def prometheus_metrics(db: DbSession) -> str:
     metrics.append(f"skra_users_total {user_count}")
 
     # Request metrics (if tracking enabled)
-    global _request_count, _request_duration_total
+    global _request_count, _request_duration_total, _last_request_time
     if _request_count > 0:
         metrics.append("")
         metrics.append("# HELP skra_requests_total Total requests")
         metrics.append("# TYPE skra_requests_total counter")
         metrics.append(f"skra_requests_total {_request_count}")
+        metrics.append("")
+        metrics.append("# HELP skra_request_duration_seconds_total Total request time")
+        metrics.append("# TYPE skra_request_duration_seconds_total counter")
+        metrics.append(f"skra_request_duration_seconds_total {_request_duration_total:.3f}")
+        metrics.append("")
+        metrics.append("# HELP skra_request_duration_seconds_avg Average request time")
+        metrics.append("# TYPE skra_request_duration_seconds_avg gauge")
+        metrics.append(
+            f"skra_request_duration_seconds_avg {_request_duration_total / _request_count:.6f}"
+        )
+    if _last_request_time is not None:
+        metrics.append("")
+        metrics.append("# HELP skra_last_request_timestamp Unix time of last request")
+        metrics.append("# TYPE skra_last_request_timestamp gauge")
+        metrics.append(f"skra_last_request_timestamp {_last_request_time:.3f}")
 
     return "\n".join(metrics)
 
@@ -105,7 +123,8 @@ async def detailed_health_check(db: DbSession) -> JSONResponse:
         db_latency = time.time() - start
         checks["database"] = {"status": "healthy", "latency_ms": round(db_latency * 1000, 2)}
     except SQLAlchemyError as e:
-        checks["database"] = {"status": "unhealthy", "error": str(e)}
+        logger.warning(f"Database health check failed: {e}")
+        checks["database"] = {"status": "unhealthy", "error": "Database health check failed"}
         overall_healthy = False
 
     # Check Redis (if configured)
@@ -119,9 +138,10 @@ async def detailed_health_check(db: DbSession) -> JSONResponse:
         checks["redis"] = {"status": "healthy", "latency_ms": round(redis_latency * 1000, 2)}
     except Exception as e:
         # Redis is optional for basic operation
+        logger.warning(f"Redis health check failed: {e}")
         checks["redis"] = {
             "status": "degraded",
-            "error": str(e),
+            "error": "Redis health check failed",
             "note": "Redis is optional, app can function without it",
         }
 
@@ -174,7 +194,8 @@ async def status_dashboard(
             "database_size_mb": round(row.db_size_bytes / (1024 * 1024), 2),
         }
     except Exception as e:
-        db_stats = {"error": str(e)}
+        logger.warning(f"Failed to fetch database stats for status dashboard: {e}")
+        db_stats = {"error": "Failed to fetch database stats"}
 
     # Storage stats (S3)
     try:
@@ -185,7 +206,8 @@ async def status_dashboard(
         # This would need to be implemented in FileStorageService
         storage_stats = {"status": "connected"}
     except Exception as e:
-        storage_stats = {"status": "error", "error": str(e)}
+        logger.warning(f"Failed to fetch storage stats for status dashboard: {e}")
+        storage_stats = {"status": "error", "error": "Failed to fetch storage stats"}
 
     # Application info
     app_info = {

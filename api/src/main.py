@@ -135,8 +135,7 @@ async def create_default_user() -> None:
         )
 
         # Create default organization
-        org = Organization(name="Default Organization")
-        org = await org_repo.create(org)
+        await org_repo.create(Organization(name="Default Organization"))
 
         logger.info(f"Created default admin user: {user.email} (id: {user.id})")
 

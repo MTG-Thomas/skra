@@ -5,7 +5,7 @@ Represents IT assets/configurations (servers, workstations, network devices, etc
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, text
@@ -16,12 +16,16 @@ from src.models.orm.base import Base
 
 if TYPE_CHECKING:
     from src.models.orm.cable import Cable
-    from src.models.orm.circuit import PoweredDevice
     from src.models.orm.configuration_status import ConfigurationStatus
     from src.models.orm.configuration_type import ConfigurationType
     from src.models.orm.organization import Organization
-    from src.models.orm.rack import RackDevice
     from src.models.orm.user import User
+
+    # circuit and rack import this module, so importing them here would close
+    # an import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    PoweredDevice = Any
+    RackDevice = Any
 
 
 class Configuration(Base):

@@ -26,6 +26,7 @@ from src.core.pubsub import (
     publish_search_done,
     publish_search_error,
 )
+from src.core.security import sanitize_log_value
 from src.models.contracts.chat import ChatRequest, ChatStartResponse
 from src.models.contracts.mutations import (
     ApplyMutationRequest,
@@ -37,6 +38,7 @@ from src.models.contracts.search import (
     AISearchRequest,
     AISearchStartResponse,
     SearchResponse,
+    SearchResult,
 )
 from src.models.enums import UserRole
 from src.models.orm.custom_asset import CustomAsset
@@ -138,6 +140,7 @@ async def search(
         openai_available = await embeddings_service.check_openai_available()
         effective_mode = "hybrid" if openai_available else "text"
 
+    results: list[SearchResult] = []
     try:
         match effective_mode:
             case "text":
@@ -170,8 +173,11 @@ async def search(
         ) from e
 
     logger.info(
-        f"Search completed: mode={effective_mode}, query='{q}', results={len(results)}",
-        extra={"user_id": str(current_user.user_id), "org_ids": [str(o) for o in org_ids]},
+        f"Search completed: mode={effective_mode}, query='{sanitize_log_value(q)}', results={len(results)}",
+        extra={
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "org_ids": sanitize_log_value([str(o) for o in org_ids]),
+        },
     )
 
     return SearchResponse(query=q, results=results)
@@ -316,7 +322,7 @@ async def ai_search(
 
     query_preview = request.query[:50] + "..." if len(request.query) > 50 else request.query
     logger.info(
-        f"AI search started: request_id={request_id}, query='{query_preview}'",
+        sanitize_log_value(f"AI search started: request_id={request_id}, query='{query_preview}'"),
         extra={"user_id": str(current_user.user_id)},
     )
 
@@ -400,8 +406,6 @@ async def _perform_chat(
                             }
 
                             # Add current document to search results
-                            from src.models.contracts.search import SearchResult
-
                             current_doc_result = SearchResult(
                                 entity_type="document",
                                 entity_id=str(entity.id),
@@ -450,8 +454,6 @@ async def _perform_chat(
                             }
 
                             # Add current asset to search results
-                            from src.models.contracts.search import SearchResult
-
                             # Build snippet from custom fields
                             field_texts = [f"{k}: {v}" for k, v in entity_fields.items()]
                             snippet = "\n".join(field_texts) if field_texts else entity_name
@@ -654,7 +656,9 @@ async def chat(
 
     message_preview = request.message[:50] + "..." if len(request.message) > 50 else request.message
     logger.info(
-        f"Chat started: request_id={request_id}, conversation_id={conversation_id}, message='{message_preview}'",
+        sanitize_log_value(
+            f"Chat started: request_id={request_id}, conversation_id={conversation_id}, message='{message_preview}'"
+        ),
         extra={"user_id": str(current_user.user_id)},
     )
 
@@ -707,7 +711,9 @@ async def apply_mutation(
         )
 
     logger.info(
-        f"Apply mutation request: entity_type={request.entity_type}, entity_id={request.entity_id}, org_id={request.organization_id}",
+        sanitize_log_value(
+            f"Apply mutation request: entity_type={request.entity_type}, entity_id={request.entity_id}, org_id={request.organization_id}"
+        ),
         extra={"user_id": str(current_user.user_id)},
     )
 
@@ -716,7 +722,9 @@ async def apply_mutation(
     org = await org_repo.get_by_id(request.organization_id)
     if not org:
         logger.warning(
-            f"Apply mutation failed: Organization not found (org_id={request.organization_id})",
+            sanitize_log_value(
+                f"Apply mutation failed: Organization not found (org_id={request.organization_id})"
+            ),
             extra={"user_id": str(current_user.user_id)},
         )
         raise HTTPException(
@@ -810,8 +818,13 @@ async def apply_mutation(
         )
 
     logger.info(
-        f"Mutation applied: entity_type={request.entity_type}, entity_id={request.entity_id}",
-        extra={"user_id": str(current_user.user_id), "org_id": str(request.organization_id)},
+        sanitize_log_value(
+            f"Mutation applied: entity_type={request.entity_type}, entity_id={request.entity_id}"
+        ),
+        extra={
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "org_id": sanitize_log_value(str(request.organization_id)),
+        },
     )
 
     return ApplyMutationResponse(

@@ -22,6 +22,7 @@ from src.core.security import (
     create_access_token,
     create_refresh_token,
     generate_csrf_token,
+    sanitize_log_value,
 )
 from src.models.contracts.oauth_config import (
     LinkedAccountResponse,
@@ -146,7 +147,7 @@ async def get_oauth_providers(db: DbSession) -> OAuthProvidersResponse:
                 if config.get("display_name"):
                     info["display_name"] = config["display_name"]
             except OAuthError:
-                pass
+                logger.debug("OIDC display name lookup failed; using default provider info")
 
         providers.append(
             OAuthProviderInfo(
@@ -214,8 +215,8 @@ async def init_oauth(
         )
 
         logger.info(
-            f"OAuth flow initiated for provider: {provider}",
-            extra={"provider": provider, "state": state[:8] + "..."},
+            f"OAuth flow initiated for provider: {sanitize_log_value(provider)}",
+            extra={"provider": sanitize_log_value(provider), "state": state[:8] + "..."},
         )
 
         return OAuthInitResponse(
@@ -269,8 +270,8 @@ async def oauth_callback(
 
     if callback_data.provider not in PROVIDER_INFO:
         logger.warning(
-            "OAuth callback with invalid provider",
-            extra={"provider": callback_data.provider},
+            sanitize_log_value("OAuth callback with invalid provider"),
+            extra={"provider": sanitize_log_value(callback_data.provider)},
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -284,8 +285,12 @@ async def oauth_callback(
 
     if not state_data_raw:
         logger.warning(
-            "OAuth callback with invalid or expired state",
-            extra={"state": callback_data.state[:8] + "..." if callback_data.state else "none"},
+            sanitize_log_value("OAuth callback with invalid or expired state"),
+            extra={
+                "state": sanitize_log_value(
+                    callback_data.state[:8] + "..." if callback_data.state else "none"
+                )
+            },
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -386,11 +391,13 @@ async def oauth_callback(
                 email_domain = user_info.email.split("@")[1].lower()
                 if email_domain != allowed_domain.lower():
                     logger.warning(
-                        f"OAuth auto-provisioning rejected for domain: {email_domain}",
+                        sanitize_log_value(
+                            f"OAuth auto-provisioning rejected for domain: {email_domain}"
+                        ),
                         extra={
-                            "email": user_info.email,
-                            "provider": callback_data.provider,
-                            "allowed_domain": allowed_domain,
+                            "email": sanitize_log_value(user_info.email),
+                            "provider": sanitize_log_value(callback_data.provider),
+                            "allowed_domain": sanitize_log_value(allowed_domain),
                         },
                     )
                     raise HTTPException(
@@ -411,10 +418,10 @@ async def oauth_callback(
             await db.commit()
 
             logger.info(
-                f"Created new user via OAuth: {user.email}",
+                sanitize_log_value(f"Created new user via OAuth: {user.email}"),
                 extra={
-                    "user_id": str(user.id),
-                    "provider": callback_data.provider,
+                    "user_id": sanitize_log_value(str(user.id)),
+                    "provider": sanitize_log_value(callback_data.provider),
                 },
             )
 
@@ -453,11 +460,11 @@ async def oauth_callback(
     )
 
     logger.info(
-        f"OAuth login successful: {user.email}",
+        sanitize_log_value(f"OAuth login successful: {user.email}"),
         extra={
-            "user_id": str(user.id),
-            "provider": callback_data.provider,
-            "oauth_user_id": user_info.provider_user_id,
+            "user_id": sanitize_log_value(str(user.id)),
+            "provider": sanitize_log_value(callback_data.provider),
+            "oauth_user_id": sanitize_log_value(user_info.provider_user_id),
         },
     )
 
@@ -555,8 +562,11 @@ async def unlink_oauth_account(
     await db.commit()
 
     logger.info(
-        f"OAuth account unlinked: {provider}",
-        extra={"user_id": str(user.id), "provider": provider},
+        sanitize_log_value(f"OAuth account unlinked: {provider}"),
+        extra={
+            "user_id": sanitize_log_value(str(user.id)),
+            "provider": sanitize_log_value(provider),
+        },
     )
 
     return {"message": f"{provider.title()} account unlinked"}

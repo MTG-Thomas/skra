@@ -1,6 +1,7 @@
 """Tests for embeddings service with new config loading."""
 
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -39,3 +40,22 @@ class TestEmbeddingsService:
             result = await service.check_openai_available()
 
             assert result is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestUnknownEntityType:
+    """Unknown entity types fail closed without touching the database."""
+
+    async def test_get_entity_and_org_unknown_type_raises(self):
+        """Fetching an unknown entity type raises ValueError."""
+        service = EmbeddingsService(AsyncMock())
+
+        with pytest.raises(ValueError, match="Unknown entity type"):
+            await service._get_entity_and_org(AsyncMock(), "bogus", uuid4())
+
+    async def test_get_entity_name_unknown_type_returns_none(self):
+        """Naming an unknown entity type returns None."""
+        service = EmbeddingsService(AsyncMock())
+
+        assert await service._get_entity_name(AsyncMock(), "bogus", uuid4()) is None

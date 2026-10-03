@@ -7,12 +7,11 @@ on:
       - '**.md'
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
+  # No paths-ignore on pull_request: the required checks (backend-checks,
+  # frontend-checks, trivy-repo-scan) must report on every PR, including
+  # docs-only ones like #156, or the PR can never become mergeable.
   pull_request:
     branches: [main, develop]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch: # Allow manual triggers
 
 env:

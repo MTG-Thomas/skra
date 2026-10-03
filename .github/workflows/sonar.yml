@@ -7,12 +7,10 @@ on:
       - '**.md'
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
+  # No paths-ignore on pull_request: the required SonarQube Scan check
+  # must report on every PR, including docs-only ones like #156.
   pull_request:
     branches: [main, develop]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 jobs:

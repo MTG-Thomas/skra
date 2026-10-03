@@ -8,6 +8,7 @@ Uses pwdlib (modern replacement for unmaintained passlib) for password hashing.
 """
 
 import base64
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -376,3 +377,32 @@ def generate_api_key() -> str:
         A URL-safe random string prefixed with 'skra_'
     """
     return f"{API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
+
+
+# =============================================================================
+# Log Injection Prevention
+# =============================================================================
+
+#: ASCII control characters (including CR/LF) that must not reach log output.
+_LOG_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def sanitize_log_value(value: object) -> str:
+    """
+    Make a value safe to interpolate into log messages.
+
+    Removes ASCII control characters (including CR and LF) so user-controlled
+    input cannot forge log lines or inject terminal escape sequences
+    (Sonar pythonsecurity:S5145, CodeQL py/log-injection).
+
+    Args:
+        value: Any value; stringified before sanitizing.
+
+    Returns:
+        The value as a single-line string with control characters removed.
+    """
+    # Explicit CR/LF removal first: this call shape is recognized as a
+    # sanitizer by CodeQL's py/log-injection query; the regex then strips
+    # any remaining control characters.
+    text = str(value).replace("\r", "").replace("\n", "")
+    return _LOG_CONTROL_CHARS.sub("", text)

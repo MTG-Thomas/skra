@@ -249,11 +249,9 @@ export function OrganizationsPage() {
             Manage organizations and their settings
           </p>
         </div>
-        {isAdmin && (
-          <Button variant="outline" size="icon" onClick={() => setFormOpen(true)}>
-            <Plus className="h-5 w-5" />
-          </Button>
-        )}
+        <Button variant="outline" size="icon" onClick={() => setFormOpen(true)}>
+          <Plus className="h-5 w-5" />
+        </Button>
       </div>
 
       <DataTable

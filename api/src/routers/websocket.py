@@ -22,7 +22,12 @@ from src.core.pubsub import (
     WebSocketMessage,
     get_connection_manager,
 )
-from src.core.security import decode_token, hash_api_key, is_api_key_token
+from src.core.security import (
+    decode_token,
+    hash_api_key,
+    is_api_key_token,
+    sanitize_log_value,
+)
 from src.models.enums import UserRole
 
 logger = logging.getLogger(__name__)
@@ -249,7 +254,7 @@ async def ping_loop(
                 logger.debug(f"Ping failed for {connection_id}: {e}")
                 break
     except asyncio.CancelledError:
-        pass
+        logger.debug("WebSocket ping loop cancelled")
 
 
 async def receive_loop(
@@ -376,7 +381,9 @@ async def websocket_connect(
         if can_subscribe_to_channel(user.user_id, channel):
             valid_channels.append(channel)
         else:
-            logger.warning(f"User {user.user_id} denied access to channel {channel}")
+            logger.warning(
+                f"User {user.user_id} denied access to channel {sanitize_log_value(channel)}"
+            )
 
     # Accept connection and subscribe to channels
     try:
@@ -398,7 +405,7 @@ async def websocket_connect(
             try:
                 await ping_task
             except asyncio.CancelledError:
-                pass
+                logger.debug("WebSocket ping task cancelled on disconnect")
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket {connection_id} disconnected normally")

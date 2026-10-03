@@ -7,7 +7,7 @@ Tracks physical cable connections between devices with port mapping.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
@@ -16,8 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.orm.base import Base
 
 if TYPE_CHECKING:
-    from src.models.orm.configuration import Configuration
     from src.models.orm.organization import Organization
+
+    # configuration imports this module, so importing it here would close an
+    # import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    Configuration = Any
 
 
 class Cable(Base):

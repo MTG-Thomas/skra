@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.relationship import (
     RelatedEntity,
     RelatedItemsResponse,
@@ -162,12 +163,14 @@ async def create_relationship(
     )
 
     logger.info(
-        f"Relationship created: {relationship.source_type}/{relationship.source_id} -> "
-        f"{relationship.target_type}/{relationship.target_id}",
+        sanitize_log_value(
+            f"Relationship created: {relationship.source_type}/{relationship.source_id} -> "
+            f"{relationship.target_type}/{relationship.target_id}"
+        ),
         extra={
-            "relationship_id": str(relationship.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "relationship_id": sanitize_log_value(str(relationship.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -202,12 +205,14 @@ async def delete_relationship(
     await repo.delete(relationship)
 
     logger.info(
-        f"Relationship deleted: {relationship.source_type}/{relationship.source_id} -> "
-        f"{relationship.target_type}/{relationship.target_id}",
+        sanitize_log_value(
+            f"Relationship deleted: {relationship.source_type}/{relationship.source_id} -> "
+            f"{relationship.target_type}/{relationship.target_id}"
+        ),
         extra={
-            "relationship_id": str(relationship.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "relationship_id": sanitize_log_value(str(relationship.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 

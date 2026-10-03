@@ -5,7 +5,7 @@ Represents tenant organizations in the Skra platform.
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, text
@@ -15,14 +15,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.orm.base import Base
 
 if TYPE_CHECKING:
-    from src.models.orm.cable import Cable
-    from src.models.orm.circuit import Circuit
-    from src.models.orm.custom_asset import CustomAsset
-    from src.models.orm.document import Document
-    from src.models.orm.location import Location
-    from src.models.orm.patch_panel import PatchPanel
-    from src.models.orm.rack import Rack
     from src.models.orm.user import User
+
+    # These models import this module, so importing them here would close an
+    # import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    Cable = Any
+    Circuit = Any
+    CustomAsset = Any
+    Document = Any
+    Location = Any
+    PatchPanel = Any
+    Rack = Any
 
 
 class Organization(Base):

@@ -1,4 +1,4 @@
-.github/workflows/sonar.yml:generic-api-key:79
+.github/workflows/sonar.yml:generic-api-key:77
 api/src/routers/attachments.py:generic-api-key:354
 .github/workflows/ci.yml:generic-api-key:91
 .github/workflows/ci.yml:generic-api-key:347

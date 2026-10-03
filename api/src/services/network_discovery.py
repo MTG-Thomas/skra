@@ -235,8 +235,8 @@ class MerakiIntegration:
         elif device_model.startswith("mr"):
             device_type = "ap"
         elif device_model.startswith("mv"):
-            device_type = "camera"  # We may not track these
-            return None  # Skip cameras for now
+            # Cameras are not tracked; skip them for now
+            return None
 
         # Determine status
         status = data.get("status", "offline")

@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.attachment import (
     AttachmentCreate,
     AttachmentDownloadResponse,
@@ -178,13 +179,13 @@ async def create_attachment(
     )
 
     logger.info(
-        f"Created attachment: {attachment.filename}",
+        sanitize_log_value(f"Created attachment: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment.id),
-            "org_id": str(org_id),
-            "entity_type": attachment_data.entity_type.value,
-            "entity_id": str(attachment_data.entity_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "entity_type": sanitize_log_value(attachment_data.entity_type.value),
+            "entity_id": sanitize_log_value(str(attachment_data.entity_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -363,11 +364,11 @@ async def delete_attachment(
         await file_storage.delete_file(s3_key)
 
     logger.info(
-        f"Deleted attachment: {attachment.filename}",
+        sanitize_log_value(f"Deleted attachment: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -456,11 +457,11 @@ async def upload_document_image(
     image_url = f"/api/organizations/{org_id}/attachments/{attachment.id}/view"
 
     logger.info(
-        f"Created document image: {attachment.filename}",
+        sanitize_log_value(f"Created document image: {attachment.filename}"),
         extra={
-            "attachment_id": str(attachment.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "attachment_id": sanitize_log_value(str(attachment.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 

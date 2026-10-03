@@ -14,6 +14,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.document import (
     DocumentCreate,
@@ -219,11 +220,11 @@ async def create_document(
     )
 
     logger.info(
-        f"Document created: {doc.name}",
+        sanitize_log_value(f"Document created: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -371,11 +372,11 @@ async def clean_document(
     )
 
     logger.info(
-        f"Document cleaned: {doc.name}",
+        sanitize_log_value(f"Document cleaned: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -449,11 +450,11 @@ async def update_document(
     )
 
     logger.info(
-        f"Document updated: {doc.name}",
+        sanitize_log_value(f"Document updated: {doc.name}"),
         extra={
-            "doc_id": str(doc.id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc.id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -506,11 +507,11 @@ async def delete_document(
     await remove_entity_from_search(db, "document", doc_id)
 
     logger.info(
-        "Document deleted",
+        sanitize_log_value("Document deleted"),
         extra={
-            "doc_id": str(doc_id),
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
+            "doc_id": sanitize_log_value(str(doc_id)),
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -547,11 +548,13 @@ async def batch_toggle_documents(
     await db.commit()
 
     logger.info(
-        f"Batch toggle documents: {result.rowcount} docs set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle documents: {result.rowcount} docs set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "updated_count": result.rowcount,  # type: ignore[attr-defined]
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "updated_count": sanitize_log_value(result.rowcount),  # type: ignore[attr-defined]
         },
     )
 
@@ -618,13 +621,13 @@ async def batch_update_paths(
     await db.commit()
 
     logger.info(
-        f"Batch path update: {updated_count} docs moved from '{request.old_path_prefix}' to '{request.new_path_prefix}'",
+        f"Batch path update: {updated_count} docs moved from '{sanitize_log_value(request.old_path_prefix)}' to '{sanitize_log_value(request.new_path_prefix)}'",
         extra={
-            "org_id": str(org_id),
-            "user_id": str(current_user.user_id),
-            "old_prefix": request.old_path_prefix,
-            "new_prefix": request.new_path_prefix,
-            "updated_count": updated_count,
+            "org_id": sanitize_log_value(str(org_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
+            "old_prefix": sanitize_log_value(request.old_path_prefix),
+            "new_prefix": sanitize_log_value(request.new_path_prefix),
+            "updated_count": sanitize_log_value(updated_count),
         },
     )
 

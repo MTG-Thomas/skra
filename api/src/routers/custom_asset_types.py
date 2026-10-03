@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.core.auth import CurrentActiveUser, CurrentSuperuser
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.custom_asset import (
     CustomAssetTypeCreate,
     CustomAssetTypePublic,
@@ -370,10 +371,10 @@ async def deactivate_custom_asset_type(
     asset_count = await repo.get_asset_count(type_id)
 
     logger.info(
-        f"Custom asset type deactivated: {asset_type.name}",
+        sanitize_log_value(f"Custom asset type deactivated: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -412,10 +413,10 @@ async def activate_custom_asset_type(
     asset_count = await repo.get_asset_count(type_id)
 
     logger.info(
-        f"Custom asset type activated: {asset_type.name}",
+        sanitize_log_value(f"Custom asset type activated: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -459,9 +460,9 @@ async def delete_custom_asset_type(
     await repo.delete(asset_type)
 
     logger.info(
-        f"Custom asset type deleted: {asset_type.name}",
+        sanitize_log_value(f"Custom asset type deleted: {asset_type.name}"),
         extra={
-            "asset_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "asset_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )

@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from src.core.auth import CurrentActiveUser, CurrentSuperuser
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.configuration import (
     ConfigurationTypeCreate,
     ConfigurationTypePublic,
@@ -188,10 +189,10 @@ async def deactivate_configuration_type(
     config_count = await repo.get_configuration_count(type_id)
 
     logger.info(
-        f"Configuration type deactivated: {config_type.name}",
+        sanitize_log_value(f"Configuration type deactivated: {config_type.name}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -230,10 +231,10 @@ async def activate_configuration_type(
     config_count = await repo.get_configuration_count(type_id)
 
     logger.info(
-        f"Configuration type activated: {config_type.name}",
+        sanitize_log_value(f"Configuration type activated: {config_type.name}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )
 
@@ -280,9 +281,9 @@ async def delete_configuration_type(
     await repo.delete_by_id(type_id)
 
     logger.info(
-        f"Configuration type deleted: {type_id}",
+        sanitize_log_value(f"Configuration type deleted: {type_id}"),
         extra={
-            "config_type_id": str(type_id),
-            "user_id": str(current_user.user_id),
+            "config_type_id": sanitize_log_value(str(type_id)),
+            "user_id": sanitize_log_value(str(current_user.user_id)),
         },
     )

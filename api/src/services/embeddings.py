@@ -141,6 +141,7 @@ class EmbeddingsService:
         Returns:
             Tuple of (entity, organization) or None if not found
         """
+        result = None
         match entity_type:
             case "password":
                 result = await db.execute(
@@ -173,7 +174,10 @@ class EmbeddingsService:
                     .where(CustomAsset.id == entity_id)
                 )
             case _:
-                raise ValueError(f"Unknown entity type: {entity_type}")
+                result = None
+
+        if result is None:
+            raise ValueError(f"Unknown entity type: {entity_type}")
 
         row = result.one_or_none()
         if row is None:
@@ -900,6 +904,7 @@ class EmbeddingsService:
         entity_id: UUID,
     ) -> str | None:
         """Get the name of an entity by type and ID."""
+        result = None
         match entity_type:
             case "password":
                 result = await db.execute(select(Password.name).where(Password.id == entity_id))
@@ -922,7 +927,10 @@ class EmbeddingsService:
                     return values.get("name") or values.get("title") or values.get("domain")
                 return None
             case _:
-                return None
+                result = None
+
+        if result is None:
+            return None
 
         return result.scalar_one_or_none()
 

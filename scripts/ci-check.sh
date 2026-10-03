@@ -32,7 +32,7 @@ backend_checks() {
     
     # Install dependencies
     echo -e "${YELLOW}Installing dependencies...${NC}"
-    pip install -e ".[dev]" -q
+    pip install --only-binary :all: -e ".[dev]" -q
     
     # Run Ruff linter
     echo -e "${YELLOW}Running Ruff linter...${NC}"
@@ -126,7 +126,7 @@ e2e_checks() {
         
         cd client
         if [ -d "node_modules" ]; then
-            npx playwright test --reporter=line || { echo -e "${RED}E2E tests failed${NC}"; exit 1; }
+            ./node_modules/.bin/playwright test --reporter=line || { echo -e "${RED}E2E tests failed${NC}"; exit 1; }
             echo -e "${GREEN}✓ E2E tests passed${NC}"
         else
             echo -e "${YELLOW}⚠ npm dependencies not installed, skipping E2E tests${NC}"
