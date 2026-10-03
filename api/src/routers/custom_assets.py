@@ -13,6 +13,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.custom_asset import (
     CustomAssetCreate,
@@ -352,7 +353,7 @@ async def create_custom_asset(
     )
 
     logger.info(
-        f"Custom asset created: {display_name}",
+        sanitize_log_value(f"Custom asset created: {display_name}"),
         extra={
             "org_id": str(org_id),
             "asset_type_id": str(type_id),
@@ -529,7 +530,7 @@ async def reveal_custom_asset(
     display_name = _get_display_name(asset, asset_type, type_fields)
 
     logger.info(
-        f"Custom asset revealed: {display_name}",
+        sanitize_log_value(f"Custom asset revealed: {display_name}"),
         extra={
             "org_id": str(org_id),
             "asset_type_id": str(type_id),
@@ -655,7 +656,7 @@ async def update_custom_asset(
     display_name = _get_display_name(asset, asset_type, type_fields)
 
     logger.info(
-        f"Custom asset updated: {display_name}",
+        sanitize_log_value(f"Custom asset updated: {display_name}"),
         extra={
             "org_id": str(org_id),
             "asset_type_id": str(type_id),
@@ -725,7 +726,7 @@ async def delete_custom_asset(
     await remove_entity_from_search(db, "custom_asset", asset_id)
 
     logger.info(
-        f"Custom asset deleted: {display_name}",
+        sanitize_log_value(f"Custom asset deleted: {display_name}"),
         extra={
             "org_id": str(org_id),
             "asset_type_id": str(type_id),
@@ -773,7 +774,9 @@ async def batch_toggle_custom_assets(
     await db.commit()
 
     logger.info(
-        f"Batch toggle custom assets: {result.rowcount} assets set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle custom assets: {result.rowcount} assets set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
             "org_id": str(org_id),
             "asset_type_id": str(type_id),

@@ -201,7 +201,6 @@ async def reindex_task(
         organization_id: Optional org filter (or all orgs if None)
         total: Total number of entities to index (may include already-indexed)
     """
-    import asyncio
     import time
 
     from redis.asyncio import Redis

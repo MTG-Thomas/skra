@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.attachment import (
     AttachmentCreate,
     AttachmentDownloadResponse,
@@ -178,7 +179,7 @@ async def create_attachment(
     )
 
     logger.info(
-        f"Created attachment: {attachment.filename}",
+        sanitize_log_value(f"Created attachment: {attachment.filename}"),
         extra={
             "attachment_id": str(attachment.id),
             "org_id": str(org_id),
@@ -363,7 +364,7 @@ async def delete_attachment(
         await file_storage.delete_file(s3_key)
 
     logger.info(
-        f"Deleted attachment: {attachment.filename}",
+        sanitize_log_value(f"Deleted attachment: {attachment.filename}"),
         extra={
             "attachment_id": str(attachment_id),
             "org_id": str(org_id),
@@ -456,7 +457,7 @@ async def upload_document_image(
     image_url = f"/api/organizations/{org_id}/attachments/{attachment.id}/view"
 
     logger.info(
-        f"Created document image: {attachment.filename}",
+        sanitize_log_value(f"Created document image: {attachment.filename}"),
         extra={
             "attachment_id": str(attachment.id),
             "org_id": str(org_id),

@@ -13,6 +13,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.location import (
     LocationCreate,
@@ -183,7 +184,7 @@ async def create_location(
     )
 
     logger.info(
-        f"Location created: {location.name}",
+        sanitize_log_value(f"Location created: {location.name}"),
         extra={
             "location_id": str(location.id),
             "org_id": str(org_id),
@@ -394,7 +395,7 @@ async def update_location(
     )
 
     logger.info(
-        f"Location updated: {location.name}",
+        sanitize_log_value(f"Location updated: {location.name}"),
         extra={
             "location_id": str(location.id),
             "org_id": str(org_id),
@@ -452,7 +453,7 @@ async def delete_location(
     await remove_entity_from_search(db, "location", location_id)
 
     logger.info(
-        f"Location deleted: {location.name}",
+        sanitize_log_value(f"Location deleted: {location.name}"),
         extra={
             "location_id": str(location.id),
             "org_id": str(org_id),
@@ -493,7 +494,9 @@ async def batch_toggle_locations(
     await db.commit()
 
     logger.info(
-        f"Batch toggle locations: {result.rowcount} locations set to is_enabled={request.is_enabled}",  # type: ignore[attr-defined]
+        sanitize_log_value(
+            f"Batch toggle locations: {result.rowcount} locations set to is_enabled={request.is_enabled}"  # type: ignore[attr-defined]
+        ),
         extra={
             "org_id": str(org_id),
             "user_id": str(current_user.user_id),

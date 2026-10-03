@@ -56,3 +56,10 @@ async def test_meraki_sync_passes_org_id_through(monkeypatch, org_id):
     provider.discover_devices.assert_called_once_with("meraki-org-9")
     sync.sync_devices.assert_called_once_with(org_id, devices)
     sync.generate_topology_diagram.assert_called_once_with(org_id)
+
+
+def test_meraki_camera_is_skipped():
+    """Meraki MV cameras are not tracked and parse to None."""
+    provider = nd.MerakiIntegration(api_key="meraki-key")
+
+    assert provider._parse_meraki_device({"model": "MV12W", "status": "online"}, "hq") is None

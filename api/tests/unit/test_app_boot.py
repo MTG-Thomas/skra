@@ -50,3 +50,44 @@ async def test_lifespan_starts_and_stops_dependencies(monkeypatch):
 
     manager.stop_pubsub.assert_called_once()
     close_db.assert_called_once()
+
+
+async def test_create_default_user_seeds_user_and_org(monkeypatch):
+    """First boot creates the default owner and its organization."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from src import main
+
+    settings = SimpleNamespace(
+        default_user_email="admin@example.com",
+        default_user_password="x" * 40,
+    )
+    monkeypatch.setattr(main, "get_settings", lambda: settings)
+    monkeypatch.setattr("src.core.security.get_password_hash", lambda password: "hashed")
+
+    user = SimpleNamespace(email="admin@example.com", id=uuid4())
+    user_repo = MagicMock()
+    user_repo.get_by_email = AsyncMock(return_value=None)
+    user_repo.create_user = AsyncMock(return_value=user)
+    org_repo = MagicMock()
+    org_repo.create = AsyncMock(side_effect=lambda org: org)
+    monkeypatch.setattr("src.repositories.user.UserRepository", MagicMock(return_value=user_repo))
+    monkeypatch.setattr(
+        "src.repositories.organization.OrganizationRepository",
+        MagicMock(return_value=org_repo),
+    )
+
+    class FakeCtx:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *args):
+            return False
+
+    monkeypatch.setattr("src.core.database.get_db_context", lambda: FakeCtx())
+
+    await main.create_default_user()
+
+    user_repo.create_user.assert_called_once()
+    org_repo.create.assert_called_once()

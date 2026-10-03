@@ -393,7 +393,7 @@ def sanitize_log_value(value: object) -> str:
 
     Removes ASCII control characters (including CR and LF) so user-controlled
     input cannot forge log lines or inject terminal escape sequences
-    (Sonar pythonsecurity:S5145).
+    (Sonar pythonsecurity:S5145, CodeQL py/log-injection).
 
     Args:
         value: Any value; stringified before sanitizing.
@@ -401,4 +401,8 @@ def sanitize_log_value(value: object) -> str:
     Returns:
         The value as a single-line string with control characters removed.
     """
-    return _LOG_CONTROL_CHARS.sub("", str(value))
+    # Explicit CR/LF removal first: this call shape is recognized as a
+    # sanitizer by CodeQL's py/log-injection query; the regex then strips
+    # any remaining control characters.
+    text = str(value).replace("\r", "").replace("\n", "")
+    return _LOG_CONTROL_CHARS.sub("", text)

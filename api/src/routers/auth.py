@@ -25,6 +25,7 @@ from src.core.security import (
     decode_token,
     generate_csrf_token,
     get_password_hash,
+    sanitize_log_value,
     validate_csrf_token,
     verify_password,
 )
@@ -570,7 +571,9 @@ async def setup_passkey_options(
         ) from e
 
     logger.info(
-        f"Passkey setup initiated for first-time registration: {setup_request.email}",
+        sanitize_log_value(
+            f"Passkey setup initiated for first-time registration: {setup_request.email}"
+        ),
     )
 
     return SetupPasskeyOptionsResponse(

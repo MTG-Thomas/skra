@@ -68,6 +68,14 @@ class TestGetLLMClient:
             get_llm_client(config)
             mock_client.assert_called_once_with("test-key", "llama3", "http://localhost:11434/v1")
 
+    def test_raises_for_unsupported_provider(self):
+        """Test factory raises ValueError for an unknown provider."""
+        config = MagicMock()
+        config.provider = "bogus"
+
+        with pytest.raises(ValueError, match="Unsupported LLM provider"):
+            get_llm_client(config)
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
