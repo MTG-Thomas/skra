@@ -48,6 +48,11 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
 # =============================================================================
 FROM nginx:alpine AS production
 
+# Apply Alpine security updates for pcre2 (CVE-2026-103111, fixed in
+# 10.49-r0) and expat (CVE-2026-93990, fixed in 2.8.5-r0). The base image
+# floats, so upgrade explicitly instead of relying on the base snapshot date.
+RUN apk --no-cache upgrade pcre2 expat
+
 # Copy built assets from builder
 COPY --from=builder --chown=nginx:nginx /app/dist /usr/share/nginx/html
 

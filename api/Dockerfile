@@ -31,8 +31,9 @@ FROM python:3.11-slim AS runtime-base
 
 # Install runtime dependencies
 # Apply Debian security updates for perl-base (CVE-2026-42496, CVE-2026-8376,
-# CVE-2026-13221, fixed in 5.40.1-6+deb13u1). The base image floats, so upgrade
-# explicitly instead of relying on the base snapshot date.
+# CVE-2026-13221, fixed in 5.40.1-6+deb13u1) and libpcre2-8-0
+# (CVE-2026-103111, fixed in 10.46-1~deb13u3). The base image floats, so
+# upgrade explicitly instead of relying on the base snapshot date.
 #
 # Runtime tooling: none beyond the application venv. curl was dropped in
 # favor of a python-urllib HEALTHCHECK (issue #108): curl and its libcurl4t64
@@ -44,7 +45,7 @@ FROM python:3.11-slim AS runtime-base
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade perl-base \
+    && apt-get install -y --no-install-recommends --only-upgrade perl-base libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with a FIXED uid/gid (15000). garage-init (which runs
