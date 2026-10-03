@@ -18,6 +18,7 @@ from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect
 
 from src.core.cache import get_redis
+from src.core.security import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,9 @@ class ConnectionManager:
             for channel in channels:
                 self._channel_subscribers[channel].add(connection_id)
 
-        logger.info(f"WebSocket connected: {connection_id} (user: {user_id}, channels: {channels})")
+        logger.info(
+            f"WebSocket connected: {connection_id} (user: {user_id}, channels: {sanitize_log_value(channels)})"
+        )
 
     async def disconnect(self, connection_id: str) -> None:
         """

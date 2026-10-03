@@ -22,6 +22,7 @@ from src.core.security import (
     create_access_token,
     create_refresh_token,
     generate_csrf_token,
+    sanitize_log_value,
 )
 from src.models.contracts.oauth_config import (
     LinkedAccountResponse,
@@ -214,8 +215,8 @@ async def init_oauth(
         )
 
         logger.info(
-            f"OAuth flow initiated for provider: {provider}",
-            extra={"provider": provider, "state": state[:8] + "..."},
+            f"OAuth flow initiated for provider: {sanitize_log_value(provider)}",
+            extra={"provider": sanitize_log_value(provider), "state": state[:8] + "..."},
         )
 
         return OAuthInitResponse(

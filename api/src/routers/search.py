@@ -26,6 +26,7 @@ from src.core.pubsub import (
     publish_search_done,
     publish_search_error,
 )
+from src.core.security import sanitize_log_value
 from src.models.contracts.chat import ChatRequest, ChatStartResponse
 from src.models.contracts.mutations import (
     ApplyMutationRequest,
@@ -170,7 +171,7 @@ async def search(
         ) from e
 
     logger.info(
-        f"Search completed: mode={effective_mode}, query='{q}', results={len(results)}",
+        f"Search completed: mode={effective_mode}, query='{sanitize_log_value(q)}', results={len(results)}",
         extra={"user_id": str(current_user.user_id), "org_ids": [str(o) for o in org_ids]},
     )
 

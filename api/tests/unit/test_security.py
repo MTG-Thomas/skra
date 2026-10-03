@@ -264,3 +264,44 @@ class TestAPIKeyFunctions:
         # Different key should produce different hash
         key2 = generate_api_key()
         assert hash_api_key(key2) != hashed
+
+
+class TestSanitizeLogValue:
+    """Tests for log injection prevention (Sonar pythonsecurity:S5145)."""
+
+    def test_clean_string_unchanged(self):
+        """Test that strings without control chars pass through."""
+        from src.core.security import sanitize_log_value
+
+        assert sanitize_log_value("hello world") == "hello world"
+
+    def test_crlf_removed(self):
+        """Test that CR/LF injection sequences are stripped."""
+        from src.core.security import sanitize_log_value
+
+        evil = "evil\nINFO forged line\r\nnext"
+        result = sanitize_log_value(evil)
+        assert "\n" not in result
+        assert "\r" not in result
+        assert result == "evilINFO forged linenext"
+
+    def test_other_control_chars_removed(self):
+        """Test that other ASCII control chars (tab, NUL, ESC, DEL) are stripped."""
+        from src.core.security import sanitize_log_value
+
+        assert sanitize_log_value("a\tb\x00c\x1bd\x7fe") == "abcde"
+
+    def test_non_string_values_stringified(self):
+        """Test that non-string values are converted then sanitized."""
+        from src.core.security import sanitize_log_value
+
+        assert sanitize_log_value(42) == "42"
+        assert sanitize_log_value(None) == "None"
+        # str() of a container repr-escapes newlines, so nothing is stripped
+        assert sanitize_log_value(["a\nb", "c"]) == str(["a\nb", "c"])
+
+    def test_unicode_preserved(self):
+        """Test that printable unicode is preserved."""
+        from src.core.security import sanitize_log_value
+
+        assert sanitize_log_value("héllo wörld ✓") == "héllo wörld ✓"

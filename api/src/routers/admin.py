@@ -25,6 +25,7 @@ from src.core.pubsub import (
     publish_reindex_cancelling,
     publish_reindex_failed,
 )
+from src.core.security import sanitize_log_value
 from src.models.enums import UserRole
 from src.models.orm.configuration import Configuration
 from src.models.orm.custom_asset import CustomAsset
@@ -459,11 +460,11 @@ async def update_user_role(
         ) from e
 
     logger.info(
-        f"User role updated: {user.email} -> {role_data.role}",
+        f"User role updated: {sanitize_log_value(user.email)} -> {sanitize_log_value(role_data.role)}",
         extra={
             "admin_id": str(current_user.user_id),
             "user_id": str(user_id),
-            "new_role": role_data.role,
+            "new_role": sanitize_log_value(role_data.role),
         },
     )
 
