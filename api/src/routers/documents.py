@@ -14,6 +14,7 @@ from sqlalchemy import update
 
 from src.core.auth import CurrentActiveUser, RequireContributor
 from src.core.database import DbSession
+from src.core.security import sanitize_log_value
 from src.models.contracts.common import BatchToggleRequest, BatchToggleResponse
 from src.models.contracts.document import (
     DocumentCreate,
@@ -618,12 +619,12 @@ async def batch_update_paths(
     await db.commit()
 
     logger.info(
-        f"Batch path update: {updated_count} docs moved from '{request.old_path_prefix}' to '{request.new_path_prefix}'",
+        f"Batch path update: {updated_count} docs moved from '{sanitize_log_value(request.old_path_prefix)}' to '{sanitize_log_value(request.new_path_prefix)}'",
         extra={
             "org_id": str(org_id),
             "user_id": str(current_user.user_id),
-            "old_prefix": request.old_path_prefix,
-            "new_prefix": request.new_path_prefix,
+            "old_prefix": sanitize_log_value(request.old_path_prefix),
+            "new_prefix": sanitize_log_value(request.new_path_prefix),
             "updated_count": updated_count,
         },
     )

@@ -6,7 +6,7 @@ These are global types shared across all organizations.
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Index, String, text
@@ -15,7 +15,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.orm.base import Base
 
 if TYPE_CHECKING:
-    from src.models.orm.configuration import Configuration
+    # configuration imports this module, so importing it here would close an
+    # import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    Configuration = Any
 
 
 class ConfigurationType(Base):

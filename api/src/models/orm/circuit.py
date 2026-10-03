@@ -7,7 +7,7 @@ Tracks power distribution circuits and device power connections.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
@@ -17,8 +17,12 @@ from src.models.orm.base import Base
 
 if TYPE_CHECKING:
     from src.models.orm.configuration import Configuration
-    from src.models.orm.location import Location
     from src.models.orm.organization import Organization
+
+    # location imports this module, so importing it here would close an
+    # import cycle (CodeQL py/unsafe-cyclic-import). Alias as Any instead;
+    # SQLAlchemy resolves the string annotations via its class registry.
+    Location = Any
 
 
 class Circuit(Base):
