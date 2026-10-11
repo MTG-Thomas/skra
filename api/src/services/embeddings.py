@@ -434,6 +434,10 @@ class EmbeddingsService:
         if not query.strip():
             return []
 
+        # Disabled entities are always excluded. Keep reading this legacy
+        # parameter so callers remain compatible without weakening visibility.
+        _ = show_disabled
+
         # Generate query embedding
         try:
             query_embedding = await self.generate_embedding(query)
@@ -462,45 +466,57 @@ class EmbeddingsService:
             .where(EmbeddingIndex.organization_id.in_(org_ids))
         )
 
-        stmt = stmt.order_by(distance_expr).limit(limit)
+        stmt = stmt.order_by(distance_expr)
 
-        result = await db.execute(stmt)
-        rows = result.all()
-
-        # Convert enabled, still-existing candidates to SearchResult objects.
+        # Fetch ranked candidates in bounded pages. Visibility filtering must
+        # happen before the caller's result limit is applied, otherwise stale
+        # disabled rows can crowd enabled matches out of the response.
         results: list[SearchResult] = []
-        for row in rows:
-            index: EmbeddingIndex = row[0]
-            org_name: str = row[1]
-            score: float = float(row[2])
+        page_size = max(limit * 2, 20)
+        offset = 0
+        while len(results) < limit:
+            page_result = await db.execute(stmt.limit(page_size).offset(offset))
+            rows = page_result.all()
+            if not rows:
+                break
 
-            # Fail closed when cleanup has not yet removed a disabled/deleted
-            # entity. Never expose the stale searchable_text snippet.
-            if not await self._check_entity_enabled(
-                db, index.entity_type, index.entity_id
-            ):
-                continue
+            indexes = [row[0] for row in rows]
+            metadata = await self._get_entity_search_metadata(db, indexes)
 
-            # Get entity name by fetching the entity
-            entity_name = await self._get_entity_name(db, index.entity_type, index.entity_id)
+            for row in rows:
+                index: EmbeddingIndex = row[0]
+                org_name: str = row[1]
+                score: float = float(row[2])
 
-            # Create snippet from searchable text (first 200 chars)
-            snippet = index.searchable_text[:200]
-            if len(index.searchable_text) > 200:
-                snippet += "..."
+                # Fail closed when cleanup has not yet removed a disabled,
+                # deleted, or unrecognized entity. Do not read its snippet.
+                entity_metadata = metadata.get((index.entity_type, index.entity_id))
+                if not entity_metadata or not entity_metadata[0]:
+                    continue
 
-            results.append(
-                SearchResult(
-                    entity_type=index.entity_type,  # type: ignore[arg-type]
-                    entity_id=str(index.entity_id),
-                    organization_id=str(index.organization_id),
-                    organization_name=org_name,
-                    name=entity_name or "Unknown",
-                    snippet=snippet,
-                    score=max(0.0, min(1.0, score)),  # Clamp to 0-1
-                    is_enabled=True,  # All items in index are enabled
+                entity_name = entity_metadata[1]
+                snippet = index.searchable_text[:200]
+                if len(index.searchable_text) > 200:
+                    snippet += "..."
+
+                results.append(
+                    SearchResult(
+                        entity_type=index.entity_type,  # type: ignore[arg-type]
+                        entity_id=str(index.entity_id),
+                        organization_id=str(index.organization_id),
+                        organization_name=org_name,
+                        name=entity_name or "Unknown",
+                        snippet=snippet,
+                        score=max(0.0, min(1.0, score)),  # Clamp to 0-1
+                        is_enabled=True,
+                    )
                 )
-            )
+                if len(results) >= limit:
+                    break
+
+            offset += len(rows)
+            if len(rows) < page_size:
+                break
 
         return results
 
@@ -744,15 +760,20 @@ class EmbeddingsService:
                 .limit(limit)
             )
         custom_asset_result = await db.execute(custom_asset_stmt)
-        for row in custom_asset_result.all():
+        custom_asset_rows = custom_asset_result.all()
+        custom_asset_metadata = await self._get_entity_search_metadata(
+            db, [row[0] for row in custom_asset_rows]
+        )
+        for row in custom_asset_rows:
             index = row[0]
             org_name = row[1]
             key = ("custom_asset", str(index.entity_id))
             if key not in seen_entities:
+                entity_metadata = custom_asset_metadata.get(("custom_asset", index.entity_id))
+                if not entity_metadata:
+                    continue
                 seen_entities.add(key)
-                entity_name = await self._get_entity_name(db, "custom_asset", index.entity_id)
-                # Get custom asset enabled status
-                is_enabled = await self._check_entity_enabled(db, "custom_asset", index.entity_id)
+                is_enabled, entity_name = entity_metadata
                 snippet = index.searchable_text[:200]
                 if len(index.searchable_text) > 200:
                     snippet += "..."
@@ -903,76 +924,56 @@ class EmbeddingsService:
 
         return combined[:limit]
 
-    async def _get_entity_name(
+    async def _get_entity_search_metadata(
         self,
         db: AsyncSession,
-        entity_type: str,
-        entity_id: UUID,
-    ) -> str | None:
-        """Get the name of an entity by type and ID."""
-        result = None
-        match entity_type:
-            case "password":
-                result = await db.execute(select(Password.name).where(Password.id == entity_id))
-            case "configuration":
-                result = await db.execute(
-                    select(Configuration.name).where(Configuration.id == entity_id)
-                )
-            case "location":
-                result = await db.execute(select(Location.name).where(Location.id == entity_id))
-            case "document":
-                result = await db.execute(select(Document.name).where(Document.id == entity_id))
-            case "custom_asset":
-                # Custom assets store name in values JSONB field
-                result = await db.execute(
-                    select(CustomAsset.values).where(CustomAsset.id == entity_id)
-                )
-                values = result.scalar_one_or_none()
-                if values:
-                    # Try common name fields
-                    return values.get("name") or values.get("title") or values.get("domain")
-                return None
-            case _:
-                result = None
+        indexes: list[EmbeddingIndex],
+    ) -> dict[tuple[str, UUID], tuple[bool, str | None]]:
+        """Batch enabled-state and display-name lookups by entity type."""
+        ids_by_type: dict[str, set[UUID]] = {}
+        for index in indexes:
+            ids_by_type.setdefault(index.entity_type, set()).add(index.entity_id)
 
-        if result is None:
-            return None
+        metadata: dict[tuple[str, UUID], tuple[bool, str | None]] = {}
+        for entity_type, entity_ids in ids_by_type.items():
+            match entity_type:
+                case "password":
+                    stmt = select(Password.id, Password.is_enabled, Password.name).where(
+                        Password.id.in_(entity_ids)
+                    )
+                case "configuration":
+                    stmt = select(
+                        Configuration.id,
+                        Configuration.is_enabled,
+                        Configuration.name,
+                    ).where(Configuration.id.in_(entity_ids))
+                case "location":
+                    stmt = select(Location.id, Location.is_enabled, Location.name).where(
+                        Location.id.in_(entity_ids)
+                    )
+                case "document":
+                    stmt = select(Document.id, Document.is_enabled, Document.name).where(
+                        Document.id.in_(entity_ids)
+                    )
+                case "custom_asset":
+                    stmt = select(
+                        CustomAsset.id,
+                        CustomAsset.is_enabled,
+                        CustomAsset.values,
+                    ).where(CustomAsset.id.in_(entity_ids))
+                case _:
+                    continue
 
-        return result.scalar_one_or_none()
+            result = await db.execute(stmt)
+            for entity_id, is_enabled, name_or_values in result.all():
+                if entity_type == "custom_asset":
+                    values = name_or_values or {}
+                    name = values.get("name") or values.get("title") or values.get("domain")
+                else:
+                    name = name_or_values
+                metadata[(entity_type, entity_id)] = (bool(is_enabled), name)
 
-    async def _check_entity_enabled(
-        self,
-        db: AsyncSession,
-        entity_type: EntityType,
-        entity_id: UUID,
-    ) -> bool:
-        """Check backing-entity state, failing closed for missing records."""
-        match entity_type:
-            case "password":
-                result = await db.execute(
-                    select(Password.is_enabled).where(Password.id == entity_id)
-                )
-            case "configuration":
-                result = await db.execute(
-                    select(Configuration.is_enabled).where(Configuration.id == entity_id)
-                )
-            case "location":
-                result = await db.execute(
-                    select(Location.is_enabled).where(Location.id == entity_id)
-                )
-            case "document":
-                result = await db.execute(
-                    select(Document.is_enabled).where(Document.id == entity_id)
-                )
-            case "custom_asset":
-                result = await db.execute(
-                    select(CustomAsset.is_enabled).where(CustomAsset.id == entity_id)
-                )
-            case _:
-                return False
-
-        is_enabled = result.scalar_one_or_none()
-        return bool(is_enabled)
+        return metadata
 
 
 def get_embeddings_service(db: AsyncSession) -> EmbeddingsService:
