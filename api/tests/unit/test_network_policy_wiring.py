@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+
 def _repo_root() -> Path:
     """Locate the repository root from local and containerized test runs."""
     env_root = os.environ.get("REPO_ROOT")
