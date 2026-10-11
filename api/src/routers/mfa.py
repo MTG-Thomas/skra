@@ -29,6 +29,7 @@ from src.core.security import decrypt_secret, encrypt_secret, get_password_hash
 from src.models.enums import MFAMethodStatus, MFAMethodType
 from src.models.orm.mfa import MFARecoveryCode, UserMFAMethod
 from src.models.orm.user import User
+from src.services.mfa_step_up import require_totp_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,17 @@ class MFASetupResponse(BaseModel):
     issuer: str
     account_name: str
     backup_codes: list[str]
+
+
+class MFASetupRequest(BaseModel):
+    """Optional step-up proof when replacing an active TOTP method."""
+
+    code: str | None = Field(
+        default=None,
+        min_length=6,
+        max_length=6,
+        pattern=r"^\d{6}$",
+    )
 
 
 class MFAVerifyRequest(BaseModel):
@@ -124,6 +136,7 @@ async def setup_mfa(
     request: Request,
     current_user: CurrentActiveUser,
     db: DbSession,
+    setup_request: MFASetupRequest | None = None,
 ) -> MFASetupResponse:
     """
     Initialize MFA enrollment for an authenticated user.
@@ -142,6 +155,16 @@ async def setup_mfa(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    active_method = await _get_totp_method(
+        db,
+        current_user.user_id,
+        MFAMethodStatus.ACTIVE,
+    )
+    if active_method is not None:
+        require_totp_step_up(
+            active_method.encrypted_secret,
+            setup_request.code if setup_request else None,
+        )
     await _delete_existing_totp_state(db, current_user.user_id)
 
     secret = pyotp.random_base32()
