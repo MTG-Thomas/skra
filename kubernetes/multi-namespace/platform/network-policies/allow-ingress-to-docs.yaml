@@ -15,7 +15,7 @@ spec:
         - namespaceSelector:
             matchLabels:
               app.kubernetes.io/name: bifrost-platform
-        - podSelector:
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
       ports:
