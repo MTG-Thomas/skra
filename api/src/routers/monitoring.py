@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-from src.core.auth import CurrentActiveUser
+from src.core.auth import CurrentAdmin
 from src.core.database import DbSession
 
 router = APIRouter(tags=["monitoring"])
@@ -33,7 +33,7 @@ _START_MONOTONIC = time.monotonic()
 
 
 @router.get("/metrics", response_class=PlainTextResponse)
-async def prometheus_metrics(db: DbSession) -> str:
+async def prometheus_metrics(db: DbSession, _current_admin: CurrentAdmin) -> str:
     """
     Prometheus-compatible metrics endpoint.
 
@@ -103,7 +103,7 @@ async def prometheus_metrics(db: DbSession) -> str:
 
 
 @router.get("/health/detailed")
-async def detailed_health_check(db: DbSession) -> JSONResponse:
+async def detailed_health_check(db: DbSession, _current_admin: CurrentAdmin) -> JSONResponse:
     """
     Detailed health check with all dependencies.
 
@@ -155,9 +155,7 @@ async def detailed_health_check(db: DbSession) -> JSONResponse:
 
 
 @router.get("/status")
-async def status_dashboard(
-    request: Request, current_user: CurrentActiveUser, db: DbSession
-) -> dict:
+async def status_dashboard(request: Request, current_user: CurrentAdmin, db: DbSession) -> dict:
     """
     Application status dashboard for administrators.
 
