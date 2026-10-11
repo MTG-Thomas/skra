@@ -15,9 +15,7 @@ def _repo_root() -> Path:
     raise FileNotFoundError("kubernetes directory not found above test file")
 
 
-POLICY_DIR = (
-    _repo_root() / "kubernetes" / "multi-namespace" / "platform" / "network-policies"
-)
+POLICY_DIR = _repo_root() / "kubernetes" / "multi-namespace" / "platform" / "network-policies"
 
 RESTRICTED_PEERS = {
     "allow-docs-to-bifrost.yaml": (
