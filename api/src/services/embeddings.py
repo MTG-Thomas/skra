@@ -30,6 +30,9 @@ from src.services.llm.factory import get_embeddings_config
 logger = logging.getLogger(__name__)
 
 EntityType = Literal["password", "configuration", "location", "document", "custom_asset"]
+SEMANTIC_SEARCH_MAX_RESULTS = 100
+SEMANTIC_SEARCH_PAGE_SIZE = 20
+SEMANTIC_SEARCH_MAX_CANDIDATES = 1_000
 
 
 class EmbeddingsService:
@@ -471,11 +474,17 @@ class EmbeddingsService:
         # Fetch ranked candidates in bounded pages. Visibility filtering must
         # happen before the caller's result limit is applied, otherwise stale
         # disabled rows can crowd enabled matches out of the response.
+        result_limit = min(max(limit, 0), SEMANTIC_SEARCH_MAX_RESULTS)
+        if result_limit == 0:
+            return []
+
         results: list[SearchResult] = []
-        page_size = max(limit * 2, 20)
-        offset = 0
-        while len(results) < limit:
-            page_result = await db.execute(stmt.limit(page_size).offset(offset))
+        for offset in range(
+            0,
+            SEMANTIC_SEARCH_MAX_CANDIDATES,
+            SEMANTIC_SEARCH_PAGE_SIZE,
+        ):
+            page_result = await db.execute(stmt.limit(SEMANTIC_SEARCH_PAGE_SIZE).offset(offset))
             rows = page_result.all()
             if not rows:
                 break
@@ -511,11 +520,10 @@ class EmbeddingsService:
                         is_enabled=True,
                     )
                 )
-                if len(results) >= limit:
+                if len(results) >= result_limit:
                     break
 
-            offset += len(rows)
-            if len(rows) < page_size:
+            if len(results) >= result_limit or len(rows) < SEMANTIC_SEARCH_PAGE_SIZE:
                 break
 
         return results
