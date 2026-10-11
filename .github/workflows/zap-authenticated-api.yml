@@ -20,7 +20,7 @@ jobs:
 
     env:
       API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
-      ZAP_AUTH_HEADER_VALUE: Bearer ${{ secrets.SKRA_ZAP_API_TOKEN }}
+      SKRA_ZAP_API_TOKEN: ${{ secrets.SKRA_ZAP_API_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -28,17 +28,21 @@ jobs:
 
       - name: Verify scan token is configured
         run: |
-          if [ -z "${ZAP_AUTH_HEADER_VALUE#Bearer }" ]; then
+          if [ -z "${SKRA_ZAP_API_TOKEN}" ]; then
             echo "SKRA_ZAP_API_TOKEN is not configured for the azure-neon-proof environment." >&2
             exit 1
           fi
 
       - name: Run authenticated passive OpenAPI scan
         run: |
-          set -o pipefail
-          mkdir -p zap-authenticated-api
-          chmod 777 zap-authenticated-api
-          docker run --rm \
+          raw_dir="zap-authenticated-api-raw"
+          raw_console="${RUNNER_TEMP}/zap-console.raw.log"
+          safe_console="${RUNNER_TEMP}/zap-console.log"
+          mkdir -p "${raw_dir}"
+          chmod 777 "${raw_dir}"
+
+          set +e
+          ZAP_AUTH_HEADER_VALUE="Bearer ${SKRA_ZAP_API_TOKEN}" docker run --rm \
             -v "${PWD}:/zap/wrk/:rw" \
             -e ZAP_AUTH_HEADER_VALUE \
             ghcr.io/zaproxy/zaproxy:stable \
@@ -48,21 +52,31 @@ jobs:
               -S \
               -T 5 \
               -c /zap/wrk/.zap/api-scan-rules.tsv \
-              -J zap-authenticated-api/zap-api.json \
-              -r zap-authenticated-api/zap-api.html \
-              -w zap-authenticated-api/zap-api.md \
-              -z "-config replacer.full_list(0).description=auth-header \
-                  -config replacer.full_list(0).enabled=true \
-                  -config replacer.full_list(0).matchtype=REQ_HEADER \
-                  -config replacer.full_list(0).matchstr=Authorization \
-                  -config replacer.full_list(0).replacement=\"${ZAP_AUTH_HEADER_VALUE}\" \
-                  -config view.locale=en_GB" \
-            2>&1 | tee zap-authenticated-api/zap-console.log
+              -J "${raw_dir}/zap-api.json" \
+              -r "${raw_dir}/zap-api.html" \
+              -w "${raw_dir}/zap-api.md" \
+              --hook /zap/wrk/.zap/auth_header_hook.py \
+              -z "-config view.locale=en_GB" \
+            >"${raw_console}" 2>&1
+          scan_status=$?
+          set -e
+
+          python .zap/redact_output.py \
+            "${raw_dir}" \
+            zap-authenticated-api \
+            "${raw_console}" \
+            "${safe_console}"
+          cat "${safe_console}"
+          exit "${scan_status}"
 
       - name: Upload authenticated ZAP artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
           name: zap-authenticated-api
-          path: zap-authenticated-api/
+          path: |
+            zap-authenticated-api/zap-api.json
+            zap-authenticated-api/zap-api.html
+            zap-authenticated-api/zap-api.md
+          if-no-files-found: error
           retention-days: 30
