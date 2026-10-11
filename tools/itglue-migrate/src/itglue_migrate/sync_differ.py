@@ -6,7 +6,7 @@ to represent sync plans.
 
 from __future__ import annotations
 
-import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -658,11 +658,9 @@ class SyncDiffer:
 
         # Check for duplicate org names (case-insensitive)
         org_names = [o.get("name", "").lower() for o in csv_orgs if o.get("name")]
-        duplicates = [n for n in org_names if org_names.count(n) > 1]
-        if duplicates:
-            warnings.append(
-                f"Found {len(set(duplicates))} duplicate organization names"
-            )
+        duplicate_count = sum(count > 1 for count in Counter(org_names).values())
+        if duplicate_count:
+            warnings.append(f"Found {duplicate_count} duplicate organization names")
 
         # Check for empty passwords
         empty_pwds = [p for p in csv_passwords if not p.get("password")]
@@ -673,9 +671,29 @@ class SyncDiffer:
         def is_empty_content(content: str | None) -> bool:
             if not content:
                 return True
-            # Strip HTML tags and check if remaining text is empty
-            text = re.sub(r"<[^>]+>", "", content)
-            return not text.strip()
+
+            # Match the previous simple tag-stripping behavior in one pass.
+            # A regex beginning with an unbounded negated class can retry from
+            # every '<' in malformed input and degrade quadratically.
+            in_tag = False
+            tag_has_content = False
+            for char in content:
+                if not in_tag:
+                    if char == "<":
+                        in_tag = True
+                        tag_has_content = False
+                    elif not char.isspace():
+                        return False
+                elif char == ">":
+                    # The old <[^>]+> expression did not consume empty tags.
+                    if not tag_has_content:
+                        return False
+                    in_tag = False
+                else:
+                    tag_has_content = True
+
+            # An unterminated tag was text under the previous behavior.
+            return not in_tag
 
         empty_docs = [d for d in csv_docs if is_empty_content(d.get("content"))]
         if empty_docs:

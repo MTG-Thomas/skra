@@ -1110,6 +1110,26 @@ class TestSyncDifferValidation:
 
         assert len(warnings) == 0
 
+    def test_validate_handles_large_malformed_document_linearly(
+        self, mock_state: ExistingState
+    ) -> None:
+        """Malformed tag prefixes remain text without regex backtracking."""
+        differ = SyncDiffer(mock_state)
+        docs = [{"name": "Malformed", "content": "<" * 100_000}]
+
+        warnings = differ.validate_data_quality([], docs, [])
+
+        assert warnings == []
+
+    def test_validate_handles_large_duplicate_org_list(self, mock_state: ExistingState) -> None:
+        """Duplicate detection handles large inputs without repeated scans."""
+        differ = SyncDiffer(mock_state)
+        orgs = [{"name": f"Org {i % 1_000}"} for i in range(100_000)]
+
+        warnings = differ.validate_data_quality(orgs, [], [])
+
+        assert warnings == ["Found 1000 duplicate organization names"]
+
     def test_validate_returns_all_warnings(self, mock_state: ExistingState) -> None:
         """All validation issues are returned together."""
         differ = SyncDiffer(mock_state)
