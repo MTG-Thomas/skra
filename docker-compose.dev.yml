@@ -103,9 +103,9 @@ services:
       context: ./client
       dockerfile: Dockerfile.dev
       target: "" # Clear the production target from base compose file
-    # No ports override: base maps 8080:8080 and Dockerfile.dev serves
-    # Vite on container port 8080 (Compose port lists merge, so an extra
-    # entry here would double-claim the host port).
+    # Plain HTTP is published only by explicit non-production overlays.
+    ports:
+      - "${CLIENT_PORT:-8080}:8080"
     environment:
       API_URL: http://api:8000
     # node:20-slim has no wget (base file probes nginx): probe the Vite

@@ -30,7 +30,10 @@ def _repo_root() -> Path:
 ROOT = _repo_root()
 BASE = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 DEV = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
+HTTP = (ROOT / "docker-compose.http.yml").read_text(encoding="utf-8")
+SSL = (ROOT / "docker-compose.ssl.yml").read_text(encoding="utf-8")
 TEST = (ROOT / "docker-compose.test.yml").read_text(encoding="utf-8")
+DEPLOY = (ROOT / "scripts" / "deploy-test-vm.sh").read_text(encoding="utf-8")
 
 
 def _service_block(text: str, name: str) -> str:
@@ -111,12 +114,22 @@ def test_e2e_api_disables_rate_limiting():
     assert 'SKRA_RATE_LIMITING_ENABLED: "false"' in code
 
 
-def test_client_port_mapping_is_single_and_unprivileged():
-    """One published client mapping; dev adds none (Compose merges lists)."""
+def test_client_plaintext_port_requires_explicit_overlay():
+    """The TLS stack cannot expose the client around its reverse proxy."""
     base_code = _uncommented(_service_block(BASE, "client"))
-
-    assert base_code.count("CLIENT_PORT") == 1
-    assert '"${CLIENT_PORT:-8080}:8080"' in base_code
-
     dev_code = _uncommented(_service_block(DEV, "client"))
-    assert "ports:" not in dev_code
+    http_code = _uncommented(_service_block(HTTP, "client"))
+
+    assert "ports:" not in base_code
+    assert '"${CLIENT_PORT:-8080}:8080"' in dev_code
+    assert '"${CLIENT_PORT:-8080}:8080"' in http_code
+
+
+def test_deploy_selects_exactly_one_public_entrypoint():
+    """Deployments choose the TLS proxy or the explicit HTTP overlay."""
+    assert "COMPOSE_FILES+=(-f docker-compose.ssl.yml)" in DEPLOY
+    assert "COMPOSE_FILES+=(-f docker-compose.http.yml)" in DEPLOY
+
+    ssl_proxy = _uncommented(_service_block(SSL, "ssl-proxy"))
+    assert '"443:443"' in ssl_proxy
+    assert '"80:80"' in ssl_proxy
