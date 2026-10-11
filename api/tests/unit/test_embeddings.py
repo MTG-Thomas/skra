@@ -7,6 +7,7 @@ Uses mocks for OpenAI API calls.
 
 import hashlib
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -61,6 +62,76 @@ class TestContentHash:
         expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
         assert result == expected
+
+
+class TestSemanticSearchVisibility:
+    """Semantic search must not trust stale embedding-index state."""
+
+    @pytest.mark.asyncio
+    async def test_search_filters_disabled_stale_index_before_reading_snippet(
+        self,
+    ) -> None:
+        """A delayed cleanup cannot expose a disabled entity's indexed text."""
+        db = AsyncMock()
+        query_result = MagicMock()
+        disabled_id = uuid4()
+        enabled_id = uuid4()
+        org_id = uuid4()
+        disabled_index = MagicMock(
+            entity_type="document",
+            entity_id=disabled_id,
+            organization_id=org_id,
+            searchable_text="retired confidential document",
+        )
+        enabled_index = MagicMock(
+            entity_type="document",
+            entity_id=enabled_id,
+            organization_id=org_id,
+            searchable_text="current document",
+        )
+        query_result.all.return_value = [
+            (disabled_index, "Customer", 0.99),
+            (enabled_index, "Customer", 0.80),
+        ]
+        db.execute.return_value = query_result
+        service = EmbeddingsService(db)
+
+        with (
+            patch.object(
+                service,
+                "generate_embedding",
+                new=AsyncMock(return_value=[0.0] * 1536),
+            ),
+            patch.object(
+                service,
+                "_check_entity_enabled",
+                new=AsyncMock(
+                    side_effect=lambda _db, _type, entity_id: entity_id == enabled_id
+                ),
+            ) as check_enabled,
+            patch.object(
+                service,
+                "_get_entity_name",
+                new=AsyncMock(return_value="Current"),
+            ) as get_name,
+        ):
+            results = await service.search(db, "document", [org_id])
+
+        assert [result.entity_id for result in results] == [str(enabled_id)]
+        assert all("retired confidential" not in result.snippet for result in results)
+        assert check_enabled.await_count == 2
+        get_name.assert_awaited_once_with(db, "document", enabled_id)
+
+    @pytest.mark.asyncio
+    async def test_missing_backing_entity_is_not_enabled(self) -> None:
+        """An orphaned index row fails closed until cleanup removes it."""
+        db = AsyncMock()
+        query_result = MagicMock()
+        query_result.scalar_one_or_none.return_value = None
+        db.execute.return_value = query_result
+        service = EmbeddingsService(db)
+
+        assert not await service._check_entity_enabled(db, "document", uuid4())
 
 
 class TestExtractSearchableText:

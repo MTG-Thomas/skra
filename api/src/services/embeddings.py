@@ -408,22 +408,22 @@ class EmbeddingsService:
         query: str,
         org_ids: list[UUID],
         limit: int = 20,
-        show_disabled: bool = False,  # kept for API compatibility but ignored - index only has enabled entities
+        show_disabled: bool = False,  # kept for API compatibility
     ) -> list[SearchResult]:
         """
         Perform semantic search across organizations.
 
-        Note: The show_disabled parameter is kept for API compatibility but is
-        effectively ignored. The embedding index only contains enabled entities,
-        so all results are from enabled entities. Disabled entities are removed
-        from the index when they are disabled.
+        The backing entity's enabled state is verified before returning every
+        result. Index cleanup remains best-effort, so the index itself is not an
+        authorization or visibility boundary.
 
         Args:
             db: Database session
             query: Search query text
             org_ids: List of organization IDs to search within
             limit: Maximum number of results
-            show_disabled: Kept for API compatibility (ignored - index only has enabled entities)
+            show_disabled: Kept for API compatibility; semantic results always
+                exclude disabled entities because their index rows are stale
 
         Returns:
             List of search results ordered by relevance
@@ -450,8 +450,8 @@ class EmbeddingsService:
         # Build the query with cosine distance
         distance_expr = EmbeddingIndex.embedding.cosine_distance(query_embedding)
 
-        # Build base query - no need to filter by is_enabled since the index
-        # only contains enabled entities (disabled entities are removed from index)
+        # Select candidates by similarity. Backing-entity state is checked below
+        # because index cleanup is asynchronous and may be delayed or fail.
         stmt = (
             select(
                 EmbeddingIndex,
@@ -467,13 +467,19 @@ class EmbeddingsService:
         result = await db.execute(stmt)
         rows = result.all()
 
-        # Convert to SearchResult objects
-        # All results are from enabled entities since the index only contains enabled entities
+        # Convert enabled, still-existing candidates to SearchResult objects.
         results: list[SearchResult] = []
         for row in rows:
             index: EmbeddingIndex = row[0]
             org_name: str = row[1]
             score: float = float(row[2])
+
+            # Fail closed when cleanup has not yet removed a disabled/deleted
+            # entity. Never expose the stale searchable_text snippet.
+            if not await self._check_entity_enabled(
+                db, index.entity_type, index.entity_id
+            ):
+                continue
 
             # Get entity name by fetching the entity
             entity_name = await self._get_entity_name(db, index.entity_type, index.entity_id)
@@ -937,10 +943,10 @@ class EmbeddingsService:
     async def _check_entity_enabled(
         self,
         db: AsyncSession,
-        entity_type: str,
+        entity_type: EntityType,
         entity_id: UUID,
     ) -> bool:
-        """Check if an entity is enabled by type and ID."""
+        """Check backing-entity state, failing closed for missing records."""
         match entity_type:
             case "password":
                 result = await db.execute(
@@ -963,10 +969,10 @@ class EmbeddingsService:
                     select(CustomAsset.is_enabled).where(CustomAsset.id == entity_id)
                 )
             case _:
-                return True  # Unknown entity type, assume enabled
+                return False
 
         is_enabled = result.scalar_one_or_none()
-        return is_enabled if is_enabled is not None else True
+        return bool(is_enabled)
 
 
 def get_embeddings_service(db: AsyncSession) -> EmbeddingsService:
