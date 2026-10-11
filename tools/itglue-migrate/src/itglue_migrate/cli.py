@@ -2267,6 +2267,7 @@ def _display_dry_run_summary(plan_data: dict[str, Any], target_org: str | None) 
 
 @app.command()
 def run(
+    ctx: typer.Context,
     plan: Annotated[
         Path,
         typer.Option(
@@ -2426,8 +2427,14 @@ def run(
         )
         raise typer.Exit(1)
 
-    # Determine API URL (command line overrides plan)
-    effective_api_url = api_url or plan_data.get("api_url")
+    # Only an explicit command-line option may override the reviewed plan
+    # target. Ambient environment configuration is a fallback when the plan
+    # itself has no API URL.
+    api_url_source = ctx.get_parameter_source("api_url")
+    if api_url_source is not None and api_url_source.name == "COMMANDLINE":
+        effective_api_url = api_url
+    else:
+        effective_api_url = plan_data.get("api_url") or api_url
     if not effective_api_url:
         error_console.print(
             "[red]Error:[/red] No API URL specified. Use --api-url, set SKRA_API_URL (or legacy BIFROST_API_URL), or ensure plan file has api_url."
