@@ -172,7 +172,7 @@ class SyncDiffer:
         plan = EntityPlan()
         seen_names: set[str] = set()
 
-        for org in csv_orgs:
+        for source_index, org in enumerate(csv_orgs):
             org_name = org.get("name", "")
             itglue_id = str(org.get("id", ""))
 
@@ -185,6 +185,7 @@ class SyncDiffer:
                 plan.skipped.append({
                     "name": org_name,
                     "itglue_id": itglue_id,
+                    "source_index": source_index,
                     "reason": "duplicate_name",
                 })
                 continue

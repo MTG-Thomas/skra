@@ -880,6 +880,7 @@ class TestSyncDifferDuplicateDetection:
         assert len(plan.skipped) == 1
         assert plan.skipped[0]["name"] == "ACME INC"
         assert plan.skipped[0]["itglue_id"] == "2"
+        assert plan.skipped[0]["source_index"] == 1
         assert plan.skipped[0]["reason"] == "duplicate_name"
 
     def test_diff_organizations_skips_multiple_duplicates(self) -> None:
