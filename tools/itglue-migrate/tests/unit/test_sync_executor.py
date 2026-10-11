@@ -1821,6 +1821,27 @@ class TestSyncExecutorAttachmentUpload:
         )
 
     @pytest.mark.asyncio
+    async def test_empty_source_id_never_starts_attachment_upload(
+        self, mock_client: MagicMock, mock_doc_processor: MagicMock, tmp_path: MagicMock
+    ) -> None:
+        """An empty source ID cannot broaden a scan to the entity-type folder."""
+        mock_client.create_configuration = AsyncMock(return_value={"id": "new-config-uuid"})
+        plan = SyncPlan()
+        plan.configurations.to_create = [{"id": "", "name": "Server"}]
+
+        executor = SyncExecutor(
+            mock_client,
+            org_id="org-uuid",
+            dry_run=False,
+            doc_processor=mock_doc_processor,
+            export_path=tmp_path,
+        )
+        result = await executor.execute(plan)
+
+        assert result.created.get("configurations", 0) == 1
+        mock_doc_processor.upload_entity_attachments.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_upload_attachments_after_location_create(
         self, mock_client: MagicMock, mock_doc_processor: MagicMock, tmp_path: MagicMock
     ) -> None:

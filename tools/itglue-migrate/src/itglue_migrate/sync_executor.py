@@ -259,6 +259,13 @@ class SyncExecutor:
         if not self.doc_processor or not self.export_path:
             return 0
 
+        if not itglue_id.strip():
+            logger.warning(
+                "Skipping attachment upload for %s: source entity ID is empty",
+                entity_type,
+            )
+            return 0
+
         try:
             count = await self.doc_processor.upload_entity_attachments(
                 entity_type=entity_type,
