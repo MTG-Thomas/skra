@@ -23,11 +23,9 @@ async def test_add_favorite_returns_conflict_at_cap():
         entity_id=uuid4(),
     )
 
-    with (
-        patch("src.routers.me.UserFavoritesRepository", return_value=repo),
-        pytest.raises(HTTPException) as exc_info,
-    ):
-        await add_favorite(current_user, AsyncMock(), request)
+    with patch("src.routers.me.UserFavoritesRepository", return_value=repo):
+        with pytest.raises(HTTPException) as exc_info:
+            await add_favorite(current_user, AsyncMock(), request)
 
     assert exc_info.value.status_code == status.HTTP_409_CONFLICT
     assert str(MAX_FAVORITES_PER_USER) in exc_info.value.detail

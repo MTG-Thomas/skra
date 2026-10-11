@@ -94,10 +94,23 @@ class TestUserFavoritesRepository:
         session = AsyncMock()
         result = MagicMock(rowcount=1)
         session.execute.return_value = result
+        favorite_id = uuid4()
+        user_id = uuid4()
+
+        deleted = await UserFavoritesRepository(session).delete(favorite_id, user_id)
+
+        assert deleted is True
+        statement = session.execute.await_args.args[0]
+        assert "user_favorites.id" in str(statement)
+        assert "user_favorites.user_id" in str(statement)
+        assert favorite_id in statement.compile().params.values()
+        assert user_id in statement.compile().params.values()
+
+    async def test_delete_returns_false_when_owner_row_does_not_exist(self):
+        """A missing or differently owned favorite is not reported deleted."""
+        session = AsyncMock()
+        session.execute.return_value = MagicMock(rowcount=0)
 
         deleted = await UserFavoritesRepository(session).delete(uuid4(), uuid4())
 
-        assert deleted is True
-        statement = str(session.execute.await_args.args[0])
-        assert "user_favorites.id" in statement
-        assert "user_favorites.user_id" in statement
+        assert deleted is False
