@@ -15,6 +15,18 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  powershell-script-guardrails:
+    name: PowerShell script guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify database export SSH protections
+        shell: pwsh
+        run: ./scripts/tests/test_export_dev_vm_db.ps1
+
   gitleaks:
     name: Gitleaks secret scan
     runs-on: ubuntu-latest
