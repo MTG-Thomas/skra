@@ -58,6 +58,14 @@ def test_settings_services_define_both_database_urls():
             assert "SKRA_DATABASE_URL_SYNC:" in block, service
 
 
+def test_test_initializer_runs_required_post_migration_backfills():
+    """The test stack must exercise the same fail-closed init path as production."""
+    init = _service_block(TEST, "init")
+
+    assert 'command: ["python", "-m", "scripts.init_container"]' in init
+    assert 'command: ["alembic", "upgrade", "head"]' not in init
+
+
 def _uncommented(block: str) -> str:
     """Strip full-line and trailing comments so docs cannot trip the checks."""
     return "\n".join(line.split("#", 1)[0] for line in block.splitlines())
