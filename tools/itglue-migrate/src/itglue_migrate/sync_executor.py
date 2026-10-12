@@ -59,6 +59,14 @@ def _map_org_status_to_is_enabled(status: str | None) -> bool:
     return str(status).lower() == "active"
 
 
+def _entity_is_enabled(entity: dict[str, Any]) -> bool:
+    """Preserve an explicit enabled flag unless the export marks it archived."""
+    archived = entity.get("archived")
+    if archived is None:
+        return bool(entity.get("is_enabled", True))
+    return str(archived).lower() not in ("true", "1", "yes")
+
+
 class APIClientProtocol(Protocol):
     """Protocol defining the API client interface used by SyncExecutor."""
 
@@ -505,11 +513,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 # Parse configuration_interfaces from JSON string if present
                 interfaces = entity.get("configuration_interfaces")
@@ -731,11 +735,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 response = await self.client.create_document(
                     org_id=self.org_id,
@@ -811,11 +811,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 response = await self.client.create_password(
                     org_id=self.org_id,
@@ -894,6 +890,9 @@ class SyncExecutor:
                 name = entity.get("name", "Unnamed")
                 password = entity.get("password", "")
 
+                # CSV row passwords carry the same state fields as regular passwords.
+                is_enabled = _entity_is_enabled(entity)
+
                 # Create the password
                 response = await self.client.create_password(
                     org_id=self.org_id,
@@ -908,7 +907,7 @@ class SyncExecutor:
                         "resource_type": entity.get("resource_type"),
                         "resource_id": resource_id,
                     },
-                    is_enabled=entity.get("is_enabled", True),
+                    is_enabled=is_enabled,
                 )
 
                 password_uuid = response.get("id")
@@ -1289,12 +1288,9 @@ class SyncExecutor:
                 # Handle archived -> is_enabled AND archived field value
                 # The CSV parser puts "archived" at top-level (for is_enabled)
                 # but the type may also have an "archived" field that needs a value
-                is_enabled = entity.get("is_enabled", True)
+                is_enabled = _entity_is_enabled(entity)
                 archived = entity.get("archived")
                 if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
-
                     # If type has "archived" field, include it in values
                     if "archived" in type_field_defs:
                         field_def = type_field_defs["archived"]
