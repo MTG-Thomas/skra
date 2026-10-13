@@ -494,9 +494,9 @@ jobs:
           echo "E2E_ORG_ID=$E2E_ORG_ID" >> "$GITHUB_ENV"
           echo "seeded org id captured"
 
-      - name: Dump API logs on seed failure
+      - name: Dump init and API logs on stack failure
         if: failure()
-        run: docker compose -f docker-compose.test.yml --profile client --profile e2e logs api 2>&1 | tail -n 40
+        run: docker compose -f docker-compose.test.yml --profile client --profile e2e logs init api 2>&1 | tail -n 120
 
       - name: Install client dependencies (Playwright container)
         run: |
