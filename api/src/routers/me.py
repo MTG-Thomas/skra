@@ -14,9 +14,13 @@ from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
 from src.models.contracts.access_tracking import RecentItem
 from src.repositories.access_tracking import AccessTrackingRepository
-from src.repositories.user_favorites import UserFavoritesRepository
+from src.repositories.user_favorites import (
+    FavoriteLimitExceededError,
+    UserFavoritesRepository,
+)
 
 router = APIRouter(prefix="/api/me", tags=["me"])
+MAX_FAVORITES_PER_USER = 100
 
 
 # ============================================================================
@@ -109,29 +113,20 @@ async def add_favorite(
     """
     repo = UserFavoritesRepository(db)
 
-    # Check if already favorited
-    existing = await repo.get_by_user_and_entity(
-        user_id=current_user.user_id,
-        organization_id=data.organization_id,
-        entity_type=data.entity_type,
-        entity_id=data.entity_id,
-    )
-
-    if existing:
-        return FavoriteResponse.model_validate(existing)
-
-    # Get current count for ordering
-    count = await repo.count_by_user(current_user.user_id)
-
-    # Create new favorite
-    favorite = await repo.create(
-        user_id=current_user.user_id,
-        organization_id=data.organization_id,
-        entity_type=data.entity_type,
-        entity_id=data.entity_id,
-        custom_label=data.custom_label,
-        display_order=count,  # Add to end
-    )
+    try:
+        favorite = await repo.get_or_create_with_limit(
+            user_id=current_user.user_id,
+            organization_id=data.organization_id,
+            entity_type=data.entity_type,
+            entity_id=data.entity_id,
+            custom_label=data.custom_label,
+            max_count=MAX_FAVORITES_PER_USER,
+        )
+    except FavoriteLimitExceededError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Favorite limit of {MAX_FAVORITES_PER_USER} reached",
+        ) from None
 
     return FavoriteResponse.model_validate(favorite)
 
@@ -149,15 +144,7 @@ async def remove_favorite(
     """
     repo = UserFavoritesRepository(db)
 
-    # First verify this favorite belongs to the user
-    favorites = await repo.list_by_user(current_user.user_id)
-    if not any(f.id == favorite_id for f in favorites):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Favorite not found",
-        )
-
-    deleted = await repo.delete(favorite_id)
+    deleted = await repo.delete(favorite_id, current_user.user_id)
 
     if not deleted:
         raise HTTPException(
