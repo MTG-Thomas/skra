@@ -6,12 +6,13 @@ to represent sync plans.
 
 from __future__ import annotations
 
-import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from itglue_migrate.csv_parser import slugify_to_display_name
 from itglue_migrate.field_inference import column_name_to_key
+from itglue_migrate.html_text import has_visible_html_text
 
 if TYPE_CHECKING:
     from itglue_migrate.state_fetcher import ExistingState
@@ -659,10 +660,10 @@ class SyncDiffer:
 
         # Check for duplicate org names (case-insensitive)
         org_names = [o.get("name", "").lower() for o in csv_orgs if o.get("name")]
-        duplicates = [n for n in org_names if org_names.count(n) > 1]
+        duplicates = {name for name, count in Counter(org_names).items() if count > 1}
         if duplicates:
             warnings.append(
-                f"Found {len(set(duplicates))} duplicate organization names"
+                f"Found {len(duplicates)} duplicate organization names"
             )
 
         # Check for empty passwords
@@ -674,9 +675,7 @@ class SyncDiffer:
         def is_empty_content(content: str | None) -> bool:
             if not content:
                 return True
-            # Strip HTML tags and check if remaining text is empty
-            text = re.sub(r"<[^>]+>", "", content)
-            return not text.strip()
+            return not has_visible_html_text(content)
 
         empty_docs = [d for d in csv_docs if is_empty_content(d.get("content"))]
         if empty_docs:
