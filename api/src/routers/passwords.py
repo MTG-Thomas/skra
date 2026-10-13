@@ -55,7 +55,7 @@ def _to_public(password: Password) -> PasswordPublic:
         "username": password.username,
         "url": password.url,
         "notes": password.notes,
-        "_totp_secret_encrypted": password.totp_secret_encrypted,  # For computed has_totp
+        "has_totp": bool(password.totp_secret_encrypted),
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
         "sync_metadata": sync_metadata_to_response(password.sync_metadata),
         "is_enabled": password.is_enabled,
@@ -358,7 +358,7 @@ async def reveal_password(
         "username": password.username,
         "url": password.url,
         "notes": password.notes,
-        "_totp_secret_encrypted": password.totp_secret_encrypted,
+        "has_totp": bool(password.totp_secret_encrypted),
         "metadata": password.metadata_ if isinstance(password.metadata_, dict) else {},
         "sync_metadata": sync_metadata_to_response(password.sync_metadata),
         "is_enabled": password.is_enabled,

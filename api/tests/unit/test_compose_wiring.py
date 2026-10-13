@@ -112,11 +112,12 @@ def test_e2e_api_disables_rate_limiting():
 
 
 def test_client_port_mapping_is_single_and_unprivileged():
-    """One published client mapping; dev adds none (Compose merges lists)."""
+    """Production publishes one port; development replaces it with loopback."""
     base_code = _uncommented(_service_block(BASE, "client"))
 
     assert base_code.count("CLIENT_PORT") == 1
     assert '"${CLIENT_PORT:-8080}:8080"' in base_code
 
     dev_code = _uncommented(_service_block(DEV, "client"))
-    assert "ports:" not in dev_code
+    assert "ports: !override" in dev_code
+    assert '"127.0.0.1:8080:8080"' in dev_code

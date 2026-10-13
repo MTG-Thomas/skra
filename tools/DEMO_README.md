@@ -16,7 +16,7 @@ Generate realistic MSP data for your Skra demo in under 2 minutes.
 cd tools
 
 # Get your token first (see below), then run:
-./quick_demo.sh http://localhost:8080 <your-jwt-token>
+SKRA_TOKEN=<your-jwt-token> ./quick_demo.sh http://localhost:8080
 ```
 
 **What it creates:**
@@ -126,7 +126,7 @@ For more control over generated data:
 pip install httpx
 
 # Run Python generator
-python generate_demo_data.py --api-url http://localhost:8080 --token <jwt-token>
+SKRA_TOKEN=<jwt-token> python generate_demo_data.py --api-url http://localhost:8080
 ```
 
 ## Cleanup
