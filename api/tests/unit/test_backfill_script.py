@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ import pytest
 
 _REPO = os.environ.get("REPO_ROOT") or str(Path(__file__).resolve().parents[3])
 SCRIPT = Path(_REPO) / "api" / "scripts" / "backfill_expiration_projections.py"
+API_ROOT = SCRIPT.parents[1]
 
 
 def load_module(monkeypatch: pytest.MonkeyPatch) -> Any:
@@ -109,3 +112,24 @@ def test_backfill_service_is_coroutine() -> None:
     import src.services.expiration_projection as service
 
     assert asyncio.iscoroutinefunction(service.backfill_all_projections)
+
+
+def test_backfill_entrypoint_registers_related_mappers() -> None:
+    """The standalone init process must load every string-named relationship."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from sqlalchemy.orm import configure_mappers; "
+                "import scripts.backfill_expiration_projections; "
+                "configure_mappers()"
+            ),
+        ],
+        cwd=API_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
