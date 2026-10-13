@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from itglue_migrate.api_client import APIError
 from itglue_migrate.document_processor import DocumentProcessor
+from itglue_migrate.html_text import has_visible_html_text
 from itglue_migrate.progress import Phase, ProgressReporter, SimpleProgressReporter
 from itglue_migrate.relationship_audit import (
     RelationshipAuditResult,
@@ -41,8 +41,7 @@ def _is_content_empty(html_content: str) -> bool:
     """
     if not html_content:
         return True
-    text = re.sub(r"<[^>]+>", "", html_content)
-    return not text.strip()
+    return not has_visible_html_text(html_content)
 
 
 def _map_org_status_to_is_enabled(status: str | None) -> bool:
@@ -654,7 +653,16 @@ class SyncExecutor:
 
             # If CSV content is empty and we have a doc_processor, try loading from file
             if not raw_content and self.doc_processor:
-                loaded_content = self.doc_processor.load_document_content(itglue_id)
+                try:
+                    loaded_content = self.doc_processor.load_document_content(itglue_id)
+                except Exception as e:
+                    result.failed["documents"] = result.failed.get("documents", 0) + 1
+                    result.errors.append(f"Document '{doc_name}': {e}")
+                    logger.warning("Failed to load document '%s': %s", doc_name, e)
+                    if self.reporter:
+                        self.reporter.update_progress(failed=1)
+                        self.reporter.error(f"Document '{doc_name}': {e}")
+                    continue
                 if loaded_content:
                     raw_content = loaded_content
 
