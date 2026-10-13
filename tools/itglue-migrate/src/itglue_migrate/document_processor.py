@@ -429,29 +429,25 @@ class DocumentProcessor:
         if src.startswith(("http://", "https://", "data:")):
             return None
 
-        # Try relative to document folder first (most common)
-        relative_path = doc_folder / src
-        if relative_path.exists() and relative_path.is_file():
-            return relative_path.resolve()
-
-        # Try stripping leading slash
-        if src.startswith("/"):
-            clean_src = src.lstrip("/")
-            clean_path = doc_folder / clean_src
-            if clean_path.exists() and clean_path.is_file():
-                return clean_path.resolve()
-
-        # Try URL-decoded path
         try:
             from urllib.parse import unquote
 
             decoded_src = unquote(src)
-            if decoded_src != src:
-                decoded_path = doc_folder / decoded_src
-                if decoded_path.exists() and decoded_path.is_file():
-                    return decoded_path.resolve()
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            return None
+
+        # IT Glue sometimes emits a leading slash for a document-relative
+        # image. Strip only that presentation detail, then canonicalize and
+        # require the final target (including symlinks) to remain in the
+        # document folder before any file content is read.
+        if "\\" in decoded_src or "\x00" in decoded_src:
+            return None
+        document_root = doc_folder.resolve()
+        candidate = (document_root / decoded_src.lstrip("/")).resolve()
+        if not candidate.is_relative_to(document_root):
+            return None
+        if candidate.exists() and candidate.is_file():
+            return candidate
 
         return None
 

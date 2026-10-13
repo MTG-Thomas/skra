@@ -126,6 +126,24 @@ def _resolve_org_uuid(
     return org_uuid
 
 
+def _exclude_skipped_organizations(
+    organizations: list[dict[str, Any]],
+    org_plan: EntityPlan,
+) -> list[dict[str, Any]]:
+    """Remove exact source rows the organization differ marked as skipped."""
+    skipped_indexes = {
+        item["source_index"]
+        for item in org_plan.skipped
+        if item.get("reason") == "duplicate_name"
+        and isinstance(item.get("source_index"), int)
+    }
+    return [
+        organization
+        for source_index, organization in enumerate(organizations)
+        if source_index not in skipped_indexes
+    ]
+
+
 def _validate_export_path(export_path: Path) -> dict[str, Any]:
     """Validate the export path exists and has expected structure.
 
@@ -2278,6 +2296,7 @@ def _display_dry_run_summary(plan_data: dict[str, Any], target_org: str | None) 
 
 @app.command()
 def run(
+    ctx: typer.Context,
     plan: Annotated[
         Path,
         typer.Option(
@@ -2437,8 +2456,14 @@ def run(
         )
         raise typer.Exit(1)
 
-    # Determine API URL (command line overrides plan)
-    effective_api_url = api_url or plan_data.get("api_url")
+    # Only an explicit command-line option may override the reviewed plan
+    # target. Ambient environment configuration is a fallback when the plan
+    # itself has no API URL.
+    api_url_source = ctx.get_parameter_source("api_url")
+    if api_url_source is not None and api_url_source.name == "COMMANDLINE":
+        effective_api_url = api_url
+    else:
+        effective_api_url = plan_data.get("api_url") or api_url
     if not effective_api_url:
         error_console.print(
             "[red]Error:[/red] No API URL specified. Use --api-url, set SKRA_API_URL (or legacy BIFROST_API_URL), or ensure plan file has api_url."
@@ -2846,6 +2871,7 @@ async def _run_sync(
         # Diff organizations to find which need to be created
         org_differ = SyncDiffer(all_orgs_state)
         org_plan = org_differ.diff_organizations(orgs_to_sync)
+        orgs_to_sync = _exclude_skipped_organizations(orgs_to_sync, org_plan)
 
         # Display org plan if any need to be created
         if org_plan.to_create:
