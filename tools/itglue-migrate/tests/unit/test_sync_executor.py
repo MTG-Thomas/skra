@@ -827,6 +827,20 @@ class TestSyncExecutorCellWrites:
                 "values": {"name": "Another Asset"},
             },
         }
+        state.custom_asset_types = {
+            "type-uuid-1": {
+                "id": "type-uuid-1",
+                "fields": [
+                    {"key": "api_key", "name": "API Key", "type": "password"}
+                ],
+            },
+            "type-uuid-2": {
+                "id": "type-uuid-2",
+                "fields": [
+                    {"key": "notes", "name": "Notes", "type": "text"}
+                ],
+            },
+        }
         return state
 
     @pytest.mark.asyncio
@@ -840,7 +854,7 @@ class TestSyncExecutorCellWrites:
         plan.passwords.cell_writes = [
             {
                 "id": "pwd-1",
-                "name": "api_key",
+                "name": "API Key",
                 "password": "secret-value-123",
                 "resource_type": "FlexibleAsset::StructuredData::Cell",
                 "resource_id": "asset-123",
@@ -859,6 +873,32 @@ class TestSyncExecutorCellWrites:
             asset_id="asset-uuid-abc",
             values={"api_key": "secret-value-123"},
         )
+
+    @pytest.mark.asyncio
+    async def test_execute_cell_writes_rejects_public_target_field(
+        self, mock_client: MagicMock, mock_state: MagicMock
+    ) -> None:
+        """Cell writes never place secret values into public text fields."""
+        mock_client.update_custom_asset = AsyncMock()
+        plan = SyncPlan()
+        plan.passwords.cell_writes = [
+            {
+                "id": "pwd-2",
+                "name": "Notes",
+                "password": "must-not-be-written",
+                "resource_type": "FlexibleAsset::StructuredData::Cell",
+                "resource_id": "asset-456",
+            }
+        ]
+
+        executor = SyncExecutor(
+            mock_client, org_id="org-uuid", dry_run=False, state=mock_state
+        )
+        result = await executor.execute(plan)
+
+        assert result.skipped.get("cell_writes", 0) == 1
+        assert result.created.get("cell_writes", 0) == 0
+        mock_client.update_custom_asset.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_execute_cell_writes_skipped_without_state(
