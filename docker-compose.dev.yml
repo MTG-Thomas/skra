@@ -54,6 +54,8 @@ services:
       target: dev
     ports:
       - "127.0.0.1:8000:8000"
+      # Debug Adapter Protocol has no authentication. Use an authenticated
+      # tunnel for remote attachment; never publish it on every host interface.
       - "127.0.0.1:5678:5678" # debugpy attach (ENABLE_DEBUG=true only)
     environment:
       SKRA_ENVIRONMENT: development
