@@ -1,6 +1,6 @@
 """Password contracts (API request/response schemas)."""
 
-from pydantic import BaseModel, Field, PrivateAttr, computed_field
+from pydantic import BaseModel, Field
 
 from src.models.contracts.base import PublicEntityBase
 from src.models.contracts.sync import SyncMetadata
@@ -45,14 +45,7 @@ class PasswordPublic(PublicEntityBase):
     updated_by_user_id: str | None = None
     updated_by_user_name: str | None = None
 
-    # Private attribute for internal use (not serialized)
-    _totp_secret_encrypted: str | None = PrivateAttr(default=None)
-
-    @computed_field
-    @property
-    def has_totp(self) -> bool:
-        """Whether this password has TOTP configured."""
-        return bool(self._totp_secret_encrypted)
+    has_totp: bool = False
 
 
 class PasswordReveal(PasswordPublic):

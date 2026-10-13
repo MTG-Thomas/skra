@@ -304,6 +304,17 @@ def _filter_org_records(
     return org_configs, org_locations, org_documents, org_passwords, org_custom_assets
 
 
+def _build_per_org_plan(org: dict[str, Any], org_plan: EntityPlan, *, dry_run: bool) -> EntityPlan:
+    """Describe an org in per-org reporting without recreating it live."""
+    plan = EntityPlan()
+    org_name = org.get("name")
+    if dry_run and any(item.get("name") == org_name for item in org_plan.to_create):
+        plan.to_create = [org]
+    else:
+        plan.existing = [org]
+    return plan
+
+
 def _match_organizations(
     parsed_orgs: list[dict[str, Any]],
     existing_orgs: list[dict[str, Any]],
@@ -2746,6 +2757,7 @@ def _build_attachment_validation_summary(
     image_references = collect_embedded_image_references(export_path, documents)
     image_validation = verify_embedded_images(image_references)
     summary = validation.to_dict()
+    summary["orphaned_folders"] = int(summary.get("total_orphaned_folders", 0) or 0)
     summary.pop("orphaned", None)
     summary.pop("total_orphaned_folders", None)
     summary["orphaned_scope"] = "not_reported_per_org"
@@ -3004,11 +3016,7 @@ async def _run_sync(
                 console.print(f"  [dim]CSV types NOT in API (will create): {sorted(missing_in_api)}[/dim]")
 
             # Build organization plan for this specific org
-            this_org_plan = EntityPlan()
-            if any(o.get("name") == org_name for o in org_plan.to_create):
-                this_org_plan.to_create = [org]
-            elif any(o.get("name") == org_name for o in org_plan.existing):
-                this_org_plan.existing = [org]
+            this_org_plan = _build_per_org_plan(org, org_plan, dry_run=dry_run)
 
             plan = SyncPlan(
                 organizations=this_org_plan,
