@@ -119,6 +119,9 @@ class TestSemanticSearchVisibility:
         assert [result.entity_id for result in results] == [str(enabled_id)]
         assert all("retired confidential" not in result.snippet for result in results)
         get_metadata.assert_awaited_once_with(db, [disabled_index, enabled_index])
+        tie_breaker = db.execute.await_args.args[0]._order_by_clauses[-1]
+        assert tie_breaker.key == "id"
+        assert tie_breaker.table.name == "embedding_index"
 
     @pytest.mark.asyncio
     async def test_search_fills_limit_after_filtering_first_candidate_page(self) -> None:

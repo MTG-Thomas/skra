@@ -469,7 +469,8 @@ class EmbeddingsService:
             .where(EmbeddingIndex.organization_id.in_(org_ids))
         )
 
-        stmt = stmt.order_by(distance_expr)
+        # Keep OFFSET pagination stable when candidates have equal similarity.
+        stmt = stmt.order_by(distance_expr, EmbeddingIndex.id)
 
         # Fetch ranked candidates in bounded pages. Visibility filtering must
         # happen before the caller's result limit is applied, otherwise stale
