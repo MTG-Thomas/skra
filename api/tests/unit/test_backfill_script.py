@@ -139,8 +139,9 @@ def test_orm_package_exports_user_favorite_for_mapper_registration() -> None:
     """Keep the package-level mapper import covered by the primary test run."""
     from sqlalchemy.orm import configure_mappers
 
-    from src.models.orm import UserFavorite
+    import src.models.orm as orm_models
 
+    orm_models = importlib.reload(orm_models)
     configure_mappers()
 
-    assert UserFavorite.__tablename__ == "user_favorites"
+    assert orm_models.UserFavorite.__tablename__ == "user_favorites"
