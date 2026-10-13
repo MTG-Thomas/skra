@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -17,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from itglue_migrate.api_client import APIError
 from itglue_migrate.document_processor import DocumentProcessor
 from itglue_migrate.field_inference import column_name_to_key
+from itglue_migrate.html_text import has_visible_html_text
 from itglue_migrate.progress import Phase, ProgressReporter, SimpleProgressReporter
 from itglue_migrate.relationship_audit import (
     RelationshipAuditResult,
@@ -42,8 +42,7 @@ def _is_content_empty(html_content: str) -> bool:
     """
     if not html_content:
         return True
-    text = re.sub(r"<[^>]+>", "", html_content)
-    return not text.strip()
+    return not has_visible_html_text(html_content)
 
 
 def _map_org_status_to_is_enabled(status: str | None) -> bool:
@@ -58,6 +57,14 @@ def _map_org_status_to_is_enabled(status: str | None) -> bool:
     if not status:
         return True
     return str(status).lower() == "active"
+
+
+def _entity_is_enabled(entity: dict[str, Any]) -> bool:
+    """Preserve an explicit enabled flag unless the export marks it archived."""
+    archived = entity.get("archived")
+    if archived is None:
+        return bool(entity.get("is_enabled", True))
+    return str(archived).lower() not in ("true", "1", "yes")
 
 
 class APIClientProtocol(Protocol):
@@ -506,11 +513,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 # Parse configuration_interfaces from JSON string if present
                 interfaces = entity.get("configuration_interfaces")
@@ -651,7 +654,16 @@ class SyncExecutor:
 
             # If CSV content is empty and we have a doc_processor, try loading from file
             if not raw_content and self.doc_processor:
-                loaded_content = self.doc_processor.load_document_content(itglue_id)
+                try:
+                    loaded_content = self.doc_processor.load_document_content(itglue_id)
+                except Exception as e:
+                    result.failed["documents"] = result.failed.get("documents", 0) + 1
+                    result.errors.append(f"Document '{doc_name}': {e}")
+                    logger.warning("Failed to load document '%s': %s", doc_name, e)
+                    if self.reporter:
+                        self.reporter.update_progress(failed=1)
+                        self.reporter.error(f"Document '{doc_name}': {e}")
+                    continue
                 if loaded_content:
                     raw_content = loaded_content
 
@@ -732,11 +744,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 response = await self.client.create_document(
                     org_id=self.org_id,
@@ -812,11 +820,7 @@ class SyncExecutor:
                     metadata["itglue_id"] = itglue_id
 
                 # Handle archived -> is_enabled
-                is_enabled = entity.get("is_enabled", True)
-                archived = entity.get("archived")
-                if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
+                is_enabled = _entity_is_enabled(entity)
 
                 response = await self.client.create_password(
                     org_id=self.org_id,
@@ -895,6 +899,9 @@ class SyncExecutor:
                 name = entity.get("name", "Unnamed")
                 password = entity.get("password", "")
 
+                # CSV row passwords carry the same state fields as regular passwords.
+                is_enabled = _entity_is_enabled(entity)
+
                 # Create the password
                 response = await self.client.create_password(
                     org_id=self.org_id,
@@ -909,7 +916,7 @@ class SyncExecutor:
                         "resource_type": entity.get("resource_type"),
                         "resource_id": resource_id,
                     },
-                    is_enabled=entity.get("is_enabled", True),
+                    is_enabled=is_enabled,
                 )
 
                 password_uuid = response.get("id")
@@ -1290,12 +1297,9 @@ class SyncExecutor:
                 # Handle archived -> is_enabled AND archived field value
                 # The CSV parser puts "archived" at top-level (for is_enabled)
                 # but the type may also have an "archived" field that needs a value
-                is_enabled = entity.get("is_enabled", True)
+                is_enabled = _entity_is_enabled(entity)
                 archived = entity.get("archived")
                 if archived is not None:
-                    archived_str = str(archived).lower()
-                    is_enabled = archived_str not in ("true", "1", "yes")
-
                     # If type has "archived" field, include it in values
                     if "archived" in type_field_defs:
                         field_def = type_field_defs["archived"]

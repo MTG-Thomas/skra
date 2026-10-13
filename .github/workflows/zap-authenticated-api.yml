@@ -36,9 +36,10 @@ jobs:
       - name: Run authenticated passive OpenAPI scan
         run: |
           set -o pipefail
-          mkdir -p zap-authenticated-api
-          chmod 777 zap-authenticated-api
+          install -d -m 700 zap-authenticated-api
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
             -v "${PWD}:/zap/wrk/:rw" \
             -e ZAP_AUTH_HEADER_VALUE \
             ghcr.io/zaproxy/zaproxy:stable \
