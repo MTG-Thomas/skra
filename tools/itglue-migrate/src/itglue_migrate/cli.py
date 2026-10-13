@@ -126,6 +126,24 @@ def _resolve_org_uuid(
     return org_uuid
 
 
+def _exclude_skipped_organizations(
+    organizations: list[dict[str, Any]],
+    org_plan: EntityPlan,
+) -> list[dict[str, Any]]:
+    """Remove exact source rows the organization differ marked as skipped."""
+    skipped_indexes = {
+        item["source_index"]
+        for item in org_plan.skipped
+        if item.get("reason") == "duplicate_name"
+        and isinstance(item.get("source_index"), int)
+    }
+    return [
+        organization
+        for source_index, organization in enumerate(organizations)
+        if source_index not in skipped_indexes
+    ]
+
+
 def _validate_export_path(export_path: Path) -> dict[str, Any]:
     """Validate the export path exists and has expected structure.
 
@@ -2853,6 +2871,7 @@ async def _run_sync(
         # Diff organizations to find which need to be created
         org_differ = SyncDiffer(all_orgs_state)
         org_plan = org_differ.diff_organizations(orgs_to_sync)
+        orgs_to_sync = _exclude_skipped_organizations(orgs_to_sync, org_plan)
 
         # Display org plan if any need to be created
         if org_plan.to_create:
