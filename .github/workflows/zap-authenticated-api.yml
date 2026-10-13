@@ -38,11 +38,12 @@ jobs:
           raw_dir="zap-authenticated-api-raw"
           raw_console="${RUNNER_TEMP}/zap-console.raw.log"
           safe_console="${RUNNER_TEMP}/zap-console.log"
-          mkdir -p "${raw_dir}"
-          chmod 777 "${raw_dir}"
+          install -d -m 700 "${raw_dir}" zap-authenticated-api
 
           set +e
           ZAP_AUTH_HEADER_VALUE="Bearer ${SKRA_ZAP_API_TOKEN}" docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
             -v "${PWD}:/zap/wrk/:rw" \
             -e ZAP_AUTH_HEADER_VALUE \
             ghcr.io/zaproxy/zaproxy:stable \

@@ -453,6 +453,23 @@ Line 3"
 
         assert field_map["empty_field"].field_type == "text"
 
+    def test_secret_named_columns_use_encrypted_field_types(
+        self, parser: CSVParser, temp_dir: Path
+    ) -> None:
+        """Secret-like headers override public value-based inference."""
+        csv_content = """id,organization,API Token,TOTP Secret,Description
+1,org-1,token-value,seed-value,public text
+"""
+        csv_path = temp_dir / "secret-fields.csv"
+        csv_path.write_text(csv_content, encoding="utf-8")
+
+        fields, _ = parser.parse_custom_asset_csv(csv_path, "secret-fields")
+        field_map = {field.name: field for field in fields}
+
+        assert field_map["API Token"].field_type == "password"
+        assert field_map["TOTP Secret"].field_type == "totp"
+        assert field_map["Description"].field_type == "text"
+
 
 class TestDiscoverCustomAssetTypes:
     """Test discovery of custom asset types."""

@@ -76,7 +76,9 @@ def main(argv: list[str]) -> int:
         print("SKRA_ZAP_API_TOKEN is required for output redaction", file=sys.stderr)
         return 2
 
-    create_safe_artifacts(Path(argv[1]), Path(argv[2]), Path(argv[3]), Path(argv[4]), token)
+    create_safe_artifacts(
+        Path(argv[1]), Path(argv[2]), Path(argv[3]), Path(argv[4]), token
+    )
     return 0
 
 

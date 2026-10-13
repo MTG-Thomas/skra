@@ -166,6 +166,10 @@ class TestPasswordContracts:
         assert "password_encrypted" not in fields
         assert "name" in fields
         assert "username" in fields
+        assert "has_totp" in fields
+
+        public = PasswordPublic.model_construct(name="Admin", has_totp=True)
+        assert public.model_dump()["has_totp"] is True
 
     def test_password_reveal_includes_password(self):
         """Test PasswordReveal schema includes password field."""
