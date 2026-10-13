@@ -61,6 +61,14 @@ def test_settings_services_define_both_database_urls():
             assert "SKRA_DATABASE_URL_SYNC:" in block, service
 
 
+def test_test_initializer_runs_required_post_migration_backfills():
+    """The test stack must exercise the same fail-closed init path as production."""
+    init = _service_block(TEST, "init")
+
+    assert 'command: ["python", "-m", "scripts.init_container"]' in init
+    assert 'command: ["alembic", "upgrade", "head"]' not in init
+
+
 def _uncommented(block: str) -> str:
     """Strip full-line and trailing comments so docs cannot trip the checks."""
     return "\n".join(line.split("#", 1)[0] for line in block.splitlines())
@@ -101,6 +109,14 @@ def test_dev_client_probes_vite_health_proxy():
     assert "http://127.0.0.1:8080/health" in code
 
 
+def test_dev_debugger_is_published_only_on_loopback():
+    """debugpy has no authentication and must require a local/tunneled attach."""
+    code = _uncommented(_service_block(DEV, "api"))
+
+    assert '"127.0.0.1:5678:5678"' in code
+    assert re.search(r'^\s*-\s*"?5678:5678"?\s*$', code, re.MULTILINE) is None
+
+
 def test_e2e_api_disables_rate_limiting():
     """The E2E-serving API disables the login rate limiter (refs #16).
 
@@ -121,7 +137,8 @@ def test_client_plaintext_port_requires_explicit_overlay():
     http_code = _uncommented(_service_block(HTTP, "client"))
 
     assert "ports:" not in base_code
-    assert '"${CLIENT_PORT:-8080}:8080"' in dev_code
+    assert "ports: !override" in dev_code
+    assert '"127.0.0.1:8080:8080"' in dev_code
     assert '"${CLIENT_PORT:-8080}:8080"' in http_code
 
 

@@ -6,7 +6,7 @@
 # using the API directly with curl.
 #
 # Usage:
-#   ./quick_demo.sh http://localhost:8080 <jwt_token>
+#   SKRA_TOKEN=<jwt_token> ./quick_demo.sh http://localhost:8080
 #   
 # Or if you're already logged in to the web UI, grab the token from
 # browser dev tools (Application > Local Storage > skra-auth)
@@ -14,11 +14,11 @@
 set -e
 
 API_URL="${1:-http://localhost:8080}"
-TOKEN="${2:-}"
+TOKEN="${SKRA_TOKEN:-}"
 
 if [ -z "$TOKEN" ]; then
     echo "⚠️  No token provided. Trying to use demo mode (requires manual login first)"
-    echo "Usage: $0 <api_url> <jwt_token>"
+    echo "Usage: SKRA_TOKEN=<jwt_token> $0 <api_url>"
     echo ""
     echo "To get your token:"
     echo "  1. Login to the web UI at $API_URL"

@@ -234,10 +234,10 @@ Visit `/docs` in your browser to explore and test endpoints interactively.
 Use API keys for migration scripts:
 
 1. **Create an API key** via the web UI (Settings → API Keys)
-2. **Include in requests** via the `X-API-Key` header:
+2. **Include in requests** as a bearer token in the `Authorization` header:
 
 ```bash
-curl -H "X-API-Key: your-api-key-here" \
+curl -H "Authorization: Bearer your-api-key-here" \
   https://api.example.com/api/organizations/{org_id}/passwords
 ```
 
@@ -277,7 +277,7 @@ def get_all_items(org_id, endpoint):
     while True:
         response = requests.get(
             f"{BASE_URL}/api/organizations/{org_id}/{endpoint}",
-            headers={"X-API-Key": API_KEY},
+            headers={"Authorization": f"Bearer {API_KEY}"},
             params={"limit": limit, "offset": offset}
         )
         data = response.json()
@@ -407,7 +407,7 @@ from concurrent.futures import ThreadPoolExecutor
 def create_password(data):
     response = requests.post(
         f"{BASE_URL}/api/organizations/{org_id}/passwords",
-        headers={"X-API-Key": API_KEY},
+        headers={"Authorization": f"Bearer {API_KEY}"},
         json=data
     )
     response.raise_for_status()

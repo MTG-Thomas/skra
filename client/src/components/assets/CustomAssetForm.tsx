@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod/v4";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem } from "@/components/ui/form";
@@ -21,6 +20,10 @@ import type {
   CustomAssetType,
   FieldDefinition,
 } from "@/hooks/useCustomAssets";
+import {
+  buildAssetValuesSchema,
+  cleanEditableAssetValues,
+} from "@/lib/custom-asset-form";
 
 interface CustomAssetFormProps {
   open: boolean;
@@ -43,64 +46,11 @@ export function CustomAssetForm({
 }: CustomAssetFormProps) {
   // Build dynamic schema based on field definitions
   const { schema, defaultValues } = useMemo(() => {
-    const fieldSchemas: Record<string, z.ZodTypeAny> = {};
     const defaults: Record<string, unknown> = {};
 
     for (const field of assetType.fields) {
       // Skip header fields
       if (field.type === "header") continue;
-
-      let fieldSchema: z.ZodTypeAny;
-
-      switch (field.type) {
-        case "text":
-        case "textbox":
-          fieldSchema = z.string();
-          if (field.required) {
-            fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-          }
-          break;
-
-        case "password":
-        case "totp":
-          // Password/TOTP fields are optional in edit mode (leave blank to keep current)
-          fieldSchema = z.string();
-          if (field.required && mode === "create") {
-            fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-          }
-          break;
-
-        case "number":
-          if (field.required) {
-            fieldSchema = z.number({ message: `${field.name} is required` });
-          } else {
-            fieldSchema = z.union([z.number(), z.null()]);
-          }
-          break;
-
-        case "date":
-          fieldSchema = z.string();
-          if (field.required) {
-            fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-          }
-          break;
-
-        case "checkbox":
-          fieldSchema = z.boolean();
-          break;
-
-        case "select":
-          fieldSchema = z.string();
-          if (field.required) {
-            fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-          }
-          break;
-
-        default:
-          fieldSchema = z.string();
-      }
-
-      fieldSchemas[field.key] = fieldSchema;
 
       // Set default values
       if (initialData?.values[field.key] !== undefined) {
@@ -128,12 +78,8 @@ export function CustomAssetForm({
       }
     }
 
-    const formSchema = z.object({
-      values: z.object(fieldSchemas),
-    });
-
     return {
-      schema: formSchema,
+      schema: buildAssetValuesSchema(assetType.fields, mode),
       defaultValues: {
         values: defaults,
       },
@@ -157,14 +103,7 @@ export function CustomAssetForm({
     // Checklist fields are excluded entirely: their state is owned by the
     // interactive toggles (single-item deltas), so a stale edit form must
     // never overwrite another user's completions with a full snapshot.
-    const cleanedValues: Record<string, unknown> = {};
-    for (const field of assetType.fields) {
-      if (field.type === "header" || field.type === "checklist") continue;
-      const value = data.values[field.key];
-      if (value !== undefined && value !== "" && value !== null) {
-        cleanedValues[field.key] = value;
-      }
-    }
+    const cleanedValues = cleanEditableAssetValues(assetType.fields, data.values);
     onSubmit({ values: cleanedValues });
   };
 

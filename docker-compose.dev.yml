@@ -18,18 +18,18 @@ services:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skradev}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
 
   # Valkey - expose port for direct access (e.g. redis-cli, RedisInsight)
   valkey:
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   # Garage - expose ports for direct access
   garage:
     ports:
-      - "3900:3900"  # S3 API
-      - "3903:3903"  # Admin API (dev only — not needed in production)
+      - "127.0.0.1:3900:3900"  # S3 API
+      - "127.0.0.1:3903:3903"  # Admin API (dev only — not needed in production)
 
   # Init container - build from local Dockerfile + development password default
   init:
@@ -53,8 +53,10 @@ services:
       # Dev stage carries debugpy; default (production) target never does.
       target: dev
     ports:
-      - "8000:8000"
-      - "5678:5678" # debugpy attach (ENABLE_DEBUG=true only)
+      - "127.0.0.1:8000:8000"
+      # Debug Adapter Protocol has no authentication. Use an authenticated
+      # tunnel for remote attachment; never publish it on every host interface.
+      - "127.0.0.1:5678:5678" # debugpy attach (ENABLE_DEBUG=true only)
     environment:
       SKRA_ENVIRONMENT: development
       SKRA_DEBUG: ${SKRA_DEBUG:-true}
@@ -103,9 +105,9 @@ services:
       context: ./client
       dockerfile: Dockerfile.dev
       target: "" # Clear the production target from base compose file
-    # Plain HTTP is published only by explicit non-production overlays.
-    ports:
-      - "${CLIENT_PORT:-8080}:8080"
+    # Compose's override tag replaces the public base binding for local use.
+    ports: !override
+      - "127.0.0.1:8080:8080"
     environment:
       API_URL: http://api:8000
     # node:20-slim has no wget (base file probes nginx): probe the Vite
