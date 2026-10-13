@@ -1039,6 +1039,18 @@ class TestSyncDifferValidation:
         assert len(warnings) == 1
         assert "2 duplicate" in warnings[0]
 
+    def test_validate_large_duplicate_and_malformed_html_inputs(
+        self, mock_state: ExistingState
+    ) -> None:
+        differ = SyncDiffer(mock_state)
+        orgs = [{"name": f"Org {index // 2}"} for index in range(4_000)]
+        docs = [{"name": "Malformed", "content": "<" * 100_000}]
+
+        warnings = differ.validate_data_quality(orgs, docs, [])
+
+        assert any("2000 duplicate" in warning for warning in warnings)
+        assert not any("documents have empty content" in warning for warning in warnings)
+
     def test_validate_no_duplicates_returns_empty(
         self, mock_state: ExistingState
     ) -> None:

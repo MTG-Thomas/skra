@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod/v4";
 import { Layers, ArrowLeft, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,70 +36,10 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getDisplayFieldKey, getDisplayValue } from "@/lib/custom-asset-utils";
-
-// Build dynamic schema based on field definitions
-function buildSchema(fields: FieldDefinition[], mode: "create" | "edit") {
-  const fieldSchemas: Record<string, z.ZodTypeAny> = {};
-
-  for (const field of fields) {
-    if (field.type === "header") continue;
-
-    let fieldSchema: z.ZodTypeAny;
-
-    switch (field.type) {
-      case "text":
-      case "textbox":
-        fieldSchema = z.string();
-        if (field.required) {
-          fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-        }
-        break;
-
-      case "password":
-      case "totp":
-        fieldSchema = z.string();
-        if (field.required && mode === "create") {
-          fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-        }
-        break;
-
-      case "number":
-        if (field.required) {
-          fieldSchema = z.number({ message: `${field.name} is required` });
-        } else {
-          fieldSchema = z.union([z.number(), z.null()]);
-        }
-        break;
-
-      case "date":
-        fieldSchema = z.string();
-        if (field.required) {
-          fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-        }
-        break;
-
-      case "checkbox":
-        fieldSchema = z.boolean();
-        break;
-
-      case "select":
-        fieldSchema = z.string();
-        if (field.required) {
-          fieldSchema = (fieldSchema as z.ZodString).min(1, `${field.name} is required`);
-        }
-        break;
-
-      default:
-        fieldSchema = z.string();
-    }
-
-    fieldSchemas[field.key] = fieldSchema;
-  }
-
-  return z.object({
-    values: z.object(fieldSchemas),
-  });
-}
+import {
+  buildAssetValuesSchema,
+  cleanEditableAssetValues,
+} from "@/lib/custom-asset-form";
 
 // Build default values from asset data
 function buildDefaultValues(
@@ -188,7 +127,7 @@ export function CustomAssetDetailPage() {
       return { schema: null, defaultValues: null };
     }
     return {
-      schema: buildSchema(assetType.fields, "edit"),
+      schema: buildAssetValuesSchema(assetType.fields, "edit"),
       defaultValues: buildDefaultValues(assetType.fields, asset),
     };
   }, [assetType, asset]);
@@ -262,15 +201,7 @@ export function CustomAssetDetailPage() {
     setIsSaving(true);
     try {
       const data = form.getValues();
-      // Clean up values - remove empty strings and nulls for non-required fields
-      const cleanedValues: Record<string, unknown> = {};
-      for (const field of assetType!.fields) {
-        if (field.type === "header") continue;
-        const value = data.values[field.key];
-        if (value !== undefined && value !== "" && value !== null) {
-          cleanedValues[field.key] = value;
-        }
-      }
+      const cleanedValues = cleanEditableAssetValues(assetType!.fields, data.values);
       await updateAsset.mutateAsync({ values: cleanedValues });
       setIsEditing(false);
       toast.success("Asset updated successfully");

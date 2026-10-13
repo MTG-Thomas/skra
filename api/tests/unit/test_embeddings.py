@@ -7,10 +7,12 @@ Uses mocks for OpenAI API calls.
 
 import hashlib
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
 from src.models.contracts.custom_asset import FieldDefinition
+from src.models.orm.embedding_index import EmbeddingIndex
 from src.services.embeddings import EmbeddingsService
 
 
@@ -61,6 +63,171 @@ class TestContentHash:
         expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
         assert result == expected
+
+
+class TestSemanticSearchVisibility:
+    """Semantic search must not trust stale embedding-index state."""
+
+    @pytest.mark.asyncio
+    async def test_search_filters_disabled_stale_index_before_reading_snippet(
+        self,
+    ) -> None:
+        """A delayed cleanup cannot expose a disabled entity's indexed text."""
+        db = AsyncMock()
+        query_result = MagicMock()
+        disabled_id = uuid4()
+        enabled_id = uuid4()
+        org_id = uuid4()
+        disabled_index = MagicMock(
+            entity_type="document",
+            entity_id=disabled_id,
+            organization_id=org_id,
+            searchable_text="retired confidential document",
+        )
+        enabled_index = MagicMock(
+            entity_type="document",
+            entity_id=enabled_id,
+            organization_id=org_id,
+            searchable_text="current document",
+        )
+        query_result.all.return_value = [
+            (disabled_index, "Customer", 0.99),
+            (enabled_index, "Customer", 0.80),
+        ]
+        db.execute.return_value = query_result
+        service = EmbeddingsService(db)
+
+        with (
+            patch.object(
+                service,
+                "generate_embedding",
+                new=AsyncMock(return_value=[0.0] * 1536),
+            ),
+            patch.object(
+                service,
+                "_get_entity_search_metadata",
+                new=AsyncMock(
+                    return_value={
+                        ("document", disabled_id): (False, "Retired"),
+                        ("document", enabled_id): (True, "Current"),
+                    }
+                ),
+            ) as get_metadata,
+        ):
+            results = await service.search(db, "document", [org_id])
+
+        assert [result.entity_id for result in results] == [str(enabled_id)]
+        assert all("retired confidential" not in result.snippet for result in results)
+        get_metadata.assert_awaited_once_with(db, [disabled_index, enabled_index])
+        tie_breaker = db.execute.await_args.args[0]._order_by_clauses[-1]
+        assert tie_breaker.key == "id"
+        assert tie_breaker.table.name == "embedding_index"
+
+    @pytest.mark.asyncio
+    async def test_search_fills_limit_after_filtering_first_candidate_page(self) -> None:
+        """Disabled leading candidates do not crowd out later enabled matches."""
+        db = AsyncMock()
+        org_id = uuid4()
+        disabled_indexes = [
+            MagicMock(
+                entity_type="document",
+                entity_id=uuid4(),
+                organization_id=org_id,
+                searchable_text="retired confidential document",
+            )
+            for _ in range(20)
+        ]
+        enabled_index = MagicMock(
+            entity_type="document",
+            entity_id=uuid4(),
+            organization_id=org_id,
+            searchable_text="current document",
+        )
+        first_page = MagicMock()
+        first_page.all.return_value = [(index, "Customer", 0.99) for index in disabled_indexes]
+        second_page = MagicMock()
+        second_page.all.return_value = [(enabled_index, "Customer", 0.80)]
+        db.execute.side_effect = [first_page, second_page]
+        service = EmbeddingsService(db)
+
+        metadata = {
+            **{("document", index.entity_id): (False, "Retired") for index in disabled_indexes},
+            ("document", enabled_index.entity_id): (True, "Current"),
+        }
+        with (
+            patch.object(
+                service,
+                "generate_embedding",
+                new=AsyncMock(return_value=[0.0] * 1536),
+            ),
+            patch.object(
+                service,
+                "_get_entity_search_metadata",
+                new=AsyncMock(
+                    side_effect=[
+                        {key: value for key, value in metadata.items() if not value[0]},
+                        {("document", enabled_index.entity_id): (True, "Current")},
+                    ]
+                ),
+            ) as get_metadata,
+        ):
+            results = await service.search(db, "document", [org_id], limit=1)
+
+        assert [result.entity_id for result in results] == [str(enabled_index.entity_id)]
+        assert get_metadata.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_entity_search_metadata_batches_each_supported_type(self) -> None:
+        """Metadata lookup uses one query per entity type and fails closed."""
+        db = AsyncMock()
+        ids = {
+            entity_type: uuid4()
+            for entity_type in (
+                "password",
+                "configuration",
+                "location",
+                "document",
+                "custom_asset",
+                "unknown",
+            )
+        }
+        indexes: list[EmbeddingIndex] = [
+            MagicMock(entity_type=entity_type, entity_id=entity_id)
+            for entity_type, entity_id in ids.items()
+        ]
+        names = ["Password", "Configuration", "Location", "Document"]
+        query_results = []
+        for entity_type, name in zip(
+            ("password", "configuration", "location", "document"),
+            names,
+            strict=True,
+        ):
+            result = MagicMock()
+            result.all.return_value = [(ids[entity_type], True, name)]
+            query_results.append(result)
+        custom_asset_result = MagicMock()
+        custom_asset_result.all.return_value = [
+            (ids["custom_asset"], True, {"domain": "example.com"})
+        ]
+        query_results.append(custom_asset_result)
+        db.execute.side_effect = query_results
+        service = EmbeddingsService(db)
+
+        metadata = await service._get_entity_search_metadata(db, indexes)
+
+        assert db.execute.await_count == 5
+        assert metadata[("password", ids["password"])] == (True, "Password")
+        assert metadata[("configuration", ids["configuration"])] == (
+            True,
+            "Configuration",
+        )
+        assert metadata[("location", ids["location"])] == (True, "Location")
+        assert metadata[("document", ids["document"])] == (True, "Document")
+        assert metadata[("custom_asset", ids["custom_asset"])] == (
+            True,
+            "example.com",
+        )
+        assert ("unknown", ids["unknown"]) not in metadata
 
 
 class TestExtractSearchableText:
