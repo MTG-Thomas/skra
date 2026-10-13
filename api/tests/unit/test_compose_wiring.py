@@ -98,6 +98,14 @@ def test_dev_client_probes_vite_health_proxy():
     assert "http://127.0.0.1:8080/health" in code
 
 
+def test_dev_debugger_is_published_only_on_loopback():
+    """debugpy has no authentication and must require a local/tunneled attach."""
+    code = _uncommented(_service_block(DEV, "api"))
+
+    assert '"127.0.0.1:5678:5678"' in code
+    assert re.search(r'^\s*-\s*"?5678:5678"?\s*$', code, re.MULTILINE) is None
+
+
 def test_e2e_api_disables_rate_limiting():
     """The E2E-serving API disables the login rate limiter (refs #16).
 
@@ -112,11 +120,12 @@ def test_e2e_api_disables_rate_limiting():
 
 
 def test_client_port_mapping_is_single_and_unprivileged():
-    """One published client mapping; dev adds none (Compose merges lists)."""
+    """Production publishes one port; development replaces it with loopback."""
     base_code = _uncommented(_service_block(BASE, "client"))
 
     assert base_code.count("CLIENT_PORT") == 1
     assert '"${CLIENT_PORT:-8080}:8080"' in base_code
 
     dev_code = _uncommented(_service_block(DEV, "client"))
-    assert "ports:" not in dev_code
+    assert "ports: !override" in dev_code
+    assert '"127.0.0.1:8080:8080"' in dev_code

@@ -11,6 +11,7 @@ from itglue_migrate.sync_differ import EntityPlan, SyncPlan
 from itglue_migrate.sync_executor import (
     SyncExecutor,
     SyncResult,
+    _is_content_empty,
     _map_org_status_to_is_enabled,
 )
 
@@ -28,6 +29,11 @@ def _resolved_link(
         "target_id": target_id,
         "target_itglue_id": "cfg-1",
     }
+
+
+def test_empty_content_check_handles_malformed_html_linearly() -> None:
+    assert _is_content_empty("<" * 100_000) is False
+    assert _is_content_empty("<p>visible</p>") is False
 
 
 class TestRelationshipResumeAndAudit:
@@ -319,6 +325,30 @@ class TestSyncExecutorDryRun:
         assert result.skipped.get("documents", 0) == 0
         doc_processor.load_document_content.assert_called_once_with("doc-3")
         mock_client.create_document.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_document_load_failure_isolated_to_one_document(
+        self, mock_client: MagicMock
+    ) -> None:
+        plan = SyncPlan()
+        plan.documents.to_create = [
+            {"id": "broken", "name": "Broken Export"},
+            {"id": "good", "name": "Good Export", "content": "plain text"},
+        ]
+        doc_processor = MagicMock()
+        doc_processor.load_document_content.side_effect = OSError("unreadable export")
+
+        executor = SyncExecutor(
+            mock_client,
+            org_id="org-uuid",
+            dry_run=True,
+            doc_processor=doc_processor,
+        )
+        result = await executor.execute(plan)
+
+        assert result.failed.get("documents", 0) == 1
+        assert result.created.get("documents", 0) == 1
+        assert any("Broken Export" in error for error in result.errors)
 
     @pytest.mark.asyncio
     async def test_dry_run_counts_empty_document_with_attachments(
@@ -955,6 +985,41 @@ class TestSyncExecutorRowCreates:
             target_type="custom_asset",
             target_id="asset-uuid-abc",
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "state_fields",
+        [
+            {"archived": "Yes"},
+            {"is_enabled": False},
+        ],
+        ids=["archived", "explicitly-disabled"],
+    )
+    async def test_execute_disabled_row_password_as_disabled(
+        self,
+        mock_client: MagicMock,
+        mock_state: MagicMock,
+        state_fields: dict[str, object],
+    ) -> None:
+        """Disabled ::Row passwords must not be imported as enabled."""
+        plan = SyncPlan()
+        plan.passwords.row_creates = [
+            {
+                "id": "pwd-1",
+                "name": "Archived Row Password",
+                "password": "secret-value",
+                "resource_type": "FlexibleAsset::StructuredData::Row",
+                "resource_id": "asset-123",
+                **state_fields,
+            }
+        ]
+
+        executor = SyncExecutor(
+            mock_client, org_id="org-uuid", dry_run=False, state=mock_state
+        )
+        await executor.execute(plan)
+
+        assert mock_client.create_password.await_args.kwargs["is_enabled"] is False
 
     @pytest.mark.asyncio
     async def test_execute_row_creates_dry_run(

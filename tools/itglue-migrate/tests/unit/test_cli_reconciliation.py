@@ -9,13 +9,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from itglue_migrate.cli import _build_attachment_validation_summary
+from itglue_migrate.cli import (
+    _build_attachment_validation_summary,
+    _build_per_org_plan,
+)
 from itglue_migrate.reconciliation import (
     OrganizationReconciliation,
     ReconciliationReport,
     build_plan_counts,
 )
-from itglue_migrate.sync_differ import SyncPlan
+from itglue_migrate.sync_differ import EntityPlan, SyncPlan
 from itglue_migrate.verification import BROKEN_EMBEDDED_IMAGE
 
 
@@ -25,6 +28,64 @@ def _write_doc_with_image(export: Path, src: str) -> None:
     (doc_dir / "index.html").write_text(
         f"<p>doc</p><img src=\"{src}\">", encoding="utf-8"
     )
+
+
+def test_live_per_org_plan_does_not_retry_global_creation() -> None:
+    org = {"id": "1", "name": "Acme"}
+    global_plan = EntityPlan(to_create=[org])
+
+    live = _build_per_org_plan(org, global_plan, dry_run=False)
+    preview = _build_per_org_plan(org, global_plan, dry_run=True)
+
+    assert live.to_create == []
+    assert live.existing == [org]
+    assert preview.to_create == [org]
+
+
+def test_orphaned_attachment_folders_require_follow_up(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from itglue_migrate import cli
+
+    validation = type(
+        "Validation",
+        (),
+        {"to_dict": lambda self: {"total_orphaned_folders": 2, "orphaned": []}},
+    )()
+    monkeypatch.setattr(cli, "validate_attachments", lambda *_args, **_kwargs: validation)
+    monkeypatch.setattr(cli, "collect_embedded_image_references", lambda *_args: [])
+    monkeypatch.setattr(
+        cli,
+        "verify_embedded_images",
+        lambda *_args: type(
+            "Images",
+            (),
+            {"failures": [], "expected_count": 0, "present_count": 0},
+        )(),
+    )
+
+    summary = _build_attachment_validation_summary(
+        tmp_path,
+        configurations=[],
+        locations=[],
+        documents=[],
+        passwords=[],
+        custom_assets=[],
+    )
+    report = ReconciliationReport.create(export_path=tmp_path, target="all", dry_run=True)
+    report.organizations.append(
+        OrganizationReconciliation(
+            name="Acme",
+            itglue_id="1",
+            bifrost_id="org-1",
+            dry_run=True,
+            entities=build_plan_counts(SyncPlan()),
+            attachment_summary=summary,
+        )
+    )
+
+    assert summary["orphaned_folders"] == 2
+    assert report.summary()["follow_up_required"] is True
 
 
 def test_attachment_summary_carries_broken_image_mismatch(tmp_path: Path) -> None:
