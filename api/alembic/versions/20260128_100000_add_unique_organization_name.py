@@ -21,6 +21,30 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Preserve every pre-constraint organization and its relationships while
+    # deterministically disambiguating duplicate names. The first-created row
+    # retains the original name; later rows receive a stable UUID suffix.
+    op.execute("""
+        WITH ranked AS (
+            SELECT
+                id,
+                name,
+                ROW_NUMBER() OVER (
+                    PARTITION BY name
+                    ORDER BY created_at, id
+                ) AS duplicate_number
+            FROM organizations
+        )
+        UPDATE organizations AS organization
+        SET name = LEFT(ranked.name, 207)
+            || ' (duplicate '
+            || organization.id::text
+            || ')'
+        FROM ranked
+        WHERE organization.id = ranked.id
+          AND ranked.duplicate_number > 1
+    """)
+
     # Drop the existing non-unique index
     op.drop_index("ix_organizations_name", table_name="organizations")
 

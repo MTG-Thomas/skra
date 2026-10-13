@@ -95,7 +95,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["alembic", "upgrade", "head"]
+    command: ["python", "-m", "scripts.init_container"]
 
   # FastAPI Application (Test) - Only started for E2E tests
   api:
