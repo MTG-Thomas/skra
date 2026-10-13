@@ -123,7 +123,11 @@ class TestSyncDifferOrganizations:
 
         csv_orgs = [
             {"id": "123", "name": "Existing Org"},
-            {"id": "456", "name": "New Org"},
+            {
+                "id": "456",
+                "name": "New Org",
+                "organization_status": "Inactive",
+            },
         ]
 
         differ = SyncDiffer(state)
@@ -131,6 +135,7 @@ class TestSyncDifferOrganizations:
 
         assert len(plan.to_create) == 1
         assert plan.to_create[0]["name"] == "New Org"
+        assert plan.to_create[0]["organization_status"] == "Inactive"
         assert plan.to_create[0]["metadata"]["itglue_id"] == "456"
         assert len(plan.existing) == 1
         assert plan.existing[0]["name"] == "Existing Org"
@@ -880,6 +885,7 @@ class TestSyncDifferDuplicateDetection:
         assert len(plan.skipped) == 1
         assert plan.skipped[0]["name"] == "ACME INC"
         assert plan.skipped[0]["itglue_id"] == "2"
+        assert plan.skipped[0]["source_index"] == 1
         assert plan.skipped[0]["reason"] == "duplicate_name"
 
     def test_diff_organizations_skips_multiple_duplicates(self) -> None:
