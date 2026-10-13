@@ -957,6 +957,41 @@ class TestSyncExecutorRowCreates:
         )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "state_fields",
+        [
+            {"archived": "Yes"},
+            {"is_enabled": False},
+        ],
+        ids=["archived", "explicitly-disabled"],
+    )
+    async def test_execute_disabled_row_password_as_disabled(
+        self,
+        mock_client: MagicMock,
+        mock_state: MagicMock,
+        state_fields: dict[str, object],
+    ) -> None:
+        """Disabled ::Row passwords must not be imported as enabled."""
+        plan = SyncPlan()
+        plan.passwords.row_creates = [
+            {
+                "id": "pwd-1",
+                "name": "Archived Row Password",
+                "password": "secret-value",
+                "resource_type": "FlexibleAsset::StructuredData::Row",
+                "resource_id": "asset-123",
+                **state_fields,
+            }
+        ]
+
+        executor = SyncExecutor(
+            mock_client, org_id="org-uuid", dry_run=False, state=mock_state
+        )
+        await executor.execute(plan)
+
+        assert mock_client.create_password.await_args.kwargs["is_enabled"] is False
+
+    @pytest.mark.asyncio
     async def test_execute_row_creates_dry_run(
         self, mock_client: MagicMock, mock_state: MagicMock
     ) -> None:
