@@ -148,6 +148,7 @@ jobs:
             scripts/deploy-test-vm.sh \
             docker-compose.yml \
             docker-compose.test-vm.yml \
+            docker-compose.http.yml \
             docker-compose.ssl.yml
           {
             printf 'DEPLOY_SHA=%q\n' "${DEPLOY_SHA}"

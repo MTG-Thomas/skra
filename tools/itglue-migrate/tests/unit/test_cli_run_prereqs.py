@@ -63,6 +63,58 @@ def test_run_requires_token_naming_skra_first(tmp_path, monkeypatch):
     )
 
 
+def test_run_environment_url_does_not_override_reviewed_plan(
+    tmp_path, monkeypatch
+):
+    """Ambient URL configuration cannot redirect a reviewed migration plan."""
+    _clean_api_env(monkeypatch)
+    plan = _plan_file(tmp_path, api_url="https://reviewed.example")
+    runner = CliRunner()
+
+    with patch.object(cli, "_execute_migration", new=AsyncMock(return_value=0)) as execute:
+        result = runner.invoke(
+            cli.app,
+            ["run", "--all", "--dry-run", "--plan", str(plan)],
+            env={
+                "SKRA_API_URL": "https://ambient-attacker.example",
+                "SKRA_API_TOKEN": "test-token",
+            },
+        )
+
+    assert result.exit_code == 0
+    assert execute.await_args is not None
+    assert execute.await_args.kwargs["api_url"] == "https://reviewed.example"
+
+
+def test_run_explicit_url_can_override_reviewed_plan(tmp_path, monkeypatch):
+    """A visible command-line choice can intentionally override the plan target."""
+    _clean_api_env(monkeypatch)
+    plan = _plan_file(tmp_path, api_url="https://reviewed.example")
+    runner = CliRunner()
+
+    with patch.object(cli, "_execute_migration", new=AsyncMock(return_value=0)) as execute:
+        result = runner.invoke(
+            cli.app,
+            [
+                "run",
+                "--all",
+                "--dry-run",
+                "--plan",
+                str(plan),
+                "--api-url",
+                "https://explicit.example",
+            ],
+            env={
+                "SKRA_API_URL": "https://ambient-attacker.example",
+                "SKRA_API_TOKEN": "test-token",
+            },
+        )
+
+    assert result.exit_code == 0
+    assert execute.await_args is not None
+    assert execute.await_args.kwargs["api_url"] == "https://explicit.example"
+
+
 def _client_factory(client: MagicMock) -> MagicMock:
     factory = MagicMock()
     context = MagicMock()

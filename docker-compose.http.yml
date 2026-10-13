@@ -1,0 +1,10 @@
+# Explicit plaintext deployment override.
+#
+# Do not combine this file with docker-compose.ssl.yml. Production TLS
+# deployments intentionally keep the client reachable only on the Compose
+# network so port 8080 cannot bypass the SSL reverse proxy.
+
+services:
+  client:
+    ports:
+      - "${CLIENT_PORT:-8080}:8080"

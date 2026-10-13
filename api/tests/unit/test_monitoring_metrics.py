@@ -10,12 +10,22 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+from fastapi.routing import APIRoute
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import Response
 
 from src.routers import monitoring
 from src.routers.monitoring import detailed_health_check, prometheus_metrics, status_dashboard
+
+
+def _admin() -> SimpleNamespace:
+    return SimpleNamespace(
+        user_id=uuid4(),
+        email="admin@example.com",
+        role="administrator",
+        is_platform_admin=True,
+    )
 
 
 def _db_failures() -> AsyncMock:
@@ -35,7 +45,7 @@ def _db_healthy(user_count: int = 3) -> AsyncMock:
 
 async def test_metrics_use_renamed_series():
     """All series carry the skra_ prefix; no legacy names remain."""
-    body = await prometheus_metrics(_db_healthy())
+    body = await prometheus_metrics(_db_healthy(), _admin())
 
     for series in (
         "skra_info",
@@ -49,7 +59,7 @@ async def test_metrics_use_renamed_series():
 
 async def test_metrics_report_healthy_database():
     """A working database reports connected=1 and the real user count."""
-    body = await prometheus_metrics(_db_healthy(user_count=7))
+    body = await prometheus_metrics(_db_healthy(user_count=7), _admin())
 
     assert "skra_database_connected 1" in body
     assert "skra_users_total 7" in body
@@ -59,14 +69,14 @@ async def test_metrics_include_request_count_when_nonzero(monkeypatch):
     """The request counter series appears once traffic has been served."""
     monkeypatch.setattr(monitoring, "_request_count", 42)
 
-    body = await prometheus_metrics(_db_healthy())
+    body = await prometheus_metrics(_db_healthy(), _admin())
 
     assert "skra_requests_total 42" in body
 
 
 async def test_metrics_report_real_uptime_as_gauge():
     """Uptime is process age in seconds, not a hardcoded placeholder."""
-    body = await prometheus_metrics(_db_healthy())
+    body = await prometheus_metrics(_db_healthy(), _admin())
 
     assert "# TYPE skra_uptime_seconds gauge" in body
     line = next(line for line in body.splitlines() if line.startswith("skra_uptime_seconds "))
@@ -85,13 +95,13 @@ async def test_request_metrics_middleware_tracks_requests(monkeypatch):
     response = await middleware.dispatch(request, call_next)
 
     assert response.status_code == 200
-    body = await prometheus_metrics(_db_healthy())
+    body = await prometheus_metrics(_db_healthy(), _admin())
     assert "skra_requests_total 1" in body
 
 
 async def test_metrics_degrade_gracefully_without_database():
     """A down database reports connected=0 and zero users, still 200-shape."""
-    body = await prometheus_metrics(_db_failures())
+    body = await prometheus_metrics(_db_failures(), _admin())
 
     assert "skra_database_connected 0" in body
     assert "skra_users_total 0" in body
@@ -102,7 +112,7 @@ async def test_metrics_include_last_request_timestamp_once_served(monkeypatch):
     """The last-request series appears once traffic has been served."""
     monkeypatch.setattr(monitoring, "_last_request_time", 1700000000.5)
 
-    body = await prometheus_metrics(_db_healthy())
+    body = await prometheus_metrics(_db_healthy(), _admin())
 
     assert "skra_last_request_timestamp 1700000000.500" in body
 
@@ -111,7 +121,7 @@ async def test_status_dashboard_hides_error_details():
     """Dashboard stats failures return generic text, never exception details."""
     db = AsyncMock()
     db.execute.side_effect = Exception("db secret detail")
-    user = SimpleNamespace(user_id=uuid4(), email="admin@example.com", role="administrator")
+    user = _admin()
 
     with patch(
         "src.services.file_storage.FileStorageService",
@@ -133,7 +143,7 @@ async def test_detailed_health_check_hides_error_details():
         "src.core.cache.get_redis",
         side_effect=Exception("redis secret detail"),
     ):
-        response = await detailed_health_check(db)
+        response = await detailed_health_check(db, _admin())
 
     assert response.status_code == 503
     body = json.loads(response.body)
@@ -145,3 +155,22 @@ async def test_detailed_health_check_hides_error_details():
     assert body["checks"]["redis"]["status"] == "degraded"
     assert body["checks"]["redis"]["error"] == "Redis health check failed"
     assert "secret detail" not in json.dumps(body)
+
+
+def test_sensitive_monitoring_routes_require_admin_dependency() -> None:
+    """Every monitoring-data endpoint resolves the shared admin dependency."""
+    sensitive_paths = {"/metrics", "/health/detailed", "/status"}
+    routes = {
+        route.path: route
+        for route in monitoring.router.routes
+        if isinstance(route, APIRoute) and route.path in sensitive_paths
+    }
+
+    assert set(routes) == sensitive_paths
+    for route in routes.values():
+        dependency_names = {
+            dependency.call.__name__
+            for dependency in route.dependant.dependencies
+            if dependency.call is not None
+        }
+        assert "get_current_admin" in dependency_names
