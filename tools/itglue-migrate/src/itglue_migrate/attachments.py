@@ -49,6 +49,28 @@ class DocumentNotFoundError(AttachmentScannerError):
         super().__init__(f"Document folder not found for ID {doc_id} in {export_path}")
 
 
+class InvalidAttachmentPathError(AttachmentScannerError):
+    """Raised when an entity path component could escape its attachment scope."""
+
+    def __init__(self, component_name: str, value: str) -> None:
+        self.component_name = component_name
+        self.value = value
+        super().__init__(f"Invalid attachment {component_name}: {value!r}")
+
+
+def _validate_attachment_path_component(component_name: str, value: str) -> str:
+    """Validate a single attachment path component and return it unchanged."""
+    if (
+        not value.strip()
+        or value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or "\x00" in value
+    ):
+        raise InvalidAttachmentPathError(component_name, value)
+    return value
+
+
 # Size formatting constants
 SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
 
@@ -620,21 +642,36 @@ class AttachmentScanner:
             ExportNotFoundError: If the export path does not exist.
         """
         self._validate_export_path(export_path)
+        entity_type = _validate_attachment_path_component("entity type", entity_type)
+        entity_id = _validate_attachment_path_component("entity ID", str(entity_id))
 
         files: list[Path] = []
 
         # Check standard attachments directory
-        entity_dir = export_path / "attachments" / entity_type / str(entity_id)
+        attachments_dir = (export_path / "attachments").resolve()
+        entity_dir = export_path / "attachments" / entity_type / entity_id
         if entity_dir.exists() and entity_dir.is_dir():
-            files.extend(self._scan_directory_files(entity_dir))
+            resolved_entity_dir = entity_dir.resolve()
+            if not resolved_entity_dir.is_relative_to(attachments_dir):
+                raise InvalidAttachmentPathError("entity directory", str(entity_dir))
+            files.extend(
+                file_path
+                for file_path in self._scan_directory_files(entity_dir)
+                if file_path.resolve().is_relative_to(resolved_entity_dir)
+            )
 
         # Also check floor plans directory for this entity type
         # IT Glue exports floor plans as {entity_type}-floor-plans-photos/{id}-filename.ext
         floor_plans_dir = export_path / f"{entity_type}-floor-plans-photos"
         if floor_plans_dir.exists() and floor_plans_dir.is_dir():
             entity_id_prefix = f"{entity_id}-"
+            resolved_floor_plans_dir = floor_plans_dir.resolve()
             for item in sorted(floor_plans_dir.iterdir(), key=lambda path: path.name):
-                if item.is_file() and item.name.startswith(entity_id_prefix):
+                if (
+                    item.is_file()
+                    and item.name.startswith(entity_id_prefix)
+                    and item.resolve().is_relative_to(resolved_floor_plans_dir)
+                ):
                     files.append(item)
 
         return sorted([f.resolve() for f in files])
