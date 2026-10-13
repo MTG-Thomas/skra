@@ -6,7 +6,7 @@ Creates realistic organizations, configurations, passwords, documents, etc.
 for demonstration purposes.
 
 Usage:
-    python generate_demo_data.py --api-url http://localhost:8080 --token <jwt-token>
+    SKRA_TOKEN=<jwt-token> python generate_demo_data.py --api-url http://localhost:8080
     
 Or run directly against the database:
     python generate_demo_data.py --database-url postgresql://...
@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
 import string
 from datetime import UTC, datetime, timedelta
@@ -495,12 +496,13 @@ class DemoDataGenerator:
 async def main():
     parser = argparse.ArgumentParser(description="Generate demo data for Skra")
     parser.add_argument("--api-url", default="http://localhost:8080", help="API base URL")
-    parser.add_argument("--token", help="JWT auth token (or set SKRA_TOKEN env var)")
     parser.add_argument("--cleanup", action="store_true", help="Remove demo data after creation")
     
     args = parser.parse_args()
     
-    token = args.token or "demo-token"
+    token = os.environ.get("SKRA_TOKEN")
+    if not token:
+        parser.error("SKRA_TOKEN must contain a JWT authentication token")
     
     async with DemoDataGenerator(args.api_url, token) as generator:
         stats = await generator.generate_all()

@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const e2ePort = process.env.E2E_PORT || '5173';
+if (!/^\d{1,5}$/.test(e2ePort) || Number(e2ePort) < 1 || Number(e2ePort) > 65535) {
+  throw new Error('E2E_PORT must be a decimal TCP port between 1 and 65535');
+}
 const e2eBaseURL = process.env.E2E_BASE_URL || `http://localhost:${e2ePort}`;
 
 /**

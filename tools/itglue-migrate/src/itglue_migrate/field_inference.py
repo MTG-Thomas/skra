@@ -23,6 +23,7 @@ FieldType = Literal[
     "password",
     "totp",
 ]
+SecretFieldType = Literal["password", "totp"]
 
 # Pattern to detect HTML tags in field values
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -62,6 +63,19 @@ class FieldDefinition(_FieldDefinitionRequired, total=False):
 # Patterns for column name detection (case-insensitive)
 PASSWORD_PATTERNS = re.compile(r"password|secret|key|credential|token", re.IGNORECASE)
 TOTP_PATTERNS = re.compile(r"otp|totp|mfa|2fa|two.?factor", re.IGNORECASE)
+
+
+def infer_secret_field_type(column_name: str) -> SecretFieldType | None:
+    """Infer secret-only field types from a column name.
+
+    TOTP indicators take precedence because those column names commonly also
+    contain words such as ``secret`` or ``key``.
+    """
+    if TOTP_PATTERNS.search(column_name):
+        return "totp"
+    if PASSWORD_PATTERNS.search(column_name):
+        return "password"
+    return None
 
 # Date patterns for value detection
 DATE_PATTERNS = [
@@ -291,13 +305,9 @@ class FieldInferrer:
         Returns:
             Inferred field type.
         """
-        # Check column name patterns first (highest priority)
-        # TOTP must be checked before password (because TOTP columns often contain "secret")
-        if TOTP_PATTERNS.search(column_name):
-            return "totp"
-
-        if PASSWORD_PATTERNS.search(column_name):
-            return "password"
+        # Check column name patterns first (highest priority).
+        if secret_type := infer_secret_field_type(column_name):
+            return secret_type
 
         # Filter to non-empty values for content analysis
         non_empty_values = [v for v in values if v is not None and v.strip()]
