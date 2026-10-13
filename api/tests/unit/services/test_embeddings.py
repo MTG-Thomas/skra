@@ -1,6 +1,6 @@
 """Tests for embeddings service with new config loading."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -52,10 +52,17 @@ class TestUnknownEntityType:
         service = EmbeddingsService(AsyncMock())
 
         with pytest.raises(ValueError, match="Unknown entity type"):
-            await service._get_entity_and_org(AsyncMock(), "bogus", uuid4())
+            await service._get_entity_and_org(
+                AsyncMock(),
+                "bogus",  # pyright: ignore[reportArgumentType]
+                uuid4(),
+            )
 
-    async def test_get_entity_name_unknown_type_returns_none(self):
-        """Naming an unknown entity type returns None."""
-        service = EmbeddingsService(AsyncMock())
+    async def test_get_entity_search_metadata_unknown_type_returns_empty(self):
+        """Metadata lookup ignores unknown entity types without querying."""
+        db = AsyncMock()
+        service = EmbeddingsService(db)
+        index = MagicMock(entity_type="bogus", entity_id=uuid4())
 
-        assert await service._get_entity_name(AsyncMock(), "bogus", uuid4()) is None
+        assert await service._get_entity_search_metadata(db, [index]) == {}
+        db.execute.assert_not_awaited()
