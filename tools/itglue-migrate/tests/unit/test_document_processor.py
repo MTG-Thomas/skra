@@ -483,6 +483,50 @@ class TestResolveImagePath:
             doc_folder, "data:image/png;base64,..."
         ) is None
 
+    @pytest.mark.parametrize(
+        "malicious_src",
+        [
+            "../operator-secret.txt",
+            "%2e%2e/operator-secret.txt",
+            "..\\operator-secret.txt",
+        ],
+    )
+    def test_resolve_rejects_paths_outside_document_folder(
+        self,
+        processor: DocumentProcessor,
+        temp_dir: Path,
+        malicious_src: str,
+    ) -> None:
+        """Document HTML cannot select a local file outside its folder."""
+        doc_folder = temp_dir / "doc"
+        doc_folder.mkdir()
+        (temp_dir / "operator-secret.txt").write_text("secret", encoding="utf-8")
+
+        assert processor._resolve_image_path(doc_folder, malicious_src) is None
+
+    def test_resolve_rejects_absolute_local_path(
+        self, processor: DocumentProcessor, temp_dir: Path
+    ) -> None:
+        """Absolute image sources are scoped to the document folder, not the host."""
+        doc_folder = temp_dir / "doc"
+        doc_folder.mkdir()
+        outside_file = temp_dir / "operator-secret.txt"
+        outside_file.write_text("secret", encoding="utf-8")
+
+        assert processor._resolve_image_path(doc_folder, str(outside_file)) is None
+
+    def test_resolve_rejects_symlink_outside_document_folder(
+        self, processor: DocumentProcessor, temp_dir: Path
+    ) -> None:
+        """A crafted document symlink cannot escape the export document scope."""
+        doc_folder = temp_dir / "doc"
+        doc_folder.mkdir()
+        outside_file = temp_dir / "operator-secret.txt"
+        outside_file.write_text("secret", encoding="utf-8")
+        (doc_folder / "linked-secret.txt").symlink_to(outside_file)
+
+        assert processor._resolve_image_path(doc_folder, "linked-secret.txt") is None
+
 
 class TestTransformHtml:
     """Test _transform_html method."""
