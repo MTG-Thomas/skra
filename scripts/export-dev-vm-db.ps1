@@ -4,7 +4,8 @@ param(
     [string]$DeployRoot = "/home/thomas/deploy/skra-main",
     [string]$ComposeProject = "skra-dev",
     [string]$OutputDirectory = ".migration-runs/azure-neon-proof",
-    [string]$OutputPrefix = "skra-dev"
+    [string]$OutputPrefix = "skra-dev",
+    [string]$KnownHostsFile = (Join-Path $HOME ".ssh/known_hosts")
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,11 +22,18 @@ $remoteStats = "/tmp/$OutputPrefix-$timestamp-stats.txt"
 $localDump = Join-Path $localOutput "$OutputPrefix.dump"
 $localStats = Join-Path $localOutput "$OutputPrefix-stats.txt"
 $compose = "docker compose -p '$ComposeProject' -f docker-compose.yml -f docker-compose.test-vm.yml -f docker-compose.ssl.yml"
+
+# Host enrollment is intentionally not automated here. Verify the server's
+# fingerprint through a trusted channel before adding it to this file.
+if (-not (Test-Path -LiteralPath $KnownHostsFile -PathType Leaf)) {
+    throw "Known-hosts file not found: $KnownHostsFile. Verify and enroll the VM host key before exporting."
+}
+$resolvedKnownHosts = (Resolve-Path -LiteralPath $KnownHostsFile).Path
 $sshOptions = @(
     "-o", "BatchMode=yes",
     "-o", "ConnectTimeout=10",
-    "-o", "StrictHostKeyChecking=no",
-    "-o", "UserKnownHostsFile=NUL"
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "UserKnownHostsFile=$resolvedKnownHosts"
 )
 
 $sshTarget = "$VmUser@$VmHost"
