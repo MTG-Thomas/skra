@@ -133,3 +133,14 @@ def test_backfill_entrypoint_registers_related_mappers() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_orm_package_exports_user_favorite_for_mapper_registration() -> None:
+    """Keep the package-level mapper import covered by the primary test run."""
+    from sqlalchemy.orm import configure_mappers
+
+    from src.models.orm import UserFavorite
+
+    configure_mappers()
+
+    assert UserFavorite.__tablename__ == "user_favorites"
