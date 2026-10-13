@@ -207,6 +207,7 @@ class SyncDiffer:
             else:
                 plan.to_create.append({
                     "name": org_name,
+                    "organization_status": org.get("organization_status"),
                     "metadata": {"itglue_id": itglue_id},
                 })
 
