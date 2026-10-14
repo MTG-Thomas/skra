@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from itglue_migrate.field_inference import infer_secret_field_type
+
 # Known core entity CSV filenames
 CORE_ENTITY_FILES = frozenset(
     [
@@ -34,7 +36,9 @@ NUMBER_PATTERN = re.compile(r"^-?\d+(?:\.\d+)?$")
 CHECKBOX_VALUES = frozenset(["true", "false", "yes", "no", "1", "0"])
 
 # Field type literal
-FieldType = Literal["text", "textbox", "number", "date", "checkbox", "select"]
+FieldType = Literal[
+    "text", "textbox", "number", "date", "checkbox", "select", "password", "totp"
+]
 
 
 def slugify_to_display_name(slug: str) -> str:
@@ -509,8 +513,10 @@ class CSVParser:
             values = [self._normalize_value(row.get(header)) for row in rows]
             non_empty_values = [v for v in values if v]
 
-            # Detect field type
-            field_type = self._detect_field_type(values)
+            # Secret-like columns must be declared as encrypted field types.
+            # Value-only inference would otherwise import their contents into
+            # ordinary public text fields.
+            field_type = infer_secret_field_type(header) or self._detect_field_type(values)
 
             # Determine if required (all rows have values)
             required = len(non_empty_values) == len(rows) and len(rows) > 0

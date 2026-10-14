@@ -126,6 +126,24 @@ def _resolve_org_uuid(
     return org_uuid
 
 
+def _exclude_skipped_organizations(
+    organizations: list[dict[str, Any]],
+    org_plan: EntityPlan,
+) -> list[dict[str, Any]]:
+    """Remove exact source rows the organization differ marked as skipped."""
+    skipped_indexes = {
+        item["source_index"]
+        for item in org_plan.skipped
+        if item.get("reason") == "duplicate_name"
+        and isinstance(item.get("source_index"), int)
+    }
+    return [
+        organization
+        for source_index, organization in enumerate(organizations)
+        if source_index not in skipped_indexes
+    ]
+
+
 def _validate_export_path(export_path: Path) -> dict[str, Any]:
     """Validate the export path exists and has expected structure.
 
@@ -302,6 +320,17 @@ def _filter_org_records(
                 org_custom_assets.append(asset)
 
     return org_configs, org_locations, org_documents, org_passwords, org_custom_assets
+
+
+def _build_per_org_plan(org: dict[str, Any], org_plan: EntityPlan, *, dry_run: bool) -> EntityPlan:
+    """Describe an org in per-org reporting without recreating it live."""
+    plan = EntityPlan()
+    org_name = org.get("name")
+    if dry_run and any(item.get("name") == org_name for item in org_plan.to_create):
+        plan.to_create = [org]
+    else:
+        plan.existing = [org]
+    return plan
 
 
 def _match_organizations(
@@ -2267,6 +2296,7 @@ def _display_dry_run_summary(plan_data: dict[str, Any], target_org: str | None) 
 
 @app.command()
 def run(
+    ctx: typer.Context,
     plan: Annotated[
         Path,
         typer.Option(
@@ -2426,8 +2456,14 @@ def run(
         )
         raise typer.Exit(1)
 
-    # Determine API URL (command line overrides plan)
-    effective_api_url = api_url or plan_data.get("api_url")
+    # Only an explicit command-line option may override the reviewed plan
+    # target. Ambient environment configuration is a fallback when the plan
+    # itself has no API URL.
+    api_url_source = ctx.get_parameter_source("api_url")
+    if api_url_source is not None and api_url_source.name == "COMMANDLINE":
+        effective_api_url = api_url
+    else:
+        effective_api_url = plan_data.get("api_url") or api_url
     if not effective_api_url:
         error_console.print(
             "[red]Error:[/red] No API URL specified. Use --api-url, set SKRA_API_URL (or legacy BIFROST_API_URL), or ensure plan file has api_url."
@@ -2739,6 +2775,7 @@ def _build_attachment_validation_summary(
     image_references = collect_embedded_image_references(export_path, documents)
     image_validation = verify_embedded_images(image_references)
     summary = validation.to_dict()
+    summary["orphaned_folders"] = int(summary.get("total_orphaned_folders", 0) or 0)
     summary.pop("orphaned", None)
     summary.pop("total_orphaned_folders", None)
     summary["orphaned_scope"] = "not_reported_per_org"
@@ -2834,6 +2871,7 @@ async def _run_sync(
         # Diff organizations to find which need to be created
         org_differ = SyncDiffer(all_orgs_state)
         org_plan = org_differ.diff_organizations(orgs_to_sync)
+        orgs_to_sync = _exclude_skipped_organizations(orgs_to_sync, org_plan)
 
         # Display org plan if any need to be created
         if org_plan.to_create:
@@ -2997,11 +3035,7 @@ async def _run_sync(
                 console.print(f"  [dim]CSV types NOT in API (will create): {sorted(missing_in_api)}[/dim]")
 
             # Build organization plan for this specific org
-            this_org_plan = EntityPlan()
-            if any(o.get("name") == org_name for o in org_plan.to_create):
-                this_org_plan.to_create = [org]
-            elif any(o.get("name") == org_name for o in org_plan.existing):
-                this_org_plan.existing = [org]
+            this_org_plan = _build_per_org_plan(org, org_plan, dry_run=dry_run)
 
             plan = SyncPlan(
                 organizations=this_org_plan,

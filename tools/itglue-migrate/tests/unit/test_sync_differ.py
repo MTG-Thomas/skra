@@ -123,7 +123,11 @@ class TestSyncDifferOrganizations:
 
         csv_orgs = [
             {"id": "123", "name": "Existing Org"},
-            {"id": "456", "name": "New Org"},
+            {
+                "id": "456",
+                "name": "New Org",
+                "organization_status": "Inactive",
+            },
         ]
 
         differ = SyncDiffer(state)
@@ -131,6 +135,7 @@ class TestSyncDifferOrganizations:
 
         assert len(plan.to_create) == 1
         assert plan.to_create[0]["name"] == "New Org"
+        assert plan.to_create[0]["organization_status"] == "Inactive"
         assert plan.to_create[0]["metadata"]["itglue_id"] == "456"
         assert len(plan.existing) == 1
         assert plan.existing[0]["name"] == "Existing Org"
@@ -880,6 +885,7 @@ class TestSyncDifferDuplicateDetection:
         assert len(plan.skipped) == 1
         assert plan.skipped[0]["name"] == "ACME INC"
         assert plan.skipped[0]["itglue_id"] == "2"
+        assert plan.skipped[0]["source_index"] == 1
         assert plan.skipped[0]["reason"] == "duplicate_name"
 
     def test_diff_organizations_skips_multiple_duplicates(self) -> None:
@@ -1038,6 +1044,18 @@ class TestSyncDifferValidation:
 
         assert len(warnings) == 1
         assert "2 duplicate" in warnings[0]
+
+    def test_validate_large_duplicate_and_malformed_html_inputs(
+        self, mock_state: ExistingState
+    ) -> None:
+        differ = SyncDiffer(mock_state)
+        orgs = [{"name": f"Org {index // 2}"} for index in range(4_000)]
+        docs = [{"name": "Malformed", "content": "<" * 100_000}]
+
+        warnings = differ.validate_data_quality(orgs, docs, [])
+
+        assert any("2000 duplicate" in warning for warning in warnings)
+        assert not any("documents have empty content" in warning for warning in warnings)
 
     def test_validate_no_duplicates_returns_empty(
         self, mock_state: ExistingState

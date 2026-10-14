@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from itglue_migrate.api_client import APIError
 from itglue_migrate.document_processor import DocumentProcessor
+from itglue_migrate.field_inference import column_name_to_key
+from itglue_migrate.html_text import has_visible_html_text
 from itglue_migrate.progress import Phase, ProgressReporter, SimpleProgressReporter
 from itglue_migrate.relationship_audit import (
     RelationshipAuditResult,
@@ -41,8 +42,7 @@ def _is_content_empty(html_content: str) -> bool:
     """
     if not html_content:
         return True
-    text = re.sub(r"<[^>]+>", "", html_content)
-    return not text.strip()
+    return not has_visible_html_text(html_content)
 
 
 def _map_org_status_to_is_enabled(status: str | None) -> bool:
@@ -265,6 +265,13 @@ class SyncExecutor:
             return 0
 
         if not self.doc_processor or not self.export_path:
+            return 0
+
+        if not itglue_id.strip():
+            logger.warning(
+                "Skipping attachment upload for %s: source entity ID is empty",
+                entity_type,
+            )
             return 0
 
         try:
@@ -654,7 +661,16 @@ class SyncExecutor:
 
             # If CSV content is empty and we have a doc_processor, try loading from file
             if not raw_content and self.doc_processor:
-                loaded_content = self.doc_processor.load_document_content(itglue_id)
+                try:
+                    loaded_content = self.doc_processor.load_document_content(itglue_id)
+                except Exception as e:
+                    result.failed["documents"] = result.failed.get("documents", 0) + 1
+                    result.errors.append(f"Document '{doc_name}': {e}")
+                    logger.warning("Failed to load document '%s': %s", doc_name, e)
+                    if self.reporter:
+                        self.reporter.update_progress(failed=1)
+                        self.reporter.error(f"Document '{doc_name}': {e}")
+                    continue
                 if loaded_content:
                     raw_content = loaded_content
 
@@ -1379,12 +1395,6 @@ class SyncExecutor:
                 password_value = entity.get("password", "")
                 password_name = entity.get("name", "")
 
-                if self.dry_run:
-                    result.created["cell_writes"] = (
-                        result.created.get("cell_writes", 0) + 1
-                    )
-                    continue
-
                 # Look up the custom asset UUID from ITGlue resource_id
                 # Check result.id_map first (assets created this sync run)
                 # Then fall back to state (assets that already existed)
@@ -1419,10 +1429,41 @@ class SyncExecutor:
                     )
                     continue
 
-                # Determine which field to update based on password name
-                # The password name typically matches the field name in IT Glue
-                # We use the password name as the field key
-                field_key = password_name
+                # Resolve the actual schema field and fail closed unless it is
+                # explicitly encrypted by the API. This prevents a stale or
+                # pre-existing public text field from receiving plaintext.
+                type_data = self.state.custom_asset_types.get(type_id)
+                requested_key = column_name_to_key(password_name)
+                field_key = ""
+                field_type = ""
+                if type_data:
+                    for field_def in type_data.get("fields", []):
+                        candidate_key = str(field_def.get("key", ""))
+                        candidate_name = str(field_def.get("name", ""))
+                        if requested_key in {
+                            column_name_to_key(candidate_key),
+                            column_name_to_key(candidate_name),
+                        }:
+                            field_key = candidate_key
+                            field_type = str(field_def.get("type", "")).lower()
+                            break
+
+                if not field_key or field_type not in {"password", "totp"}:
+                    result.skipped["cell_writes"] = (
+                        result.skipped.get("cell_writes", 0) + 1
+                    )
+                    logger.warning(
+                        "Cell write skipped: target field is missing or not a "
+                        "password/totp field for asset %s",
+                        asset_uuid,
+                    )
+                    continue
+
+                if self.dry_run:
+                    result.created["cell_writes"] = (
+                        result.created.get("cell_writes", 0) + 1
+                    )
+                    continue
 
                 # Update the custom asset with the password value
                 await self.client.update_custom_asset(

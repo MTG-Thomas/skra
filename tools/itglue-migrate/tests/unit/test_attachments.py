@@ -15,6 +15,7 @@ from itglue_migrate.attachments import (
     DocumentNotFoundError,
     EntityAttachmentStats,
     ExportNotFoundError,
+    InvalidAttachmentPathError,
     format_size,
     validate_attachments,
 )
@@ -453,6 +454,40 @@ class TestGetEntityAttachments:
         # Verify sorted order
         names = [f.name for f in files]
         assert names == sorted(names)
+
+    @pytest.mark.parametrize(
+        ("entity_type", "entity_id"),
+        [
+            ("configurations", ""),
+            ("configurations", "../passwords/123"),
+            ("../passwords", "123"),
+            ("configurations", "..\\passwords\\123"),
+        ],
+    )
+    def test_get_entity_attachments_rejects_unscoped_paths(
+        self,
+        scanner: AttachmentScanner,
+        temp_dir: Path,
+        entity_type: str,
+        entity_id: str,
+    ) -> None:
+        """Empty and traversing components cannot broaden attachment scans."""
+        (temp_dir / "attachments").mkdir()
+
+        with pytest.raises(InvalidAttachmentPathError):
+            scanner.get_entity_attachments(temp_dir, entity_type, entity_id)
+
+    def test_get_entity_attachments_ignores_symlinks_outside_entity_directory(
+        self, scanner: AttachmentScanner, temp_dir: Path
+    ) -> None:
+        """A crafted export symlink cannot add a local file to an upload."""
+        entity_dir = temp_dir / "attachments" / "documents" / "123"
+        entity_dir.mkdir(parents=True)
+        outside_file = temp_dir / "operator-secret.txt"
+        outside_file.write_text("secret", encoding="utf-8")
+        (entity_dir / "linked-secret.txt").symlink_to(outside_file)
+
+        assert scanner.get_entity_attachments(temp_dir, "documents", "123") == []
 
 
 class TestGetAllAttachments:

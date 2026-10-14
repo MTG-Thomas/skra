@@ -7,10 +7,15 @@ Supports CRUD operations for user bookmarks with organization scoping.
 
 from uuid import UUID
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.models.orm.user import User
 from src.models.orm.user_favorite import UserFavorite
+
+
+class FavoriteLimitExceededError(ValueError):
+    """Raised when a user has reached the allowed number of favorites."""
 
 
 class UserFavoritesRepository:
@@ -132,18 +137,61 @@ class UserFavoritesRepository:
         await self.session.refresh(favorite)
         return favorite
 
-    async def delete(self, favorite_id: UUID) -> bool:
+    async def get_or_create_with_limit(
+        self,
+        user_id: UUID,
+        organization_id: UUID,
+        entity_type: str,
+        entity_id: UUID,
+        max_count: int,
+        custom_label: str | None = None,
+    ) -> UserFavorite:
+        """Return an existing favorite or create one below a serialized cap.
+
+        Locking the owning user row makes concurrent additions for one user
+        observe each other's counts before inserting. This prevents a burst of
+        requests from racing past the per-user limit.
         """
-        Delete a favorite by ID.
+        await self.session.execute(select(User.id).where(User.id == user_id).with_for_update())
+
+        existing = await self.get_by_user_and_entity(
+            user_id=user_id,
+            organization_id=organization_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+        )
+        if existing is not None:
+            return existing
+
+        count = await self.count_by_user(user_id)
+        if count >= max_count:
+            raise FavoriteLimitExceededError(f"favorite limit of {max_count} reached")
+
+        return await self.create(
+            user_id=user_id,
+            organization_id=organization_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            custom_label=custom_label,
+            display_order=count,
+        )
+
+    async def delete(self, favorite_id: UUID, user_id: UUID) -> bool:
+        """
+        Delete a favorite by ID when it belongs to the user.
 
         Args:
             favorite_id: Favorite UUID
+            user_id: Owning user UUID
 
         Returns:
             True if deleted, False if not found
         """
         result = await self.session.execute(
-            delete(UserFavorite).where(UserFavorite.id == favorite_id)
+            delete(UserFavorite).where(
+                UserFavorite.id == favorite_id,
+                UserFavorite.user_id == user_id,
+            )
         )
         return result.rowcount > 0  # type: ignore[attr-defined]
 
@@ -209,6 +257,6 @@ class UserFavoritesRepository:
             Number of favorites
         """
         result = await self.session.execute(
-            select(UserFavorite).where(UserFavorite.user_id == user_id)
+            select(func.count()).select_from(UserFavorite).where(UserFavorite.user_id == user_id)
         )
-        return len(list(result.scalars().all()))
+        return int(result.scalar_one())

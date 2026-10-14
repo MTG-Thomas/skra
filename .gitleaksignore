@@ -10,3 +10,7 @@ api/tests/integration/test_custom_assets.py:generic-api-key:375
 api/tests/integration/test_custom_assets.py:generic-api-key:376
 kubernetes/secret.yaml:generic-api-key:32
 tools/quick_demo.sh:generic-api-key:193
+16e90135c0a66b0e34aabfc7865619b0e87ad3dc:api/tests/unit/test_garage_init_script.py:generic-api-key:24
+50530283f897d20720287b8314fb586dbc82cd9f:api/src/routers/attachments.py:generic-api-key:361
+50530283f897d20720287b8314fb586dbc82cd9f:api/tests/integration/test_custom_assets.py:generic-api-key:379
+50530283f897d20720287b8314fb586dbc82cd9f:api/tests/integration/test_custom_assets.py:generic-api-key:380

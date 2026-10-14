@@ -67,6 +67,11 @@ COMPOSE_FILES=(
 # validation host) set SKRA_TARGET_SSL=0 to skip the ssl compose file.
 if [ "${SKRA_TARGET_SSL:-1}" != "0" ]; then
   COMPOSE_FILES+=(-f docker-compose.ssl.yml)
+else
+  # Plain HTTP must be an explicit deployment choice. Keeping the published
+  # client port out of the base file prevents TLS deployments from exposing a
+  # second entry point that bypasses the SSL proxy.
+  COMPOSE_FILES+=(-f docker-compose.http.yml)
 fi
 
 API_IMAGE="${SKRA_API_IMAGE:-ghcr.io/mtg-thomas/skra-api:${DEPLOY_SHA_SHORT}}"
