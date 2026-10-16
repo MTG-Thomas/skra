@@ -92,18 +92,20 @@ export async function checkSetupStatus(): Promise<SetupStatusResponse> {
  *
  * @param email - Email address for the new account
  * @param name - Optional display name
+ * @param bootstrapToken - One-time production bootstrap authorization
  * @param deviceName - Optional friendly name for the passkey
  * @returns JWT tokens and user info on success
  */
 export async function setupWithPasskey(
   email: string,
   name?: string,
+  bootstrapToken?: string,
   deviceName?: string
 ): Promise<SetupPasskeyVerifyResponse> {
   // Step 1: Get registration options from server (auth at root level, no /api)
   const optionsResponse = await api.post<SetupPasskeyOptionsResponse>(
     "/auth/setup/passkey/options",
-    { email, name }
+    { email, name, bootstrap_token: bootstrapToken }
   );
 
   const { registration_token, options } = optionsResponse.data;
@@ -152,6 +154,7 @@ export async function setupWithPasskey(
       registration_token,
       credential,
       device_name: deviceName,
+      bootstrap_token: bootstrapToken,
     }
   );
 
