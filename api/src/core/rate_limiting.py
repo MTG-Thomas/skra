@@ -94,6 +94,7 @@ class RateLimits:
 
     # Search endpoints - can be expensive
     SEARCH = "30/minute,200/hour"
+    EXPENSIVE_READ = "10/minute,100/hour"
 
     # Admin endpoints - very strict
     ADMIN = "20/minute,100/hour"
