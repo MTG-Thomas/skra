@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -402,3 +403,136 @@ async def test_repository_lists_field_ids_for_pruning():
     repo = ExpirationProjectionRepository(session)
 
     assert await repo.list_field_ids_for_asset(ASSET_ID) == ["fid-a", "fid-b"]
+
+
+@pytest.mark.asyncio
+async def test_global_repository_query_counts_and_pages_in_database():
+    """Search, visibility, ordering, limit, and offset stay in SQL."""
+    from sqlalchemy.dialects import postgresql
+
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 250
+    page_result = MagicMock()
+    projection = MagicMock()
+    page_result.all.return_value = [(projection, "Acme")]
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[count_result, page_result])
+    repo = ExpirationProjectionRepository(session)
+
+    rows, total = await repo.query_global_page(
+        date(2026, 12, 31),
+        search="ACME%_literal",
+        sort_by="organization_name",
+        sort_dir="desc",
+        limit=20,
+        offset=40,
+        show_disabled=False,
+    )
+
+    assert rows == [(projection, "Acme")]
+    assert total == 250
+    count_stmt = session.execute.await_args_list[0].args[0]
+    page_stmt = session.execute.await_args_list[1].args[0]
+    count_sql = str(
+        count_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    page_sql = str(
+        page_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "count(*)" in count_sql.lower()
+    assert "organizations.is_enabled IS true" in count_sql
+    assert "ILIKE" in count_sql
+    assert "ESCAPE" in count_sql
+    assert "LIMIT 20" in page_sql
+    assert "OFFSET 40" in page_sql
+    assert (
+        "ORDER BY lower(organizations.name) DESC, expiration_projections.asset_id ASC"
+        in page_sql
+    )
+
+
+@pytest.mark.asyncio
+async def test_global_repository_show_disabled_drops_only_the_org_filter():
+    """Archived-org opt-in preserves all other database bounds."""
+    from sqlalchemy.dialects import postgresql
+
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 0
+    page_result = MagicMock()
+    page_result.all.return_value = []
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[count_result, page_result])
+
+    await ExpirationProjectionRepository(session).query_global_page(
+        date(2026, 12, 31),
+        search=None,
+        sort_by="days_until",
+        sort_dir="asc",
+        limit=100,
+        offset=10_000,
+        show_disabled=True,
+    )
+
+    page_stmt = session.execute.await_args_list[1].args[0]
+    page_sql = str(
+        page_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "organizations.is_enabled IS true" not in page_sql
+    assert "expiration_projections.expires_on <= '2026-12-31'" in page_sql
+    assert "LIMIT 100" in page_sql
+    assert "OFFSET 10000" in page_sql
+
+
+@pytest.mark.asyncio
+async def test_global_page_service_maps_only_repository_page_rows():
+    """The service maps a bounded repository page and preserves exact total."""
+    from src.services.expiration import find_global_upcoming_expirations_page_projected
+
+    row = SimpleNamespace(
+        organization_id=ORG_ID,
+        asset_id=ASSET_ID,
+        display_label="Wildcard Cert",
+        asset_type_id=TYPE_ID,
+        asset_type_name="SSL Certificate",
+        field_key="expires_on",
+        field_name="Expires On",
+        expires_on=date(2026, 10, 5),
+    )
+    repo = MagicMock()
+    repo.query_global_page = AsyncMock(return_value=([(row, "Acme")], 250))
+
+    with patch(
+        "src.repositories.expiration_projection.ExpirationProjectionRepository",
+        return_value=repo,
+    ):
+        items, total = await find_global_upcoming_expirations_page_projected(
+            AsyncMock(),
+            within_days=365,
+            search="cert",
+            sort_by="asset_display",
+            sort_dir="asc",
+            limit=20,
+            offset=40,
+            show_disabled=False,
+            today=date(2026, 9, 30),
+        )
+
+    assert total == 250
+    assert len(items) == 1
+    item, organization_name = items[0]
+    assert organization_name == "Acme"
+    assert item.days_until == 5
+    repo.query_global_page.assert_awaited_once_with(
+        date(2026, 10, 30),
+        search="cert",
+        sort_by="asset_display",
+        sort_dir="asc",
+        limit=20,
+        offset=40,
+        show_disabled=False,
+    )

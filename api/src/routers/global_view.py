@@ -10,7 +10,7 @@ from dataclasses import asdict
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
@@ -18,6 +18,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
+from src.core.rate_limiting import RateLimits, limiter
 from src.models.contracts.custom_asset import FieldDefinition
 from src.models.contracts.expiration import (
     GlobalUpcomingExpirationPublic,
@@ -36,7 +37,7 @@ from src.repositories.document import DocumentRepository
 from src.repositories.location import LocationRepository
 from src.repositories.password import PasswordRepository
 from src.services.custom_asset_validation import values_id_to_key
-from src.services.expiration import find_global_upcoming_expirations_projected
+from src.services.expiration import find_global_upcoming_expirations_page_projected
 
 logger = logging.getLogger(__name__)
 
@@ -640,17 +641,23 @@ async def list_global_custom_assets(
 
 
 @router.get("/expirations/upcoming", response_model=GlobalUpcomingExpirationsPublic)
+@limiter.limit(RateLimits.EXPENSIVE_READ)
 async def list_global_upcoming_expirations(
+    request: Request,
     _current_user: CurrentActiveUser,
     db: DbSession,
     within_days: int = Query(30, ge=1, le=365, description="Expiration horizon in days"),
-    search: str | None = Query(None, description="Search asset, type, field, or organization"),
+    search: str | None = Query(
+        None,
+        max_length=200,
+        description="Search asset, type, field, or organization",
+    ),
     sort_by: Literal["days_until", "asset_display", "organization_name"] = Query(
         "days_until", description="Sort field"
     ),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(20, ge=1, le=100, description="Maximum expirations to return"),
-    offset: int = Query(0, ge=0, description="Number of expirations to skip"),
+    offset: int = Query(0, ge=0, le=10_000, description="Number of expirations to skip"),
     show_disabled: bool = Query(False, description="Include archived organizations"),
 ) -> GlobalUpcomingExpirationsPublic:
     """
@@ -659,58 +666,36 @@ async def list_global_upcoming_expirations(
     V1 access model (ADR-001): every authenticated user reads every
     organization, so readability is the standard global visibility rule —
     enabled organizations by default, archived ones opted in with
-    show_disabled=true. One bounded indexed query over the expiration
-    projection serves all visible organizations (no client N+1 and no
-    per-asset scan); search and sort apply to the merged list before
-    limit/offset cap the response.
+    show_disabled=true. PostgreSQL applies search, sort, count, limit, and
+    offset over the expiration projection; the API process receives at most
+    ``limit`` rows. Historical expired rows intentionally remain visible.
+    Offset and search size are bounded, and the expensive-read rate class
+    constrains repeated count/page work.
 
     No view audit is logged: dashboard widgets poll this endpoint and
     audit entries would drown real access history.
     """
-    org_stmt = select(Organization.id, Organization.name).order_by(Organization.name)
-    if not show_disabled:
-        org_stmt = org_stmt.where(Organization.is_enabled.is_(True))
-    org_rows = (await db.execute(org_stmt)).fetchall()
-    org_ids = [row[0] for row in org_rows]
-    org_names = {row[0]: row[1] for row in org_rows}
-
-    merged = await find_global_upcoming_expirations_projected(db, org_ids, within_days=within_days)
-
-    if search:
-        needle = search.casefold()
-        merged = [
-            item
-            for item in merged
-            if needle in (item.asset_display or "").casefold()
-            or needle in item.asset_type_name.casefold()
-            or needle in item.field_name.casefold()
-            or needle in org_names.get(item.organization_id, "").casefold()
-        ]
-
-    sort_keys = {
-        "days_until": lambda item: item.days_until,
-        "asset_display": lambda item: (item.asset_display or "").casefold(),
-        "organization_name": lambda item: org_names.get(item.organization_id, "").casefold(),
-    }
-    # Stable id tie-break first, so equal primary keys stay id-ordered
-    # regardless of sort direction.
-    merged = sorted(merged, key=lambda item: str(item.asset_id))
-    merged = sorted(
-        merged,
-        key=sort_keys.get(sort_by, sort_keys["days_until"]),
-        reverse=(sort_dir == "desc"),
+    page, total = await find_global_upcoming_expirations_page_projected(
+        db,
+        within_days=within_days,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+        show_disabled=show_disabled,
     )
 
     items = [
         GlobalUpcomingExpirationPublic(
             **asdict(item),
-            organization_name=org_names.get(item.organization_id, "Unknown"),
+            organization_name=organization_name,
         )
-        for item in merged[offset : offset + limit]
+        for item, organization_name in page
     ]
     return GlobalUpcomingExpirationsPublic(
         items=items,
-        total=len(merged),
+        total=total,
         within_days=within_days,
         limit=limit,
         offset=offset,
