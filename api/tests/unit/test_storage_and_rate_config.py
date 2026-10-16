@@ -53,6 +53,25 @@ def test_rate_limiting_can_be_disabled(monkeypatch):
     assert reloaded.limiter.middleware_class is None
 
 
+def test_bootstrap_token_is_optional_masked_and_minimum_length():
+    unset = Settings(secret_key="x" * 32, bootstrap_token="")
+    configured = Settings(secret_key="x" * 32, bootstrap_token="b" * 32)
+
+    assert unset.bootstrap_token is None
+    assert configured.bootstrap_token is not None
+    assert configured.bootstrap_token.get_secret_value() == "b" * 32
+    assert str(configured.bootstrap_token) == "**********"
+    with pytest.raises(ValidationError):
+        Settings(secret_key="x" * 32, bootstrap_token="too-short")
+
+
+def test_bootstrap_token_does_not_accept_legacy_prefix(monkeypatch):
+    monkeypatch.delenv("SKRA_BOOTSTRAP_TOKEN", raising=False)
+    monkeypatch.setenv("BIFROST_DOCS_BOOTSTRAP_TOKEN", "l" * 32)
+
+    assert Settings(secret_key="x" * 32).bootstrap_token is None
+
+
 def test_s3_credentials_file_fills_unset_keys(tmp_path):
     """Managed credentials file supplies keys the env did not set."""
     creds = tmp_path / "s3.env"

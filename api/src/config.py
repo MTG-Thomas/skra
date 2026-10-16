@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field, SecretStr, computed_field, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -65,6 +65,11 @@ class _LegacyEnvSource(EnvSettingsSource):
         values = super().__call__() or {}
         dotenv_values = self._legacy_dotenv_values()
         for field_name in self.settings_cls.model_fields:
+            # Bootstrap authorization did not exist under the legacy name;
+            # accepting a stale BIFROST_DOCS_* value would create an
+            # undocumented production setup credential.
+            if field_name == "bootstrap_token":
+                continue
             if field_name in values:
                 continue
             legacy_key = f"{LEGACY_ENV_PREFIX}{field_name.upper()}"
@@ -217,6 +222,23 @@ class Settings(BaseSettings):
         description="Secret key for JWT signing and encryption (SKRA_SECRET_KEY env var required)",
         min_length=32,
     )
+
+    bootstrap_token: SecretStr | None = Field(
+        default=None,
+        min_length=32,
+        description=(
+            "One-time operator token required to create the first owner in production; "
+            "remove it after setup"
+        ),
+    )
+
+    @field_validator("bootstrap_token", mode="before")
+    @classmethod
+    def _empty_bootstrap_token_is_unset(cls, value: Any) -> Any:
+        """Allow Compose's optional empty interpolation to mean unset."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     algorithm: str = Field(default="HS256", description="JWT signing algorithm")
 

@@ -159,6 +159,9 @@ services:
       SKRA_ENVIRONMENT: ${SKRA_ENVIRONMENT:-production}
       SKRA_DEBUG: ${SKRA_DEBUG:-false}
       SKRA_SECRET_KEY: ${SKRA_SECRET_KEY:?SKRA_SECRET_KEY is required (32+ chars)}
+      # Required only while authorizing first-owner setup in production.
+      # Empty/unset fails closed for bootstrap; remove after the owner exists.
+      SKRA_BOOTSTRAP_TOKEN: ${SKRA_BOOTSTRAP_TOKEN:-}
       # Database (via PgBouncer for connection pooling)
       SKRA_DATABASE_URL: postgresql+asyncpg://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra
       SKRA_DATABASE_URL_SYNC: postgresql://skra:${POSTGRES_PASSWORD}@pgbouncer:5432/skra

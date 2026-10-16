@@ -2,7 +2,7 @@
 Authentication contracts (API request/response schemas).
 """
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, SecretStr
 
 from src.models.enums import UserRole
 
@@ -20,6 +20,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
     name: str | None = None
+    bootstrap_token: SecretStr | None = None
 
 
 class TokenResponse(BaseModel):
@@ -130,6 +131,7 @@ class SetupPasskeyOptionsRequest(BaseModel):
 
     email: EmailStr
     name: str | None = None
+    bootstrap_token: SecretStr | None = None
 
 
 class SetupPasskeyOptionsResponse(BaseModel):
@@ -146,6 +148,7 @@ class SetupPasskeyVerifyRequest(BaseModel):
     registration_token: str
     credential: dict  # WebAuthn credential response
     device_name: str | None = None
+    bootstrap_token: SecretStr | None = None
 
 
 class SetupPasskeyVerifyResponse(BaseModel):

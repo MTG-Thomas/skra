@@ -81,6 +81,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f api
 4. The `garage-init` container configures Garage (layout, bucket, S3 key) — runs once and exits
 5. Register the first user at http://localhost:8080 — first user is automatically assigned `owner` role
 
+Development/testing permit bootstrap without a token. Production fails closed:
+set a fresh `SKRA_BOOTSTRAP_TOKEN` of at least 32 characters before exposing an
+empty instance, enter it in the setup page for password or passkey setup, then
+remove it from the environment and restart after the owner exists. Generate a
+one-time value with `openssl rand -hex 32`; never commit or reuse it. The token
+does not prove that an empty database is intentional, so restore/adopt the
+correct volume before setup during an upgrade.
+
 ### Garage (S3 storage) notes
 
 - Config: `config/garage.toml` — contains a dev `admin_token` and `rpc_secret`; replace both in production

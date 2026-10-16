@@ -10,10 +10,11 @@ Provides endpoints for user authentication:
 """
 
 import logging
+import secrets
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from src.config import get_settings
 from src.core.auth import CurrentActiveUser, UserPrincipal
@@ -49,6 +50,29 @@ from src.services.audit_service import get_audit_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_BOOTSTRAP_DENIED = "Initial platform setup is not authorized."
+
+
+def _require_bootstrap_authorization(supplied_token: SecretStr | None) -> None:
+    """Fail closed on first-owner creation in production.
+
+    Development and test environments retain their current frictionless
+    bootstrap behavior. Production requires an operator-provisioned secret
+    on every password/passkey setup phase; missing configuration is a denial,
+    never an implicit public-bootstrap opt-in.
+    """
+    settings = get_settings()
+    if not settings.is_production:
+        return
+    configured_token = settings.bootstrap_token
+    if configured_token is None or supplied_token is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_BOOTSTRAP_DENIED)
+    if not secrets.compare_digest(
+        configured_token.get_secret_value(),
+        supplied_token.get_secret_value(),
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_BOOTSTRAP_DENIED)
 
 
 # =============================================================================
@@ -441,6 +465,9 @@ async def register_user(
     # Check if first user (system bootstrap)
     has_users = await user_repo.has_any_users()
 
+    if not has_users:
+        _require_bootstrap_authorization(user_data.bootstrap_token)
+
     # In production, registration is disabled after first user
     if has_users and not (settings.is_development or settings.is_testing):
         raise HTTPException(
@@ -557,6 +584,7 @@ async def setup_passkey_options(
     """
     from src.services.passkey_service import PasskeyService
 
+    _require_bootstrap_authorization(setup_request.bootstrap_token)
     passkey_service = PasskeyService(db)
 
     try:
@@ -612,6 +640,7 @@ async def setup_passkey_verify(
 
     from src.services.passkey_service import PasskeyService, PasskeyValidationError
 
+    _require_bootstrap_authorization(verify_request.bootstrap_token)
     passkey_service = PasskeyService(db)
 
     try:

@@ -42,7 +42,14 @@ default. The migrator CLI accepts `SKRA_API_URL`/`SKRA_API_TOKEN` with the
   Azure container.
 - **Docker volumes.** `skra-postgres_data` etc. are new empty volumes. Either
   adopt them with a dump/restore, or pin the old volume names in compose to
-  keep data in place (simplest for dev).
+  keep data in place (simplest for dev). Before exposing any production stack
+  that may point at an empty database, set a fresh 32+ character
+  `SKRA_BOOTSTRAP_TOKEN` (for example, `openssl rand -hex 32`). Password and
+  passkey owner setup fail closed without that token. Enter it in the setup
+  page only after confirming the intended volume, create the owner, then
+  remove the token from the environment and restart. The token authorizes
+  bootstrap; it does not restore or validate migrated data. See the canonical
+  [first-time bootstrap procedure](../agent-guidance.md#first-time-bootstrap).
 - **Images.** Pull `ghcr.io/mtg-thomas/skra-api` / `skra-client`. Old
   `bifrost-docs-*` tags stay pullable until cleanup; do not delete them until
   validation passes.
