@@ -449,8 +449,7 @@ async def test_global_repository_query_counts_and_pages_in_database():
     assert "LIMIT 20" in page_sql
     assert "OFFSET 40" in page_sql
     assert (
-        "ORDER BY lower(organizations.name) DESC, expiration_projections.asset_id ASC"
-        in page_sql
+        "ORDER BY lower(organizations.name) DESC, expiration_projections.asset_id ASC" in page_sql
     )
 
 

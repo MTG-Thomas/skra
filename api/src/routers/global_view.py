@@ -18,7 +18,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from src.core.auth import CurrentActiveUser
 from src.core.database import DbSession
-from src.core.rate_limiting import RateLimits, limiter
+from src.core.rate_limiting import RateLimits, get_authenticated_user_or_remote_address, limiter
 from src.models.contracts.custom_asset import FieldDefinition
 from src.models.contracts.expiration import (
     GlobalUpcomingExpirationPublic,
@@ -641,7 +641,10 @@ async def list_global_custom_assets(
 
 
 @router.get("/expirations/upcoming", response_model=GlobalUpcomingExpirationsPublic)
-@limiter.limit(RateLimits.EXPENSIVE_READ)
+@limiter.limit(
+    RateLimits.EXPENSIVE_READ,
+    key_func=get_authenticated_user_or_remote_address,
+)
 async def list_global_upcoming_expirations(
     request: Request,
     _current_user: CurrentActiveUser,

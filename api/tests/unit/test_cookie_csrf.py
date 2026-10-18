@@ -70,6 +70,17 @@ class TestCookieCsrfEnforcement:
         assert principal is not None
         assert principal.email == "e2e-tech@example.com"
 
+    async def test_required_auth_publishes_rate_limit_identity(self):
+        from src.core.auth import get_current_user
+
+        token = _access_token()
+        request = _make_request("GET")
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        principal = await get_current_user(request=request, credentials=credentials, db=None)
+
+        assert request.state.rate_limit_identity == f"user:{principal.user_id}"
+
     async def test_cookie_get_without_csrf_passes(self):
         from src.core.auth import get_current_user_optional
 

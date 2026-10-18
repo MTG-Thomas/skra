@@ -37,6 +37,12 @@ def _request() -> Request:
     )
 
 
+def _endpoint_handler():
+    """Return the endpoint body without requiring live rate-limit storage."""
+    endpoint = global_view.list_global_upcoming_expirations
+    return getattr(endpoint, "__wrapped__", endpoint)
+
+
 def _item(org_id, **overrides) -> UpcomingExpiration:
     base = {
         "organization_id": org_id,
@@ -69,7 +75,7 @@ async def test_global_expirations_maps_only_the_database_page_and_exact_total():
         "src.routers.global_view.find_global_upcoming_expirations_page_projected",
         new=query,
     ):
-        result = await global_view.list_global_upcoming_expirations(
+        result = await _endpoint_handler()(
             _request(),
             _user(),
             db,
@@ -100,7 +106,7 @@ async def test_global_expirations_forwards_search_sort_page_and_visibility_to_da
         "src.routers.global_view.find_global_upcoming_expirations_page_projected",
         new=query,
     ):
-        result = await global_view.list_global_upcoming_expirations(
+        result = await _endpoint_handler()(
             _request(),
             _user(),
             db,
