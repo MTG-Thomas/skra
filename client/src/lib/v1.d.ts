@@ -6783,6 +6783,8 @@ export interface components {
             password: string;
             /** Name */
             name?: string | null;
+            /** Bootstrap Token */
+            bootstrap_token?: string | null;
         };
         /**
          * ReindexCancelResponse
@@ -6998,6 +7000,8 @@ export interface components {
             email: string;
             /** Name */
             name?: string | null;
+            /** Bootstrap Token */
+            bootstrap_token?: string | null;
         };
         /**
          * SetupPasskeyOptionsResponse
@@ -7029,6 +7033,8 @@ export interface components {
             };
             /** Device Name */
             device_name?: string | null;
+            /** Bootstrap Token */
+            bootstrap_token?: string | null;
         };
         /**
          * SetupPasskeyVerifyResponse

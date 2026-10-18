@@ -50,6 +50,7 @@ export function SetupPage() {
   // Account form (shared between modes)
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [bootstrapToken, setBootstrapToken] = useState("");
 
   // Password-specific fields
   const [password, setPassword] = useState("");
@@ -82,7 +83,7 @@ export function SetupPage() {
 
     try {
       // Create the user with passkey
-      await setupWithPasskey(email, name);
+      await setupWithPasskey(email, name, bootstrapToken || undefined);
 
       // Fetch user info and login (session cookies were set on setup)
       const userResponse = await authApi.me();
@@ -114,7 +115,12 @@ export function SetupPage() {
 
     try {
       // Register the user
-      await authApi.register({ email, password, name: name || undefined });
+      await authApi.register({
+        email,
+        password,
+        name: name || undefined,
+        bootstrap_token: bootstrapToken || undefined,
+      });
 
       toast.success("Account created! Please sign in.");
       navigate("/login");
@@ -174,6 +180,26 @@ export function SetupPage() {
             required
           />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="bootstrap-token">Production bootstrap token</Label>
+        <div className="relative">
+          <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            id="bootstrap-token"
+            type="password"
+            autoComplete="one-time-code"
+            placeholder="Required for production first-owner setup"
+            value={bootstrapToken}
+            onChange={(e) => setBootstrapToken(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Leave blank for local development. Production operators provide this
+          one-time value out of band and remove it after setup.
+        </p>
       </div>
 
       <div className="pt-2 space-y-3">

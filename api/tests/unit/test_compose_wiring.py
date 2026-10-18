@@ -90,6 +90,17 @@ def test_base_client_keeps_nginx_probe():
     assert "http://127.0.0.1:8080/health" in code
 
 
+def test_production_api_receives_optional_bootstrap_token():
+    """Only the API needs the one-time first-owner authorization secret."""
+    api = _uncommented(_service_block(BASE, "api"))
+    worker = _uncommented(_service_block(BASE, "worker"))
+    init = _uncommented(_service_block(BASE, "init"))
+
+    assert "SKRA_BOOTSTRAP_TOKEN: ${SKRA_BOOTSTRAP_TOKEN:-}" in api
+    assert "SKRA_BOOTSTRAP_TOKEN" not in worker
+    assert "SKRA_BOOTSTRAP_TOKEN" not in init
+
+
 def test_worker_s3_endpoint_targets_garage():
     """Worker S3 must point at Garage, not the localhost:9000 default.
 

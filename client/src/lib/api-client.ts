@@ -432,6 +432,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   name?: string;
+  bootstrap_token?: string;
 }
 
 export interface TokenResponse {
