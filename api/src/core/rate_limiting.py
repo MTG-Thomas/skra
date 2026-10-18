@@ -19,7 +19,7 @@ class _NoOpLimiter:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         pass
 
-    def limit(self, limits: Any) -> Callable[[Any], Any]:
+    def limit(self, limits: Any, *args: Any, **kwargs: Any) -> Callable[[Any], Any]:
         """Return a decorator that leaves the route handler unchanged."""
 
         def decorator(f: Any) -> Any:
@@ -59,6 +59,15 @@ except ImportError:
         return "127.0.0.1"
 
 
+def get_authenticated_user_or_remote_address(request: Any) -> str:
+    """Key authenticated limits by user, falling back to the remote address."""
+    state = getattr(request, "state", None)
+    identity = getattr(state, "rate_limit_identity", None)
+    if identity:
+        return str(identity)
+    return f"ip:{get_remote_address(request)}"
+
+
 settings = get_settings()
 RATE_LIMITING_ENABLED = SLOWAPI_AVAILABLE and settings.rate_limiting_enabled
 
@@ -94,6 +103,7 @@ class RateLimits:
 
     # Search endpoints - can be expensive
     SEARCH = "30/minute,200/hour"
+    EXPENSIVE_READ = "10/minute,100/hour"
 
     # Admin endpoints - very strict
     ADMIN = "20/minute,100/hour"

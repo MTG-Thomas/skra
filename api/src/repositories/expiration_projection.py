@@ -11,12 +11,13 @@ retired fields.
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.orm.custom_asset_type import CustomAssetType
 from src.models.orm.expiration_projection import ExpirationProjection
+from src.models.orm.organization import Organization
 from src.repositories.base import BaseRepository
 
 
@@ -152,3 +153,77 @@ class ExpirationProjectionRepository(BaseRepository[ExpirationProjection]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def query_global_page(
+        self,
+        cutoff: date,
+        *,
+        search: str | None,
+        sort_by: str,
+        sort_dir: str,
+        limit: int,
+        offset: int,
+        show_disabled: bool,
+    ) -> tuple[list[tuple[ExpirationProjection, str]], int]:
+        """Return one exact global page and its database-side total.
+
+        Historical expired rows remain visible by product policy. Unlike the
+        legacy global reader, this query never materializes that full history
+        in the API process: PostgreSQL applies visibility, search, ordering,
+        limit, and offset before returning at most ``limit`` rows. The
+        separate count preserves the standard exact-total list contract.
+        """
+        filters = [
+            ExpirationProjection.expires_on <= cutoff,
+            CustomAssetType.is_active.is_(True),
+        ]
+        if not show_disabled:
+            filters.append(Organization.is_enabled.is_(True))
+
+        if search and (needle := search.strip()):
+            # The former Python substring match treated SQL wildcard
+            # characters literally; preserve that contract in ILIKE.
+            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            filters.append(
+                or_(
+                    ExpirationProjection.display_label.ilike(pattern, escape="\\"),
+                    ExpirationProjection.asset_type_name.ilike(pattern, escape="\\"),
+                    ExpirationProjection.field_name.ilike(pattern, escape="\\"),
+                    Organization.name.ilike(pattern, escape="\\"),
+                )
+            )
+
+        joins = (
+            (CustomAssetType, CustomAssetType.id == ExpirationProjection.asset_type_id),
+            (Organization, Organization.id == ExpirationProjection.organization_id),
+        )
+        count_stmt = select(func.count()).select_from(ExpirationProjection)
+        for target, on_clause in joins:
+            count_stmt = count_stmt.join(target, on_clause)
+        count_stmt = count_stmt.where(*filters)
+        count_result = await self.session.execute(count_stmt)
+        total = int(count_result.scalar_one())
+
+        sort_columns = {
+            "days_until": ExpirationProjection.expires_on,
+            "asset_display": func.lower(func.coalesce(ExpirationProjection.display_label, "")),
+            "organization_name": func.lower(Organization.name),
+        }
+        sort_column = sort_columns.get(sort_by, sort_columns["days_until"])
+        order = desc(sort_column) if sort_dir == "desc" else asc(sort_column)
+        page_stmt = select(ExpirationProjection, Organization.name)
+        for target, on_clause in joins:
+            page_stmt = page_stmt.join(target, on_clause)
+        page_stmt = (
+            page_stmt.where(*filters)
+            .order_by(
+                order,
+                asc(ExpirationProjection.asset_id),
+                asc(ExpirationProjection.id),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        page_result = await self.session.execute(page_stmt)
+        return [(row[0], row[1]) for row in page_result.all()], total
