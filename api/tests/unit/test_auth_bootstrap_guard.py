@@ -32,19 +32,22 @@ def _settings(*, production: bool = True, token: str | None = TOKEN) -> SimpleNa
 
 
 def test_bootstrap_guard_fails_closed_and_uses_constant_secret_contract(monkeypatch):
+    valid_token = SecretStr(TOKEN)
+    wrong_token = SecretStr("w" * 32)
+
     monkeypatch.setattr(auth, "get_settings", lambda: _settings(token=None))
     with pytest.raises(HTTPException) as missing_config:
-        auth._require_bootstrap_authorization(SecretStr(TOKEN))
+        auth._require_bootstrap_authorization(valid_token)
     assert missing_config.value.status_code == 403
 
     monkeypatch.setattr(auth, "get_settings", lambda: _settings())
     with pytest.raises(HTTPException) as missing_request:
         auth._require_bootstrap_authorization(None)
     with pytest.raises(HTTPException) as wrong_request:
-        auth._require_bootstrap_authorization(SecretStr("w" * 32))
+        auth._require_bootstrap_authorization(wrong_token)
     assert missing_request.value.detail == wrong_request.value.detail
 
-    auth._require_bootstrap_authorization(SecretStr(TOKEN))
+    auth._require_bootstrap_authorization(valid_token)
     monkeypatch.setattr(auth, "get_settings", lambda: _settings(production=False, token=None))
     auth._require_bootstrap_authorization(None)
 
