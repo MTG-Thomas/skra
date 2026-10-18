@@ -1,6 +1,7 @@
 """Tests for storage backend and rate-limiting configuration."""
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -154,4 +155,32 @@ def test_noop_limiter_decorator_returns_original_function():
     def endpoint():
         return "ok"
 
-    assert limiter.limit("1/minute")(endpoint) is endpoint
+    assert limiter.limit("1/minute", key_func=lambda: "user:test")(endpoint) is endpoint
+
+
+def test_authenticated_rate_limit_key_separates_users_behind_one_address():
+    from src.core.rate_limiting import get_authenticated_user_or_remote_address
+
+    shared_client = SimpleNamespace(host="203.0.113.10")
+    first = SimpleNamespace(
+        state=SimpleNamespace(rate_limit_identity="user:first"),
+        client=shared_client,
+    )
+    second = SimpleNamespace(
+        state=SimpleNamespace(rate_limit_identity="user:second"),
+        client=shared_client,
+    )
+
+    assert get_authenticated_user_or_remote_address(first) == "user:first"
+    assert get_authenticated_user_or_remote_address(second) == "user:second"
+
+
+def test_authenticated_rate_limit_key_falls_back_to_remote_address():
+    from src.core.rate_limiting import get_authenticated_user_or_remote_address
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(),
+        client=SimpleNamespace(host="203.0.113.10"),
+    )
+
+    assert get_authenticated_user_or_remote_address(request) == "ip:203.0.113.10"

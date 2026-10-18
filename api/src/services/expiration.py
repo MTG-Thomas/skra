@@ -246,3 +246,46 @@ async def find_global_upcoming_expirations_projected(
     items = [item for row in rows if (item := _row_to_upcoming(row, current)) is not None]
     items.sort(key=lambda i: (i.days_until, str(i.organization_id), str(i.asset_id)))
     return items
+
+
+async def find_global_upcoming_expirations_page_projected(
+    db: Any,
+    *,
+    within_days: int,
+    search: str | None,
+    sort_by: str,
+    sort_dir: str,
+    limit: int,
+    offset: int,
+    show_disabled: bool,
+    today: date | None = None,
+) -> tuple[list[tuple[UpcomingExpiration, str]], int]:
+    """Return one database-bounded global expiration page.
+
+    The global route retains its exact-total and all-historical-expirations
+    contracts, while PostgreSQL owns filtering, sorting, and pagination so
+    API memory and response work are bounded by ``limit``.
+    """
+    from src.repositories.expiration_projection import ExpirationProjectionRepository
+
+    current = today or datetime.now(UTC).date()
+    # The shared expiration contract has no alert bucket beyond the largest
+    # configured window. Clamping in SQL preserves the legacy mapper's
+    # effective result set and keeps ``total`` identical to mapped rows even
+    # when a caller requests a larger horizon.
+    cutoff = current + timedelta(days=min(within_days, max(ALERT_WINDOWS)))
+    rows, total = await ExpirationProjectionRepository(db).query_global_page(
+        cutoff,
+        search=search,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        limit=limit,
+        offset=offset,
+        show_disabled=show_disabled,
+    )
+    items = [
+        (item, organization_name)
+        for row, organization_name in rows
+        if (item := _row_to_upcoming(row, current)) is not None
+    ]
+    return items, total

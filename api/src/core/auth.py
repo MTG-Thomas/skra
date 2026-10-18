@@ -275,6 +275,10 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # FastAPI resolves dependencies before invoking the decorated route, so
+    # authenticated rate-limit key functions can use this stable principal
+    # identity instead of grouping unrelated users behind one proxy address.
+    request.state.rate_limit_identity = f"user:{user.user_id}"
     return user
 
 
