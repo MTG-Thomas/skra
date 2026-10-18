@@ -217,7 +217,11 @@ class ExpirationProjectionRepository(BaseRepository[ExpirationProjection]):
             page_stmt = page_stmt.join(target, on_clause)
         page_stmt = (
             page_stmt.where(*filters)
-            .order_by(order, asc(ExpirationProjection.asset_id))
+            .order_by(
+                order,
+                asc(ExpirationProjection.asset_id),
+                asc(ExpirationProjection.id),
+            )
             .limit(limit)
             .offset(offset)
         )
