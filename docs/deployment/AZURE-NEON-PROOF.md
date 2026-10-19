@@ -4,8 +4,8 @@ This runbook stands up Skra with Azure hosting the app/platform services and Neo
 
 ## Architecture
 
-- Azure Resource Group: `rg-skra-neon-dev`
-- Azure Container Apps: FastAPI API from the pinned GHCR image
+- Azure Resource Group: `rg-bifrost-docs-neon-dev`
+- Azure Container Apps: FastAPI API `ca-bifrost-docs-api-neon-dev`, from the pinned GHCR image. This app was provisioned before the Skra rename; a fresh Bicep deployment uses `ca-skra-api-<environment>`.
 - Azure Container Apps Job: one-shot `scripts.init_container` migrations/default setup
 - Azure Storage:
   - Static website hosting for the React build
@@ -117,7 +117,7 @@ The API deploy uses GitHub Actions OIDC instead of a stored Azure client secret.
 The app also needs permission to update:
 
 ```text
-/subscriptions/a1d63b24-1202-4bfa-9086-cf32d1d352fc/resourceGroups/rg-skra-neon-dev/providers/Microsoft.App/containerApps/ca-skra-api-neon-dev
+/subscriptions/a1d63b24-1202-4bfa-9086-cf32d1d352fc/resourceGroups/rg-bifrost-docs-neon-dev/providers/Microsoft.App/containerApps/ca-bifrost-docs-api-neon-dev
 ```
 
 ## Validation
