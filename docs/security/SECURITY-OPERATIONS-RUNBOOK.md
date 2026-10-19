@@ -7,7 +7,7 @@ The unauthenticated baseline workflow is `.github/workflows/zap-baseline.yml`.
 Approved targets are hardcoded:
 
 - `https://azure-docs.midtowntg.com`
-- `https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
+- `https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io`
 
 Run it manually from GitHub Actions with target `all`, `frontend`, or `api`. Reports are uploaded as workflow artifacts. Do not add arbitrary scan URLs.
 

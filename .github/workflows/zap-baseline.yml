@@ -31,13 +31,13 @@ jobs:
         run: |
           case "${TARGET}" in
             all)
-              MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"},{"name":"api","url":"https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
+              MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"},{"name":"api","url":"https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
               ;;
             frontend)
               MATRIX='{"include":[{"name":"frontend","url":"https://azure-docs.midtowntg.com"}]}'
               ;;
             api)
-              MATRIX='{"include":[{"name":"api","url":"https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
+              MATRIX='{"include":[{"name":"api","url":"https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io"}]}'
               ;;
             *)
               echo "Unsupported target: ${TARGET}" >&2
@@ -58,6 +58,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Wake scaled-to-zero API target
+        if: matrix.name == 'api'
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --max-time 30 "${{ matrix.url }}/health"; then
+              echo
+              echo "API target responded on attempt ${attempt}."
+              exit 0
+            fi
+            echo "API target not ready on attempt ${attempt}; waiting..."
+            sleep 10
+          done
+          echo "API target did not become healthy before the baseline scan." >&2
+          exit 1
 
       - name: Run OWASP ZAP passive baseline
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
