@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
+      API_URL: https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
       SKRA_ZAP_API_TOKEN: ${{ secrets.SKRA_ZAP_API_TOKEN }}
 
     steps:
@@ -32,6 +32,20 @@ jobs:
             echo "SKRA_ZAP_API_TOKEN is not configured for the azure-neon-proof environment." >&2
             exit 1
           fi
+
+      - name: Wake scaled-to-zero API target
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --max-time 30 "${API_URL}/health"; then
+              echo
+              echo "API target responded on attempt ${attempt}."
+              exit 0
+            fi
+            echo "API target not ready on attempt ${attempt}; waiting..."
+            sleep 10
+          done
+          echo "API target did not become healthy before the authenticated scan." >&2
+          exit 1
 
       - name: Run authenticated passive OpenAPI scan
         run: |
