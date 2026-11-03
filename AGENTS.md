@@ -17,3 +17,12 @@ Encrypt passwords/TOTP/OAuth/API secrets before storage. Public schemas never ex
 Use TanStack Query for server state, existing auth/permission hooks for UI gating, and established DataTable/WebSocket conventions. Database/storage/authentication changes need corresponding integration evidence; local UI permission checks are insufficient.
 
 Documentation work follows [docs/AGENTS.md](docs/AGENTS.md). Track existing issue context when applicable; use isolated branches/worktrees and request-authorized communication rather than named-agent labels or shared-branch handoffs. Obtain GitHub authentication through the available approved environment; never read or print pass-store token contents. Test logs and migration inputs can contain customer data and need careful handling.
+
+## Secret gate before publication
+
+Before every push and PR creation/update, commit the complete candidate and run
+`python3 scripts/secret_gate.py` (native Windows: `python`). Require exit 0;
+missing tooling/authentication, scan errors and skipped scans block publication.
+Then run the existing repository gates. Repeat after changing outgoing commits.
+See [secret scanning](SECRET-SCANNING.md) for base selection, new branches,
+pre-push input and prerequisites. Preserve GitGuardian App, CI and Gitleaks checks.
