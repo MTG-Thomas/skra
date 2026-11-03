@@ -13,7 +13,7 @@ python3 scripts/secret_gate.py --base origin/release
 # Initial publication, empty remote or orphan history, explicitly:
 python3 scripts/secret_gate.py --all-history
 # Offline regression checks (no GitGuardian calls):
-python3 scripts/test_secret_gate.py -q
+python3 scripts/tests/test_secret_gate.py -q
 ```
 
 Use `python` instead of `python3` on native Windows. Python 3.10+, Git, and

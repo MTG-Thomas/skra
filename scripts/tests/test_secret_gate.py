@@ -9,9 +9,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import secret_gate
 
-GATE = Path(__file__).with_name("secret_gate.py")
+GATE = Path(__file__).resolve().parents[1] / "secret_gate.py"
 FAKE = """import os, subprocess, sys
 from pathlib import Path
 args = sys.argv[1:]

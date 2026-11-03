@@ -100,6 +100,15 @@ jobs:
           pip install -e ".[dev]"
           pytest tests/unit --cov=src --cov-report=xml:coverage.xml --cov-report=term
 
+      - name: Generate secret-gate coverage
+        if: env.SONAR_TOKEN != ''
+        env:
+          COVERAGE_FILE: ${{ github.workspace }}/.coverage.secret-gate
+        run: |
+          python -m coverage run --rcfile=.coveragerc.secret-gate scripts/tests/test_secret_gate.py -q
+          python -m coverage combine --rcfile=.coveragerc.secret-gate
+          python -m coverage xml --rcfile=.coveragerc.secret-gate
+
       - name: Run SonarQube scan
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@c7ee0f9df90b7aa20e8dcf9695dcfe2e7da5b4f2 # v7.0.0
