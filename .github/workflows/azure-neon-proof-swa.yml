@@ -31,7 +31,7 @@ jobs:
       - name: Build frontend
         working-directory: client
         env:
-          VITE_API_URL: https://ca-skra-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
+          VITE_API_URL: https://ca-bifrost-docs-api-neon-dev.icymoss-8e8097f1.eastus.azurecontainerapps.io
         run: npm run build
 
       - name: Deploy to Azure Static Web Apps
