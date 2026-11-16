@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "skra"
 version = "1.0.0"
 description = "Skra MSP Documentation Platform API"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 dependencies = [
     # Web Framework
     "fastapi>=0.115.0",
