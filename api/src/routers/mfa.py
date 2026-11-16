@@ -16,11 +16,11 @@ import secrets
 from datetime import UTC, datetime
 
 import pyotp
-from pyotp.totp import TOTP
 import qrcode
 import qrcode.image.svg
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from pyotp.totp import TOTP
 from sqlalchemy import delete, func, select
 
 from src.core.auth import CurrentActiveUser

@@ -1,7 +1,7 @@
 """Step-up verification for security-sensitive MFA mutations."""
 
-from pyotp.totp import TOTP
 from fastapi import HTTPException, status
+from pyotp.totp import TOTP
 
 from src.core.security import decrypt_secret
 
