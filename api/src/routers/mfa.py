@@ -16,6 +16,7 @@ import secrets
 from datetime import UTC, datetime
 
 import pyotp
+from pyotp.totp import TOTP
 import qrcode
 import qrcode.image.svg
 from fastapi import APIRouter, HTTPException, Request, status
@@ -169,7 +170,7 @@ async def setup_mfa(
 
     secret = pyotp.random_base32()
     account_name = user.email
-    provisioning_uri = pyotp.TOTP(secret).provisioning_uri(
+    provisioning_uri = TOTP(secret).provisioning_uri(
         name=account_name,
         issuer_name=MFA_ISSUER,
     )
@@ -238,7 +239,7 @@ async def verify_mfa(
         )
 
     secret = decrypt_secret(method.encrypted_secret)
-    if not pyotp.TOTP(secret).verify(verify_request.code, valid_window=1):
+    if not TOTP(secret).verify(verify_request.code, valid_window=1):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code",
@@ -296,7 +297,7 @@ async def remove_mfa(
         )
 
     secret = decrypt_secret(method.encrypted_secret)
-    if not pyotp.TOTP(secret).verify(code, valid_window=1):
+    if not TOTP(secret).verify(code, valid_window=1):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code",
