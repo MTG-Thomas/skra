@@ -1,7 +1,7 @@
 """Step-up verification for security-sensitive MFA mutations."""
 
-import pyotp
 from fastapi import HTTPException, status
+from pyotp.totp import TOTP
 
 from src.core.security import decrypt_secret
 
@@ -21,7 +21,7 @@ def require_totp_step_up(encrypted_secret: str | None, code: str | None) -> None
         )
 
     secret = decrypt_secret(encrypted_secret)
-    if not pyotp.TOTP(secret).verify(code, valid_window=1):
+    if not TOTP(secret).verify(code, valid_window=1):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current MFA verification failed",
