@@ -3,7 +3,7 @@ name: OWASP ZAP Authenticated API
 on:
   workflow_dispatch:
   schedule:
-    - cron: "41 7 * * 2"
+    - cron: ""
 
 permissions:
   contents: read
